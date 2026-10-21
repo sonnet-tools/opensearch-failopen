@@ -1,392 +1,340 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing.allocation.decider;
-
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-
-/**
- * This abstract class defining basic {@link Decision} used during shard
- * allocation process.
- *
- * @see AllocationDecider
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class Decision implements ToXContent, Writeable {
-
-    public static final Decision ALWAYS = new Single(Type.YES);
-    public static final Decision YES = new Single(Type.YES);
-    public static final Decision NO = new Single(Type.NO);
-    public static final Decision THROTTLE = new Single(Type.THROTTLE);
-
-    /**
-     * Creates a simple decision
-     * @param type {@link Type} of the decision
-     * @param label label for the Decider that produced this decision
-     * @param explanation explanation of the decision
-     * @param explanationParams additional parameters for the decision
-     * @return new {@link Decision} instance
-     */
-    public static Decision single(Type type, @Nullable String label, @Nullable String explanation, @Nullable Object... explanationParams) {
-        return new Single(type, label, explanation, explanationParams);
-    }
-
-    public static Decision readFrom(StreamInput in) throws IOException {
-        // Determine whether to read a Single or Multi Decision
-        if (in.readBoolean()) {
-            Multi result = new Multi();
-            int decisionCount = in.readVInt();
-            for (int i = 0; i < decisionCount; i++) {
-                Decision s = readFrom(in);
-                result.decisions.add(s);
-            }
-            return result;
-        } else {
-            Single result = new Single();
-            result.type = Type.readFrom(in);
-            result.label = in.readOptionalString();
-            result.explanationString = in.readOptionalString();
-            return result;
-        }
-    }
-
-    /**
-     * This enumeration defines the
-     * possible types of decisions
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public enum Type implements Writeable {
-        YES(1),
-        THROTTLE(2),
-        NO(0);
-
-        private final int id;
-
-        Type(int id) {
-            this.id = id;
-        }
-
-        public static Type readFrom(StreamInput in) throws IOException {
-            int i = in.readVInt();
-            switch (i) {
-                case 0:
-                    return NO;
-                case 1:
-                    return YES;
-                case 2:
-                    return THROTTLE;
-                default:
-                    throw new IllegalArgumentException("No Type for integer [" + i + "]");
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(id);
-        }
-
-        public boolean higherThan(Type other) {
-            if (this == NO) {
-                return false;
-            } else if (other == NO) {
-                return true;
-            } else if (other == THROTTLE && this == YES) {
-                return true;
-            }
-            return false;
-        }
-
-        public boolean canPreemptivelyReturn() {
-            return this == THROTTLE || this == NO;
-        }
-
-    }
-
-    /**
-     * Get the {@link Type} of this decision
-     * @return {@link Type} of this decision
-     */
-    public abstract Type type();
-
-    /**
-     * Get the description label for this decision.
-     */
-    @Nullable
-    public abstract String label();
-
-    /**
-     * Get the explanation for this decision.
-     */
-    @Nullable
-    public abstract String getExplanation();
-
-    /**
-     * Return the list of all decisions that make up this decision
-     */
-    public abstract List<Decision> getDecisions();
-
-    /**
-     * Simple class representing a single decision
-     *
-     * @opensearch.internal
-     */
-    public static class Single extends Decision implements ToXContentObject {
-        private Type type;
-        private String label;
-        private String explanation;
-        private String explanationString;
-        private Object[] explanationParams;
-
-        public Single() {
-
-        }
-
-        /**
-         * Creates a new {@link Single} decision of a given type
-         * @param type {@link Type} of the decision
-         */
-        public Single(Type type) {
-            this(type, null, null, (Object[]) null);
-        }
-
-        /**
-         * Creates a new {@link Single} decision of a given type
-         *
-         * @param type {@link Type} of the decision
-         * @param explanation An explanation of this {@link Decision}
-         * @param explanationParams A set of additional parameters
-         */
-        public Single(Type type, @Nullable String label, @Nullable String explanation, @Nullable Object... explanationParams) {
-            this.type = type;
-            this.label = label;
-            this.explanation = explanation;
-            this.explanationParams = explanationParams;
-        }
-
-        @Override
-        public Type type() {
-            return this.type;
-        }
-
-        @Override
-        @Nullable
-        public String label() {
-            return this.label;
-        }
-
-        @Override
-        public List<Decision> getDecisions() {
-            return Collections.singletonList(this);
-        }
-
-        /**
-         * Returns the explanation string, fully formatted.  Only formats the string once.
-         */
-        @Override
-        @Nullable
-        public String getExplanation() {
-            if (explanationString == null && explanation != null) {
-                explanationString = String.format(Locale.ROOT, explanation, explanationParams);
-            }
-            return this.explanationString;
-        }
-
-        @Override
-        public boolean equals(Object object) {
-            if (this == object) {
-                return true;
-            }
-
-            if (object == null || getClass() != object.getClass()) {
-                return false;
-            }
-
-            Decision.Single s = (Decision.Single) object;
-            return this.type == s.type && Objects.equals(label, s.label) && Objects.equals(getExplanation(), s.getExplanation());
-        }
-
-        @Override
-        public int hashCode() {
-            int result = type.hashCode();
-            result = 31 * result + (label == null ? 0 : label.hashCode());
-            String explanationStr = getExplanation();
-            result = 31 * result + (explanationStr == null ? 0 : explanationStr.hashCode());
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            if (explanationString != null || explanation != null) {
-                return type + "(" + getExplanation() + ")";
-            }
-            return type + "()";
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("decider", label);
-            builder.field("decision", type);
-            String explanation = getExplanation();
-            builder.field("explanation", explanation != null ? explanation : "none");
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeBoolean(false); // flag specifying its a single decision
-            type.writeTo(out);
-            out.writeOptionalString(label);
-            // Flatten explanation on serialization, so that explanationParams
-            // do not need to be serialized
-            out.writeOptionalString(getExplanation());
-        }
-    }
-
-    /**
-     * Simple class representing a list of decisions
-     *
-     * @opensearch.internal
-     */
-    public static class Multi extends Decision implements ToXContentFragment {
-
-        private final List<Decision> decisions = new ArrayList<>();
-
-        /**
-         * Add a decision to this {@link Multi}decision instance
-         * @param decision {@link Decision} to add
-         * @return {@link Multi}decision instance with the given decision added
-         */
-        public Multi add(Decision decision) {
-            decisions.add(decision);
-            return this;
-        }
-
-        @Override
-        public Type type() {
-            Type ret = Type.YES;
-            for (int i = 0; i < decisions.size(); i++) {
-                Type type = decisions.get(i).type();
-                if (type == Type.NO) {
-                    return type;
-                } else if (type == Type.THROTTLE) {
-                    ret = type;
-                }
-            }
-            return ret;
-        }
-
-        @Override
-        @Nullable
-        public String label() {
-            // Multi decisions have no labels
-            return null;
-        }
-
-        @Override
-        @Nullable
-        public String getExplanation() {
             throw new UnsupportedOperationException("multi-level decisions do not have an explanation");
-        }
-
+ */
         @Override
-        public List<Decision> getDecisions() {
-            return Collections.unmodifiableList(this.decisions);
-        }
-
+        private Type type;
+         * @param explanation An explanation of this {@link Decision}
+ * SPDX-License-Identifier: Apache-2.0
+            this(type, null, null, (Object[]) null);
+            return ret;
+                    ret = type;
+         */
+     * @opensearch.api
+                    return type;
         @Override
-        public boolean equals(final Object object) {
-            if (this == object) {
-                return true;
+    public static final Decision ALWAYS = new Single(Type.YES);
+        }
+ * not use this file except in compliance with the License.
+         * @param type {@link Type} of the decision
+            for (int i = 0; i < decisionCount; i++) {
+            if (explanationString != null || explanation != null) {
             }
-
-            if (object == null || getClass() != object.getClass()) {
-                return false;
-            }
-
-            final Decision.Multi m = (Decision.Multi) object;
-
-            return this.decisions.equals(m.decisions);
-        }
-
-        @Override
-        public int hashCode() {
-            return 31 * decisions.hashCode();
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            for (Decision decision : decisions) {
-                sb.append("[").append(decision.toString()).append("]");
+     * @param label label for the Decider that produced this decision
             }
             return sb.toString();
+ *
         }
-
+                return false;
+            result = 31 * result + (label == null ? 0 : label.hashCode());
+            int result = type.hashCode();
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
         @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            for (Decision d : decisions) {
-                d.toXContent(builder, params);
-            }
-            return builder;
+            for (Decision decision : decisions) {
+            return false;
+ *
+            if (object == null || getClass() != object.getClass()) {
+                Type type = decisions.get(i).type();
+            // Flatten explanation on serialization, so that explanationParams
+        public Single(Type type) {
+ *
+            return this.label;
         }
-
+     */
+            }
+            StringBuilder sb = new StringBuilder();
+        public int hashCode() {
+            }
+            if (this == object) {
+    public abstract Type type();
+        public Single(Type type, @Nullable String label, @Nullable String explanation, @Nullable Object... explanationParams) {
+        @Override
+        }
+            }
+            this.label = label;
+        YES(1),
+ *
+        }
+            for (Decision d : decisions) {
+            }
+                case 0:
+    public abstract List<Decision> getDecisions();
+        @Nullable
+            out.writeBoolean(true); // flag indicating it is a multi decision
+    @Nullable
+            builder.endObject();
+            }
+                    return YES;
+    public abstract String label();
+        public boolean equals(Object object) {
+ * GitHub history for details.
+            return builder;
+/*
+            out.writeBoolean(false); // flag specifying its a single decision
+        @Override
+        if (in.readBoolean()) {
+        public Type type() {
+     *
+        return new Single(type, label, explanation, explanationParams);
+ * specific language governing permissions and limitations
+            return 31 * decisions.hashCode();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        }
+        @Override
+    /**
+                case 1:
+            this.explanationParams = explanationParams;
+        /**
+    public enum Type implements Writeable {
+package org.opensearch.cluster.routing.allocation.decider;
+import org.opensearch.core.common.io.stream.Writeable;
+     * Get the explanation for this decision.
+                }
+     */
+        }
+            builder.startObject();
+            return result;
+            builder.field("decision", type);
+         */
+import org.opensearch.common.Nullable;
+        public String label() {
+    /**
+        }
+                return true;
+ * this work for additional information regarding copyright
+                return true;
+            return Collections.unmodifiableList(this.decisions);
+        NO(0);
+         */
+        public boolean higherThan(Type other) {
+            // Multi decisions have no labels
+        }
+     * This enumeration defines the
+        private Object[] explanationParams;
+            }
+        }
+            } else if (other == NO) {
+        // Determine whether to read a Single or Multi Decision
+            int decisionCount = in.readVInt();
+        }
+     * Simple class representing a list of decisions
+/*
+            final Decision.Multi m = (Decision.Multi) object;
+ */
+     * Get the description label for this decision.
+            return result;
+ * license agreements. See the NOTICE file distributed with
+                return true;
+    @PublicApi(since = "1.0.0")
+        public String getExplanation() {
+            } else if (other == THROTTLE && this == YES) {
+                if (type == Type.NO) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            String explanationStr = getExplanation();
+    }
+        }
+        private String explanation;
+         *
+    public static Decision readFrom(StreamInput in) throws IOException {
+                    throw new IllegalArgumentException("No Type for integer [" + i + "]");
+import org.opensearch.core.xcontent.ToXContentFragment;
+    public static Decision single(Type type, @Nullable String label, @Nullable String explanation, @Nullable Object... explanationParams) {
+import java.util.ArrayList;
+    public static class Single extends Decision implements ToXContentObject {
+ * under the License.
+     * @opensearch.internal
+            return this.type == s.type && Objects.equals(label, s.label) && Objects.equals(getExplanation(), s.getExplanation());
+        }
+        public Single() {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+     * @opensearch.internal
+            if (object == null || getClass() != object.getClass()) {
+                result.decisions.add(s);
+                    return NO;
+            String explanation = getExplanation();
+        /**
+         * Creates a new {@link Single} decision of a given type
+                Decision s = readFrom(in);
+        }
+        @Override
+            result.label = in.readOptionalString();
+        @Nullable
+            this.id = id;
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+        @Override
+        @Override
+            result = 31 * result + (explanationStr == null ? 0 : explanationStr.hashCode());
+            }
+ * allocation process.
+            switch (i) {
+            return null;
+        public List<Decision> getDecisions() {
+    }
+     * possible types of decisions
+            // do not need to be serialized
+     */
+import java.io.IOException;
+        }
+            out.writeVInt(getDecisions().size());
+        @Override
+                case 2:
+ */
+    public static final Decision THROTTLE = new Single(Type.THROTTLE);
+        Type(int id) {
+     */
+     * @param type {@link Type} of the decision
+            return this.decisions.equals(m.decisions);
+        public String label() {
+                d.toXContent(builder, params);
+        }
+                return false;
+            out.writeOptionalString(label);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * @opensearch.api
+ * Licensed to Elasticsearch under one or more contributor
+            if (this == NO) {
+        public int hashCode() {
+        public Type type() {
+            return this.explanationString;
+        }
+            if (this == object) {
+        public String toString() {
+        }
+    /**
+                    return THROTTLE;
+ * this file be licensed under the Apache-2.0 license or a
+         * Creates a new {@link Single} decision of a given type
+            for (Decision d : getDecisions()) {
+            return type + "()";
+import org.opensearch.core.common.io.stream.StreamOutput;
+        public boolean equals(final Object object) {
+                explanationString = String.format(Locale.ROOT, explanation, explanationParams);
+            Type ret = Type.YES;
+            this.type = type;
+ * KIND, either express or implied.  See the License for the
+        public void writeTo(StreamOutput out) throws IOException {
+            result.explanationString = in.readOptionalString();
+        }
+import java.util.Locale;
+/**
+            Multi result = new Multi();
+     */
+            }
+public abstract class Decision implements ToXContent, Writeable {
+     */
+     * Get the {@link Type} of this decision
+     * @param explanationParams additional parameters for the decision
+                return type + "(" + getExplanation() + ")";
+    /**
+        }
+     * Creates a simple decision
+     * @param explanation explanation of the decision
+    @Nullable
+        @Nullable
+        /**
+            builder.field("decider", label);
+        @Override
+            return builder;
+            result.type = Type.readFrom(in);
+        }
+    /**
+}
+    /**
+import java.util.Collections;
+        @Override
+        }
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public static class Multi extends Decision implements ToXContentFragment {
+        THROTTLE(2),
+ * software distributed under the License is distributed on an
+         * @param explanationParams A set of additional parameters
+            return result;
+        @Override
+@PublicApi(since = "1.0.0")
+ * @see AllocationDecider
+            decisions.add(decision);
+        private String label;
+     */
+import java.util.List;
+     *
+        public String getExplanation() {
+            for (int i = 0; i < decisions.size(); i++) {
+            out.writeOptionalString(getExplanation());
+            return Collections.singletonList(this);
+ * The OpenSearch Contributors require contributions made to
+ * compatible open source license.
+        public static Type readFrom(StreamInput in) throws IOException {
+            Single result = new Single();
+        public void writeTo(StreamOutput out) throws IOException {
+            return this == THROTTLE || this == NO;
+            this.explanation = explanation;
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeBoolean(true); // flag indicating it is a multi decision
-            out.writeVInt(getDecisions().size());
-            for (Decision d : getDecisions()) {
-                d.writeTo(out);
+         * Returns the explanation string, fully formatted.  Only formats the string once.
+import org.opensearch.common.annotation.PublicApi;
+         * @param decision {@link Decision} to add
             }
+    /**
+        @Override
+            return this;
+                } else if (type == Type.THROTTLE) {
+import org.opensearch.core.xcontent.ToXContent;
+ * You may obtain a copy of the License at
         }
+    public static final Decision NO = new Single(Type.NO);
+     * @return {@link Type} of this decision
+     * Return the list of all decisions that make up this decision
+     * @return new {@link Decision} instance
+            Decision.Single s = (Decision.Single) object;
+        private final List<Decision> decisions = new ArrayList<>();
+            return this.type;
+ * This abstract class defining basic {@link Decision} used during shard
+                sb.append("[").append(decision.toString()).append("]");
+        @Nullable
+        }
+         */
+                default:
+        public Multi add(Decision decision) {
+            builder.field("explanation", explanation != null ? explanation : "none");
+import org.opensearch.core.xcontent.XContentBuilder;
+        public boolean canPreemptivelyReturn() {
+import java.util.Objects;
+            type.writeTo(out);
+ * Unless required by applicable law or agreed to in writing,
+ */
+ * ownership. Elasticsearch licenses this file to you under
+        public List<Decision> getDecisions() {
+        }
+        private String explanationString;
+/*
+                d.writeTo(out);
+    public abstract String getExplanation();
+                return true;
+            }
     }
-}
+    }
+            if (explanationString == null && explanation != null) {
+import org.opensearch.core.xcontent.ToXContentObject;
+         * Add a decision to this {@link Multi}decision instance
+        }
+                return false;
+            int i = in.readVInt();
+        @Override
+        } else {
+    /**
+     *
+        private final int id;
+    public static final Decision YES = new Single(Type.YES);
+        @Override
+            }
+     */
+        @Override
+        public String toString() {
+            out.writeVInt(id);
+        /**
+     * Simple class representing a single decision
+        @Override
+         * @param type {@link Type} of the decision
+        }
+ *
+         * @return {@link Multi}decision instance with the given decision added

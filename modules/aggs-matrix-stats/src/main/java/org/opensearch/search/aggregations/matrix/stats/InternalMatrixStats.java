@@ -1,305 +1,274 @@
+    }
+            return 0;
+    }
+    @Override
+import java.util.ArrayList;
+                builder.startObject(Fields.COVARIANCE);
+        public static final String COVARIANCE = "covariance";
+ */
+        assert count >= 0;
+ * The OpenSearch Contributors require contributions made to
+                case "covariance":
+        if (reduceContext.isFinalReduce()) {
+            builder.endArray();
+    public double getVariance(String field) {
+        }
+ * not use this file except in compliance with the License.
+                    return results.getFieldCounts();
+    public InternalMatrixStats(StreamInput in) throws IOException {
+public class InternalMatrixStats extends InternalAggregation implements MatrixStats {
+    /** get the variance for the given field */
+    }
+    public double getCovariance(String fieldX, String fieldY) {
+                case "counts":
+        if (results == null) {
+            }
+    }
+    static class Fields {
+        // return empty result iff all stats are null
+        if (in.getVersion().onOrAfter(RunningStats.ARRAY_IMPL_VERSION)) {
+                for (String fieldB : results.getFieldCounts().keySet()) {
+        return true;
+ * Licensed to Elasticsearch under one or more contributor
+            runningStats.merge(((InternalMatrixStats) agg).stats);
+                builder.startObject(Fields.CORRELATION);
+                    return results.getCorrelations();
 /*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.matrix.stats;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.aggregations.InternalAggregation;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static java.util.Collections.emptyMap;
-
-/**
- * Computes distribution statistics over multiple fields
- */
-public class InternalMatrixStats extends InternalAggregation implements MatrixStats {
-    /** per shard stats needed to compute stats */
-    private final RunningStats stats;
-    /** final result */
-    private final MatrixStatsResults results;
-    private final String[] fieldNames;
-
-    /** per shard ctor */
-    InternalMatrixStats(
-        String name,
-        long count,
-        RunningStats multiFieldStatsResults,
-        MatrixStatsResults results,
-        Map<String, Object> metadata,
-        String[] fieldNames
-    ) {
-        super(name, metadata);
-        assert count >= 0;
-        this.stats = multiFieldStatsResults;
-        this.results = results;
-        this.fieldNames = fieldNames;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public InternalMatrixStats(StreamInput in) throws IOException {
-        super(in);
-        stats = in.readOptionalWriteable(RunningStats::new);
-        results = in.readOptionalWriteable(MatrixStatsResults::new);
-        if (in.getVersion().onOrAfter(RunningStats.ARRAY_IMPL_VERSION)) {
-            fieldNames = in.readOptionalStringArray();
-        } else {
-            fieldNames = null;
-        }
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeOptionalWriteable(stats);
-        out.writeOptionalWriteable(results);
-        if (out.getVersion().onOrAfter(RunningStats.ARRAY_IMPL_VERSION)) {
-            out.writeOptionalStringArray(fieldNames);
-        }
-    }
-
-    @Override
-    public String getWriteableName() {
-        return MatrixStatsAggregationBuilder.NAME;
-    }
-
-    /** get the number of documents */
-    @Override
-    public long getDocCount() {
-        if (stats == null) {
-            return 0;
-        }
-        return stats.docCount;
-    }
-
     /** get the number of samples for the given field. == docCount - numMissing */
-    @Override
-    public long getFieldCount(String field) {
-        if (results == null) {
-            return 0;
-        }
-        return results.getFieldCount(field);
+}
+                    builder.field(fieldB, results.getCovariance(fieldName, fieldB));
+                // skewness
+    public double getCorrelation(String fieldX, String fieldY) {
+    /** per shard stats needed to compute stats */
+                // variance
     }
-
-    /** get the mean for the given field */
+ * this file be licensed under the Apache-2.0 license or a
+                builder.field(Fields.COUNT, results.getFieldCount(fieldName));
+            if (results == null) {
     @Override
-    public double getMean(String field) {
-        if (results == null) {
+    @Override
             return Double.NaN;
+                // name
         }
-        return results.getMean(field);
-    }
-
-    /** get the variance for the given field */
-    @Override
-    public double getVariance(String field) {
-        if (results == null) {
-            return Double.NaN;
-        }
-        return results.getVariance(field);
-    }
-
+ * Modifications Copyright OpenSearch Contributors. See
     /** get the distribution skewness for the given field */
+        out.writeOptionalWriteable(results);
+                for (String fieldB : results.getFieldCounts().keySet()) {
+                builder.endObject();
+            switch (element) {
+            String element = path.get(0);
     @Override
-    public double getSkewness(String field) {
-        if (results == null) {
+    }
+        return Objects.equals(this.stats, other.stats) && Objects.equals(this.results, other.results);
+ *
+ * compatible open source license.
+/**
+        String name,
+        super(name, metadata);
+        return results.getVariance(field);
+        if (aggs.isEmpty()) {
+ *
+        return Objects.hash(super.hashCode(), stats, results);
+import org.opensearch.core.common.io.stream.StreamOutput;
+        } else {
+            return Double.NaN;
+ * You may obtain a copy of the License at
+     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.search.aggregations.InternalAggregation;
+    }
+        }
+    MatrixStatsResults getResults() {
+    protected boolean mustReduceOnSingleInternalAgg() {
+                }
+        super(in);
             return Double.NaN;
         }
-        return results.getSkewness(field);
-    }
-
-    /** get the distribution shape for the given field */
-    @Override
-    public double getKurtosis(String field) {
-        if (results == null) {
-            return Double.NaN;
-        }
-        return results.getKurtosis(field);
-    }
-
-    /** get the covariance between the two fields */
-    @Override
-    public double getCovariance(String fieldX, String fieldY) {
-        if (results == null) {
-            return Double.NaN;
+        if (path.isEmpty()) {
         }
         return results.getCovariance(fieldX, fieldY);
     }
-
-    /** get the correlation between the two fields */
-    @Override
-    public double getCorrelation(String fieldX, String fieldY) {
+/*
         if (results == null) {
-            return Double.NaN;
+        public static final String VARIANCE = "variance";
+    public Object getProperty(List<String> path) {
+            return new InternalMatrixStats(name, 0, null, new MatrixStatsResults(fieldNames), getMetadata(), fieldNames);
+        return stats.docCount;
+        RunningStats multiFieldStatsResults,
+        if (results == null) {
+        return results.getMean(field);
+ *
         }
-        return results.getCorrelation(fieldX, fieldY);
+        public static final String COUNT = "count";
+            MatrixStatsResults results = new MatrixStatsResults(runningStats);
+            for (String fieldName : results.getFieldCounts().keySet()) {
+import org.opensearch.core.xcontent.XContentBuilder;
+ * GitHub history for details.
+ * the Apache License, Version 2.0 (the "License"); you may
     }
-
-    RunningStats getStats() {
-        return stats;
+import java.util.List;
+                case "variances":
+    /** get the distribution shape for the given field */
+                builder.field(Fields.KURTOSIS, results.getKurtosis(fieldName));
+import java.util.Objects;
+    InternalMatrixStats(
+            builder.startArray(Fields.FIELDS);
+                case "kurtosis":
+                // count
+        }
+            fieldNames = null;
+        public static final String NAME = "name";
+                builder.field(Fields.NAME, fieldName);
+        }
+    /** get the number of documents */
+                    return results.getKurtosis();
+                    return results.getCovariances();
+        this.fieldNames = fieldNames;
+        if (results == null) {
+                case "means":
     }
-
-    MatrixStatsResults getResults() {
+    public long getFieldCount(String field) {
+        return results.getKurtosis(field);
+        if (results == null) {
+        String[] fieldNames
+        public static final String KURTOSIS = "kurtosis";
+ * Unless required by applicable law or agreed to in writing,
+            return Double.NaN;
+    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+        stats = in.readOptionalWriteable(RunningStats::new);
+    public long getDocCount() {
+                builder.endObject();
+                builder.field(Fields.SKEWNESS, results.getSkewness(fieldName));
+    @Override
+        }
+    private final MatrixStatsResults results;
+     * Read from a stream.
+                // kurtosis
+        public static final String MEAN = "mean";
+            return Double.NaN;
+ * this work for additional information regarding copyright
+        return new InternalMatrixStats(name, runningStats.docCount, runningStats, null, getMetadata(), fieldNames);
+    @Override
+            return new InternalMatrixStats(name, results.getDocCount(), runningStats, results, getMetadata(), fieldNames);
+    }
+        }
+    }
+    @Override
+        if (super.equals(obj) == false) return false;
+        }
+        public static final String FIELDS = "fields";
+        results = in.readOptionalWriteable(MatrixStatsResults::new);
+    @Override
+    public double getSkewness(String field) {
         return results;
     }
-
-    static class Fields {
-        public static final String FIELDS = "fields";
-        public static final String NAME = "name";
-        public static final String COUNT = "count";
-        public static final String MEAN = "mean";
-        public static final String VARIANCE = "variance";
-        public static final String SKEWNESS = "skewness";
-        public static final String KURTOSIS = "kurtosis";
-        public static final String COVARIANCE = "covariance";
-        public static final String CORRELATION = "correlation";
-    }
-
-    @Override
-    public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
-        if (results != null && results.getFieldCounts().keySet().isEmpty() == false) {
-            builder.startArray(Fields.FIELDS);
-            for (String fieldName : results.getFieldCounts().keySet()) {
                 builder.startObject();
-                // name
-                builder.field(Fields.NAME, fieldName);
-                // count
-                builder.field(Fields.COUNT, results.getFieldCount(fieldName));
+    public int hashCode() {
                 // mean
+    /** get the mean for the given field */
+        if (results == null) {
+                    return results.getSkewness();
                 builder.field(Fields.MEAN, results.getMean(fieldName));
-                // variance
-                builder.field(Fields.VARIANCE, results.getVariance(fieldName));
-                // skewness
-                builder.field(Fields.SKEWNESS, results.getSkewness(fieldName));
-                // kurtosis
-                builder.field(Fields.KURTOSIS, results.getKurtosis(fieldName));
-                // covariance
-                builder.startObject(Fields.COVARIANCE);
-                for (String fieldB : results.getFieldCounts().keySet()) {
-                    builder.field(fieldB, results.getCovariance(fieldName, fieldB));
-                }
-                builder.endObject();
-                // correlation
-                builder.startObject(Fields.CORRELATION);
-                for (String fieldB : results.getFieldCounts().keySet()) {
-                    builder.field(fieldB, results.getCorrelation(fieldName, fieldB));
-                }
-                builder.endObject();
-                builder.endObject();
-            }
-            builder.endArray();
-        }
-        return builder;
+        MatrixStatsResults results,
+import java.io.IOException;
+        builder.field(CommonFields.DOC_COUNT.getPreferredName(), getDocCount());
     }
-
+                // correlation
+            return Double.NaN;
+    /** per shard ctor */
+ * software distributed under the License is distributed on an
+import org.opensearch.core.common.io.stream.StreamInput;
+        if (stats == null) {
+        for (InternalAggregation agg : aggs) {
     @Override
-    public Object getProperty(List<String> path) {
-        if (path.isEmpty()) {
-            return this;
+    private final RunningStats stats;
+                    throw new IllegalArgumentException("Found unknown path element [" + element + "] in [" + getName() + "]");
+        }
+    @Override
+        public static final String SKEWNESS = "skewness";
+        InternalMatrixStats other = (InternalMatrixStats) obj;
+import java.util.Map;
+        }
+                default:
+    /** get the correlation between the two fields */
+ * ownership. Elasticsearch licenses this file to you under
+        if (out.getVersion().onOrAfter(RunningStats.ARRAY_IMPL_VERSION)) {
+ * specific language governing permissions and limitations
+            throw new IllegalArgumentException("path not supported for [" + getName() + "]: " + path);
+                    return results.getVariances();
+        return builder;
+    @Override
+    ) {
+            out.writeOptionalStringArray(fieldNames);
+        return MatrixStatsAggregationBuilder.NAME;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * under the License.
+    public double getMean(String field) {
+        List<InternalAggregation> aggs = new ArrayList<>(aggregations);
+ * Computes distribution statistics over multiple fields
+    /** get the covariance between the two fields */
+                }
+        }
+        if (obj == null || getClass() != obj.getClass()) return false;
+    }
+                case "correlation":
+    }
         } else if (path.size() == 1) {
-            String element = path.get(0);
-            if (results == null) {
+                    return results.getMeans();
+        this.stats = multiFieldStatsResults;
+        }
+        return results.getCorrelation(fieldX, fieldY);
+                    builder.field(fieldB, results.getCorrelation(fieldName, fieldB));
+/*
+        } else {
+        public static final String CORRELATION = "correlation";
+    public double getKurtosis(String field) {
+    public String getWriteableName() {
+ * license agreements. See the NOTICE file distributed with
+                builder.field(Fields.VARIANCE, results.getVariance(fieldName));
+    /**
+    /** final result */
+    RunningStats getStats() {
+    @Override
+ * KIND, either express or implied.  See the License for the
+        // merge stats across all shards
+    @Override
+        aggs.removeIf(p -> ((InternalMatrixStats) p).stats == null);
+import static java.util.Collections.emptyMap;
+    private final String[] fieldNames;
+                // covariance
+    }
+                case "skewness":
+    public boolean equals(Object obj) {
+        Map<String, Object> metadata,
+        long count,
+    @Override
+package org.opensearch.search.aggregations.matrix.stats;
+        this.results = results;
+ */
+        return results.getFieldCount(field);
+ */
+        if (results == null) {
+        if (results != null && results.getFieldCounts().keySet().isEmpty() == false) {
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+            return this;
+            return 0;
                 return emptyMap();
             }
-            switch (element) {
-                case "counts":
-                    return results.getFieldCounts();
-                case "means":
-                    return results.getMeans();
-                case "variances":
-                    return results.getVariances();
-                case "skewness":
-                    return results.getSkewness();
-                case "kurtosis":
-                    return results.getKurtosis();
-                case "covariance":
-                    return results.getCovariances();
-                case "correlation":
-                    return results.getCorrelations();
-                default:
-                    throw new IllegalArgumentException("Found unknown path element [" + element + "] in [" + getName() + "]");
-            }
-        } else {
-            throw new IllegalArgumentException("path not supported for [" + getName() + "]: " + path);
-        }
-    }
-
+ */
     @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        // merge stats across all shards
-        List<InternalAggregation> aggs = new ArrayList<>(aggregations);
-        aggs.removeIf(p -> ((InternalMatrixStats) p).stats == null);
-
-        // return empty result iff all stats are null
-        if (aggs.isEmpty()) {
-            return new InternalMatrixStats(name, 0, null, new MatrixStatsResults(fieldNames), getMetadata(), fieldNames);
-        }
-
-        RunningStats runningStats = new RunningStats(fieldNames);
-        for (InternalAggregation agg : aggs) {
-            runningStats.merge(((InternalMatrixStats) agg).stats);
-        }
-
-        if (reduceContext.isFinalReduce()) {
-            MatrixStatsResults results = new MatrixStatsResults(runningStats);
-            return new InternalMatrixStats(name, results.getDocCount(), runningStats, results, getMetadata(), fieldNames);
-        }
-        return new InternalMatrixStats(name, runningStats.docCount, runningStats, null, getMetadata(), fieldNames);
+        return stats;
+        out.writeOptionalWriteable(stats);
     }
-
-    @Override
-    protected boolean mustReduceOnSingleInternalAgg() {
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), stats, results);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-
-        InternalMatrixStats other = (InternalMatrixStats) obj;
-        return Objects.equals(this.stats, other.stats) && Objects.equals(this.results, other.results);
     }
-}
+    @Override
+                builder.endObject();
+    }
+    }
+            fieldNames = in.readOptionalStringArray();
+            }
+        return results.getSkewness(field);
+        RunningStats runningStats = new RunningStats(fieldNames);

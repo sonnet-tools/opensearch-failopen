@@ -1,301 +1,276 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
+            }
+    @Override
  * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.shard.IndexEventListener;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
-/**
- * A composite {@link IndexEventListener} that forwards all callbacks to an immutable list of IndexEventListener
- *
- * @opensearch.internal
- */
-final class CompositeIndexEventListener implements IndexEventListener {
-
-    private final List<IndexEventListener> listeners;
-    private final Logger logger;
-
-    CompositeIndexEventListener(IndexSettings indexSettings, Collection<IndexEventListener> listeners) {
-        for (IndexEventListener listener : listeners) {
-            if (listener == null) {
-                throw new IllegalArgumentException("listeners must be non-null");
-            }
-        }
-        this.listeners = Collections.unmodifiableList(new ArrayList<>(listeners));
-        this.logger = Loggers.getLogger(getClass(), indexSettings.getIndex());
-    }
-
-    @Override
-    public void shardRoutingChanged(IndexShard indexShard, @Nullable ShardRouting oldRouting, ShardRouting newRouting) {
-        for (IndexEventListener listener : listeners) {
+                listener.beforeIndexShardRecovery(indexShard, indexSettings);
+                listener.beforeIndexAddedToCluster(index, indexSettings);
             try {
-                listener.shardRoutingChanged(indexShard, oldRouting, newRouting);
-            } catch (Exception e) {
-                logger.warn(
-                    () -> new ParameterizedMessage("[{}] failed to invoke shard touring changed callback", indexShard.shardId().getId()),
-                    e
-                );
             }
-        }
-    }
-
-    @Override
-    public void afterIndexShardCreated(IndexShard indexShard) {
-        for (IndexEventListener listener : listeners) {
+                listener.afterIndexCreated(indexService);
+                        indexShard.shardId()
             try {
-                listener.afterIndexShardCreated(indexShard);
+    public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {
+                listener.afterIndexRemoved(index, indexSettings, reason);
             } catch (Exception e) {
-                logger.warn(
-                    () -> new ParameterizedMessage("[{}] failed to invoke after shard created callback", indexShard.shardId().getId()),
-                    e
-                );
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void afterIndexShardStarted(IndexShard indexShard) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.afterIndexShardStarted(indexShard);
-            } catch (Exception e) {
-                logger.warn(
-                    () -> new ParameterizedMessage("[{}] failed to invoke after shard started callback", indexShard.shardId().getId()),
-                    e
-                );
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.beforeIndexShardClosed(shardId, indexShard, indexSettings);
-            } catch (Exception e) {
-                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke before shard closed callback", shardId.getId()), e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void afterIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.afterIndexShardClosed(shardId, indexShard, indexSettings);
-            } catch (Exception e) {
-                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke after shard closed callback", shardId.getId()), e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void indexShardStateChanged(
-        IndexShard indexShard,
-        @Nullable IndexShardState previousState,
-        IndexShardState currentState,
-        @Nullable String reason
-    ) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.indexShardStateChanged(indexShard, previousState, indexShard.state(), reason);
-            } catch (Exception e) {
-                logger.warn(
                     () -> new ParameterizedMessage(
-                        "[{}] failed to invoke index shard state changed callback",
-                        indexShard.shardId().getId()
+import org.opensearch.common.settings.Settings;
+            } catch (Exception e) {
+                    () -> new ParameterizedMessage("[{}] failed to invoke shard touring changed callback", indexShard.shardId().getId()),
+import org.opensearch.index.shard.IndexShardState;
+    @Override
                     ),
-                    e
-                );
+/*
+            try {
+ * @opensearch.internal
+    @Override
                 throw e;
+                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke before shard created callback", shardId), e);
+ * compatible open source license.
+    private final List<IndexEventListener> listeners;
+    }
+    }
+    }
+                logger.warn(
+            } catch (Exception e) {
+ */
+    }
+ */
+        for (IndexEventListener listener : listeners) {
+            }
+    @Override
+                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke after shard closed callback", shardId.getId()), e);
+                listener.onStoreClosed(shardId);
+            } catch (Exception e) {
+                throw e;
+ */
+            }
+ * The OpenSearch Contributors require contributions made to
+                logger.warn("failed to invoke before index removed callback", e);
+import org.opensearch.indices.cluster.IndicesClusterStateService.AllocatedIndices.IndexRemovalReason;
+                listener.indexShardStateChanged(indexShard, previousState, indexShard.state(), reason);
+    public void beforeIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
+                        "[{}] failed to invoke index shard state changed callback",
             }
         }
-    }
-
-    @Override
-    public void beforeIndexCreated(Index index, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
             try {
-                listener.beforeIndexCreated(index, indexSettings);
-            } catch (Exception e) {
+        @Nullable String reason
                 logger.warn("failed to invoke before index created callback", e);
                 throw e;
-            }
-        }
+                    e
+        for (IndexEventListener listener : listeners) {
+        @Nullable IndexShardState previousState,
+                throw e;
+    public void beforeIndexShardRecovery(final IndexShard indexShard, final IndexSettings indexSettings) {
+                throw new IllegalArgumentException("listeners must be non-null");
+                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke after shard deleted callback", shardId.getId()), e);
+        IndexShard indexShard,
     }
-
+        for (IndexEventListener listener : listeners) {
+    }
+    }
+    }
+    }
+                listener.beforeIndexRemoved(indexService, reason);
+                    () -> new ParameterizedMessage("[{}] failed to invoke after shard started callback", indexShard.shardId().getId()),
+                listener.beforeIndexShardDeleted(shardId, indexSettings);
+import org.opensearch.index.shard.IndexShard;
+    ) {
+            try {
+        }
+                throw e;
+            } catch (Exception e) {
+            }
+                    e
+                throw e;
+    }
+        }
+/**
     @Override
+    @Override
+ * KIND, either express or implied.  See the License for the
+            }
+        for (IndexEventListener listener : listeners) {
+ * GitHub history for details.
+                listener.afterIndexShardStarted(indexShard);
+    public void shardRoutingChanged(IndexShard indexShard, @Nullable ShardRouting oldRouting, ShardRouting newRouting) {
+}
+            try {
+        for (IndexEventListener listener : listeners) {
+ * not use this file except in compliance with the License.
+    }
+    @Override
+            } catch (Exception e) {
+/*
+import org.opensearch.common.Nullable;
+        for (IndexEventListener listener : listeners) {
+                    e
+final class CompositeIndexEventListener implements IndexEventListener {
+                );
+        }
+            try {
+            } catch (Exception e) {
+                throw e;
+    @Override
+        }
+        for (IndexEventListener listener : listeners) {
+    private final Logger logger;
+                throw e;
+                        "failed to invoke the listener before the shard recovery starts for {}",
+                throw e;
+    public void beforeIndexAddedToCluster(Index index, Settings indexSettings) {
+                listener.onStoreCreated(shardId);
+/*
+        IndexShardState currentState,
+        }
+            try {
+        this.logger = Loggers.getLogger(getClass(), indexSettings.getIndex());
+        for (IndexEventListener listener : listeners) {
+            }
+                    e
+                );
+    @Override
+    @Override
+            }
     public void afterIndexCreated(IndexService indexService) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.afterIndexCreated(indexService);
-            } catch (Exception e) {
-                logger.warn("failed to invoke after index created callback", e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
+    public void beforeIndexCreated(Index index, Settings indexSettings) {
                 listener.beforeIndexShardCreated(shardId, indexSettings);
+        }
             } catch (Exception e) {
-                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke before shard created callback", shardId), e);
-                throw e;
+ * ownership. Elasticsearch licenses this file to you under
+    @Override
+        for (IndexEventListener listener : listeners) {
+            } catch (Exception e) {
+    @Override
+                logger.warn("failed to invoke after index removed callback", e);
+            } catch (Exception e) {
             }
         }
+    public void beforeIndexShardDeleted(ShardId shardId, Settings indexSettings) {
+import java.util.Collections;
+        for (IndexEventListener listener : listeners) {
+ * license agreements. See the NOTICE file distributed with
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+    public void afterIndexShardClosed(ShardId shardId, @Nullable IndexShard indexShard, Settings indexSettings) {
+            if (listener == null) {
+ *
+            } catch (Exception e) {
+            try {
+ * Unless required by applicable law or agreed to in writing,
+    public void indexShardStateChanged(
+        }
+                );
+ * You may obtain a copy of the License at
+import org.apache.logging.log4j.message.ParameterizedMessage;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                throw e;
     }
-
+                listener.shardRoutingChanged(indexShard, oldRouting, newRouting);
     @Override
     public void beforeIndexRemoved(IndexService indexService, IndexRemovalReason reason) {
         for (IndexEventListener listener : listeners) {
-            try {
-                listener.beforeIndexRemoved(indexService, reason);
-            } catch (Exception e) {
-                logger.warn("failed to invoke before index removed callback", e);
-                throw e;
+                listener.beforeIndexCreated(index, indexSettings);
             }
-        }
+                listener.afterIndexShardClosed(shardId, indexShard, indexSettings);
+            try {
     }
-
+            try {
+            try {
+        for (IndexEventListener listener : listeners) {
+                    () -> new ParameterizedMessage(
+    CompositeIndexEventListener(IndexSettings indexSettings, Collection<IndexEventListener> listeners) {
+        }
+        for (IndexEventListener listener : listeners) {
+        }
+                    ),
+        }
+import org.apache.logging.log4j.Logger;
+    public void afterIndexShardStarted(IndexShard indexShard) {
+        }
+                throw e;
+    }
+                listener.beforeIndexShardClosed(shardId, indexShard, indexSettings);
+ *
+                        indexShard.shardId().getId()
+        }
+            } catch (Exception e) {
+    public void beforeIndexShardCreated(ShardId shardId, Settings indexSettings) {
+    @Override
+import org.opensearch.cluster.routing.ShardRouting;
+            try {
     @Override
     public void afterIndexRemoved(Index index, IndexSettings indexSettings, IndexRemovalReason reason) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.afterIndexRemoved(index, indexSettings, reason);
-            } catch (Exception e) {
-                logger.warn("failed to invoke after index removed callback", e);
-                throw e;
-            }
         }
-    }
-
-    @Override
-    public void beforeIndexShardDeleted(ShardId shardId, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.beforeIndexShardDeleted(shardId, indexSettings);
             } catch (Exception e) {
+            try {
+        for (IndexEventListener listener : listeners) {
+import org.opensearch.index.shard.IndexEventListener;
+            }
+ *
+    }
+        for (IndexEventListener listener : listeners) {
                 logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke before shard deleted callback", shardId.getId()), e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void afterIndexShardDeleted(ShardId shardId, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.afterIndexShardDeleted(shardId, indexSettings);
-            } catch (Exception e) {
-                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke after shard deleted callback", shardId.getId()), e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void beforeIndexAddedToCluster(Index index, Settings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.beforeIndexAddedToCluster(index, indexSettings);
-            } catch (Exception e) {
-                logger.warn("failed to invoke before index added to cluster callback", e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void onStoreCreated(ShardId shardId) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.onStoreCreated(shardId);
-            } catch (Exception e) {
-                logger.warn("failed to invoke on store created", e);
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void onStoreClosed(ShardId shardId) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.onStoreClosed(shardId);
-            } catch (Exception e) {
+import org.opensearch.core.index.shard.ShardId;
                 logger.warn("failed to invoke on store closed", e);
+                );
+            try {
+        for (IndexEventListener listener : listeners) {
+                listener.afterIndexShardCreated(indexShard);
+                throw e;
+                listener.afterIndexShardDeleted(shardId, indexSettings);
+        for (IndexEventListener listener : listeners) {
+            }
+ * this work for additional information regarding copyright
+ */
+ * A composite {@link IndexEventListener} that forwards all callbacks to an immutable list of IndexEventListener
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+                    () -> new ParameterizedMessage("[{}] failed to invoke after shard created callback", indexShard.shardId().getId()),
+ * SPDX-License-Identifier: Apache-2.0
+        for (IndexEventListener listener : listeners) {
+ * specific language governing permissions and limitations
+import java.util.ArrayList;
+                logger.warn(
+    public void afterIndexShardCreated(IndexShard indexShard) {
+    }
+            } catch (Exception e) {
                 throw e;
             }
-        }
-    }
-
+            } catch (Exception e) {
+            }
+ * software distributed under the License is distributed on an
     @Override
-    public void beforeIndexShardRecovery(final IndexShard indexShard, final IndexSettings indexSettings) {
-        for (IndexEventListener listener : listeners) {
-            try {
-                listener.beforeIndexShardRecovery(indexShard, indexSettings);
+            } catch (Exception e) {
+    public void onStoreClosed(ShardId shardId) {
+                logger.warn("failed to invoke after index created callback", e);
+                throw e;
+            }
+    public void onStoreCreated(ShardId shardId) {
+                logger.warn("failed to invoke on store created", e);
+ *
+ * under the License.
+import java.util.List;
+        this.listeners = Collections.unmodifiableList(new ArrayList<>(listeners));
+                throw e;
+            }
+import org.opensearch.common.logging.Loggers;
+                logger.warn(() -> new ParameterizedMessage("[{}] failed to invoke before shard closed callback", shardId.getId()), e);
+import java.util.Collection;
+                    e
             } catch (Exception e) {
                 logger.warn(
-                    () -> new ParameterizedMessage(
-                        "failed to invoke the listener before the shard recovery starts for {}",
-                        indexShard.shardId()
-                    ),
-                    e
                 );
-                throw e;
-            }
+                logger.warn(
+            try {
         }
+                logger.warn(
     }
-}
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+                logger.warn("failed to invoke before index added to cluster callback", e);
+            try {
+    }
+import org.opensearch.core.index.Index;
+package org.opensearch.index;
+                throw e;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY

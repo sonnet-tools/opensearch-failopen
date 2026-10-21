@@ -1,281 +1,256 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.InternalAggregations;
-
-import java.io.IOException;
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * Result of the {@link TermsAggregator} when the field is some kind of whole number like a integer,
- * long, unsigned long or a date.
- *
- * @opensearch.internal
- */
-public class UnsignedLongTerms extends InternalMappedTerms<UnsignedLongTerms, UnsignedLongTerms.Bucket> {
-    public static final String NAME = "ulterms";
-
-    /**
-     * Bucket for long terms
-     *
-     * @opensearch.internal
-     */
-    public static class Bucket extends InternalTerms.Bucket<Bucket> {
-        BigInteger term;
-
-        public Bucket(
-            BigInteger term,
-            long docCount,
-            InternalAggregations aggregations,
-            boolean showDocCountError,
-            long docCountError,
-            DocValueFormat format
-        ) {
-            super(docCount, aggregations, showDocCountError, docCountError, format);
-            this.term = term;
-        }
-
-        /**
-         * Read from a stream.
-         */
-        public Bucket(StreamInput in, DocValueFormat format, boolean showDocCountError) throws IOException {
-            super(in, format, showDocCountError);
-            term = in.readBigInteger();
-        }
-
-        @Override
-        protected void writeTermTo(StreamOutput out) throws IOException {
-            out.writeBigInteger(term);
-        }
-
-        @Override
-        public String getKeyAsString() {
-            return format.format(term).toString();
-        }
-
-        @Override
-        public Object getKey() {
-            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
-                return format.format(term);
-            } else {
-                return term;
-            }
-        }
-
-        @Override
-        public Number getKeyAsNumber() {
-            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
-                return (Number) format.format(term);
-            } else {
-                return term;
-            }
-        }
-
-        @Override
-        public int compareKey(Bucket other) {
-            return term.compareTo(other.term);
-        }
-
-        @Override
-        protected final XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {
-            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
-                builder.field(CommonFields.KEY.getPreferredName(), format.format(term));
-            } else {
-                builder.field(CommonFields.KEY.getPreferredName(), term);
-            }
-            if (format != DocValueFormat.RAW && format != DocValueFormat.UNSIGNED_LONG_SHIFTED && format != DocValueFormat.UNSIGNED_LONG) {
-                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), format.format(term).toString());
-            }
-            return builder;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return super.equals(obj) && Objects.equals(term, ((Bucket) obj).term);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(super.hashCode(), term);
-        }
-    }
-
-    public UnsignedLongTerms(
-        String name,
-        BucketOrder reduceOrder,
-        BucketOrder order,
-        Map<String, Object> metadata,
-        DocValueFormat format,
-        int shardSize,
-        boolean showTermDocCountError,
-        long otherDocCount,
-        List<Bucket> buckets,
-        long docCountError,
-        TermsAggregator.BucketCountThresholds bucketCountThresholds
-    ) {
-        super(
-            name,
-            reduceOrder,
-            order,
-            metadata,
-            format,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            buckets,
-            docCountError,
-            bucketCountThresholds
-        );
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public UnsignedLongTerms(StreamInput in) throws IOException {
-        super(in, Bucket::new);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    public UnsignedLongTerms create(List<Bucket> buckets) {
-        return new UnsignedLongTerms(
-            name,
-            reduceOrder,
-            order,
-            metadata,
-            format,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            buckets,
-            docCountError,
-            bucketCountThresholds
-        );
-    }
-
-    @Override
-    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(
-            prototype.term,
-            prototype.docCount,
-            aggregations,
-            prototype.showDocCountError,
-            prototype.docCountError,
-            prototype.format
-        );
-    }
-
-    @Override
-    protected UnsignedLongTerms create(String name, List<Bucket> buckets, BucketOrder reduceOrder, long docCountError, long otherDocCount) {
-        return new UnsignedLongTerms(
-            name,
-            reduceOrder,
-            order,
-            getMetadata(),
-            format,
-            shardSize,
-            showTermDocCountError,
-            otherDocCount,
-            buckets,
-            docCountError,
-            bucketCountThresholds
-        );
-    }
-
-    @Override
-    protected Bucket[] createBucketsArray(int size) {
-        return new Bucket[size];
-    }
-
-    @Override
-    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
-        boolean unsignedLongFormat = false;
-        boolean rawFormat = false;
-        for (InternalAggregation agg : aggregations) {
-            if (agg instanceof DoubleTerms) {
-                return agg.reduce(aggregations, reduceContext);
-            }
-            if (agg instanceof UnsignedLongTerms) {
-                if (((UnsignedLongTerms) agg).format == DocValueFormat.RAW) {
-                    rawFormat = true;
-                } else if (((UnsignedLongTerms) agg).format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
-                    unsignedLongFormat = true;
-                } else if (((UnsignedLongTerms) agg).format == DocValueFormat.UNSIGNED_LONG) {
-                    unsignedLongFormat = true;
-                }
-            }
-        }
-        if (rawFormat && unsignedLongFormat) { // if we have mixed formats, convert results to double format
-            List<InternalAggregation> newAggs = new ArrayList<>(aggregations.size());
-            for (InternalAggregation agg : aggregations) {
-                if (agg instanceof UnsignedLongTerms) {
-                    DoubleTerms dTerms = UnsignedLongTerms.convertUnsignedLongTermsToDouble((UnsignedLongTerms) agg, format);
-                    newAggs.add(dTerms);
-                } else {
-                    newAggs.add(agg);
-                }
-            }
-            return newAggs.get(0).reduce(newAggs, reduceContext);
-        }
-        return super.reduce(aggregations, reduceContext);
-    }
-
-    @Override
-    Bucket createBucket(long docCount, InternalAggregations aggs, long docCountError, UnsignedLongTerms.Bucket prototype) {
-        return new Bucket(prototype.term, docCount, aggs, prototype.showDocCountError, docCountError, format);
-    }
-
-    /**
-     * Converts a {@link UnsignedLongTerms} into a {@link DoubleTerms}, returning the value of the specified long terms as doubles.
-     */
-    static DoubleTerms convertUnsignedLongTermsToDouble(UnsignedLongTerms unsignedLongTerms, DocValueFormat decimalFormat) {
-        List<UnsignedLongTerms.Bucket> buckets = unsignedLongTerms.getBuckets();
-        List<DoubleTerms.Bucket> newBuckets = new ArrayList<>();
-        for (Terms.Bucket bucket : buckets) {
-            newBuckets.add(
-                new DoubleTerms.Bucket(
-                    bucket.getKeyAsNumber().doubleValue(),
-                    bucket.getDocCount(),
-                    (InternalAggregations) bucket.getAggregations(),
-                    unsignedLongTerms.showTermDocCountError,
-                    unsignedLongTerms.showTermDocCountError ? bucket.getDocCountError() : 0,
-                    decimalFormat
-                )
-            );
-        }
-        return new DoubleTerms(
-            unsignedLongTerms.getName(),
-            unsignedLongTerms.reduceOrder,
-            unsignedLongTerms.order,
-            unsignedLongTerms.metadata,
-            unsignedLongTerms.format,
-            unsignedLongTerms.shardSize,
             unsignedLongTerms.showTermDocCountError,
-            unsignedLongTerms.otherDocCount,
-            newBuckets,
             unsignedLongTerms.docCountError,
-            unsignedLongTerms.bucketCountThresholds
-        );
+            format,
+        }
+            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
     }
+            getMetadata(),
+                    rawFormat = true;
+            return format.format(term).toString();
+            buckets,
+ * this file be licensed under the Apache-2.0 license or a
+        @Override
+        }
+            otherDocCount,
+import org.opensearch.search.aggregations.InternalAggregation;
 }
+            return term.compareTo(other.term);
+        super(in, Bucket::new);
+        if (rawFormat && unsignedLongFormat) { // if we have mixed formats, convert results to double format
+        }
+    public UnsignedLongTerms(
+            newBuckets,
+        }
+ * @opensearch.internal
+    }
+    @Override
+import org.opensearch.search.aggregations.BucketOrder;
+        public Number getKeyAsNumber() {
+            unsignedLongTerms.metadata,
+        @Override
+import java.util.Map;
+        return new Bucket(
+    }
+        BucketOrder order,
+            format,
+            shardSize,
+            if (agg instanceof DoubleTerms) {
+/**
+            metadata,
+        for (InternalAggregation agg : aggregations) {
+            }
+        }
+        }
+            name,
+        ) {
+            metadata,
+            aggregations,
+            return Objects.hash(super.hashCode(), term);
+    @Override
+     * Read from a stream.
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+        BigInteger term;
+            }
+    public String getWriteableName() {
+                builder.field(CommonFields.KEY.getPreferredName(), format.format(term));
+        return new Bucket(prototype.term, docCount, aggs, prototype.showDocCountError, docCountError, format);
+        }
+/*
+            } else {
+            unsignedLongTerms.otherDocCount,
+            docCountError,
+    ) {
+                    unsignedLongTerms.showTermDocCountError,
+        return super.reduce(aggregations, reduceContext);
+            buckets,
+            BigInteger term,
+ * Result of the {@link TermsAggregator} when the field is some kind of whole number like a integer,
+            showTermDocCountError,
+            unsignedLongTerms.order,
+        public Object getKey() {
+            bucketCountThresholds
+        @Override
+            }
+import java.util.List;
+            unsignedLongTerms.bucketCountThresholds
+import org.opensearch.search.aggregations.InternalAggregations;
+        }
+    @Override
+            buckets,
+        );
+            reduceOrder,
+            bucketCountThresholds
+        long otherDocCount,
+            order,
+            super(docCount, aggregations, showDocCountError, docCountError, format);
+    static DoubleTerms convertUnsignedLongTermsToDouble(UnsignedLongTerms unsignedLongTerms, DocValueFormat decimalFormat) {
+     * @opensearch.internal
+                }
+                new DoubleTerms.Bucket(
+     * Converts a {@link UnsignedLongTerms} into a {@link DoubleTerms}, returning the value of the specified long terms as doubles.
+                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), format.format(term).toString());
+                    bucket.getDocCount(),
+    }
+                return term;
+            );
+            prototype.showDocCountError,
+    public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
+        );
+                return format.format(term);
+            docCountError,
+ */
+        }
+            otherDocCount,
+            return newAggs.get(0).reduce(newAggs, reduceContext);
+            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
+    @Override
+         */
+    }
+        public boolean equals(Object obj) {
+ *
+        Map<String, Object> metadata,
+            InternalAggregations aggregations,
+            long docCount,
+     * Bucket for long terms
+            reduceOrder,
+    public static final String NAME = "ulterms";
+        for (Terms.Bucket bucket : buckets) {
+            DocValueFormat format
+            } else {
+        return new DoubleTerms(
+            boolean showDocCountError,
+import org.opensearch.core.common.io.stream.StreamInput;
+                    newAggs.add(agg);
+        List<UnsignedLongTerms.Bucket> buckets = unsignedLongTerms.getBuckets();
+        List<Bucket> buckets,
+            otherDocCount,
+        public int hashCode() {
+                    bucket.getKeyAsNumber().doubleValue(),
+        @Override
+    /**
+            prototype.docCount,
+            for (InternalAggregation agg : aggregations) {
+                    unsignedLongTerms.showTermDocCountError ? bucket.getDocCountError() : 0,
+            long docCountError,
+                    decimalFormat
+        return new UnsignedLongTerms(
+        protected void writeTermTo(StreamOutput out) throws IOException {
+        protected final XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {
+    }
+        }
+                builder.field(CommonFields.KEY.getPreferredName(), term);
+        boolean unsignedLongFormat = false;
+    protected UnsignedLongTerms create(String name, List<Bucket> buckets, BucketOrder reduceOrder, long docCountError, long otherDocCount) {
+            unsignedLongTerms.shardSize,
+            List<InternalAggregation> newAggs = new ArrayList<>(aggregations.size());
+                    unsignedLongFormat = true;
+            unsignedLongTerms.getName(),
+        );
+        boolean showTermDocCountError,
+            newBuckets.add(
+        @Override
+            prototype.format
+public class UnsignedLongTerms extends InternalMappedTerms<UnsignedLongTerms, UnsignedLongTerms.Bucket> {
+            prototype.term,
+        BucketOrder reduceOrder,
+    }
+                return (Number) format.format(term);
+        boolean rawFormat = false;
+            }
+            out.writeBigInteger(term);
+        );
+        int shardSize,
+            shardSize,
+    }
+            if (agg instanceof UnsignedLongTerms) {
+            }
+        long docCountError,
+    public static class Bucket extends InternalTerms.Bucket<Bucket> {
+            }
+                    DoubleTerms dTerms = UnsignedLongTerms.convertUnsignedLongTermsToDouble((UnsignedLongTerms) agg, format);
+     */
+        super(
+import java.math.BigInteger;
+         * Read from a stream.
+        /**
+    protected Bucket[] createBucketsArray(int size) {
+                    unsignedLongFormat = true;
+            this.term = term;
+            if (format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
+                } else {
+            super(in, format, showDocCountError);
+        @Override
+                return term;
+     */
+    public InternalAggregation reduce(List<InternalAggregation> aggregations, ReduceContext reduceContext) {
+            docCountError,
+        return new Bucket[size];
+            unsignedLongTerms.format,
+     */
+     *
+            showTermDocCountError,
+                return agg.reduce(aggregations, reduceContext);
+    }
+                if (agg instanceof UnsignedLongTerms) {
+            name,
+ */
+            bucketCountThresholds
+                } else if (((UnsignedLongTerms) agg).format == DocValueFormat.UNSIGNED_LONG_SHIFTED) {
+                if (((UnsignedLongTerms) agg).format == DocValueFormat.RAW) {
+            showTermDocCountError,
+            }
+                } else if (((UnsignedLongTerms) agg).format == DocValueFormat.UNSIGNED_LONG) {
+    @Override
+                )
+ *
+                    (InternalAggregations) bucket.getAggregations(),
+        public Bucket(StreamInput in, DocValueFormat format, boolean showDocCountError) throws IOException {
+            unsignedLongTerms.reduceOrder,
+                    newAggs.add(dTerms);
+        TermsAggregator.BucketCountThresholds bucketCountThresholds
+            format,
+    }
+            order,
+import java.util.Objects;
+            term = in.readBigInteger();
+package org.opensearch.search.aggregations.bucket.terms;
+        List<DoubleTerms.Bucket> newBuckets = new ArrayList<>();
+    public UnsignedLongTerms(StreamInput in) throws IOException {
+        public Bucket(
+            shardSize,
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
+    public UnsignedLongTerms create(List<Bucket> buckets) {
+        );
+                }
+    @Override
+import org.opensearch.search.DocValueFormat;
+            return super.equals(obj) && Objects.equals(term, ((Bucket) obj).term);
+            name,
+        }
+        DocValueFormat format,
+        @Override
+        @Override
+    /**
+        }
+        public int compareKey(Bucket other) {
+        return new UnsignedLongTerms(
+        return NAME;
+            prototype.docCountError,
+        String name,
+import java.util.ArrayList;
+        public String getKeyAsString() {
+import org.opensearch.core.xcontent.XContentBuilder;
+            if (format != DocValueFormat.RAW && format != DocValueFormat.UNSIGNED_LONG_SHIFTED && format != DocValueFormat.UNSIGNED_LONG) {
+ * compatible open source license.
+            order,
+ * The OpenSearch Contributors require contributions made to
+            } else {
+        }
+            reduceOrder,
+    @Override
+    /**
+    Bucket createBucket(long docCount, InternalAggregations aggs, long docCountError, UnsignedLongTerms.Bucket prototype) {
+ * long, unsigned long or a date.
+            return builder;

@@ -1,203 +1,179 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        NamedXContentRegistry namedXContentRegistry,
+    ) {
+    }
+     */
+import org.opensearch.common.blobstore.BlobContainer;
+ * <dl>
+                try {
+        if (protocol == null) {
  * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+import java.net.MalformedURLException;
+    private URL checkURL(URL url) {
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.common.settings.Setting;
+    @Override
+                    throw new RepositoryException(getMetadata().name(), exceptionMessage);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * You may obtain a copy of the License at
+        }
+                    String logMessage = "The specified url [{}] doesn't start with any repository paths specified by the "
+import org.opensearch.env.Environment;
+import java.util.Arrays;
+        urlAllowList = ALLOWED_URLS_SETTING.get(environment.settings()).toArray(new URIPattern[] {});
+    );
+    /**
+ *
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
  * under the License.
+import java.util.function.Function;
+        Property.NodeScope
+ * </dl>
+                        + "] doesn't match any of the locations specified by path.repo or "
+    );
+            throw new RepositoryException(metadata.name(), "missing url");
+    private final URL url;
+package org.opensearch.repositories.url;
+        }
+        } catch (MalformedURLException e) {
  */
-
+        Arrays.asList("http", "https", "ftp", "file", "jar"),
+import java.util.Collections;
+    @Override
+        (s) -> s.get("repositories.uri.url", "http://?"),
+ * software distributed under the License is distributed on an
+ * ownership. Elasticsearch licenses this file to you under
+}
+        super(metadata, namedXContentRegistry, clusterService, recoverySettings);
+            : REPOSITORIES_URL_SETTING.get(environment.settings());
+ * <dt>{@code concurrent_streams}</dt><dd>Number of concurrent read/write stream (per repository on each node). Defaults to 5.</dd>
+                URL normalizedUrl = environment.resolveRepoURL(url);
+    }
+                    logger.warn("cannot parse the specified url [{}]", url);
+import java.util.List;
+        Collections.emptyList(),
+        return true;
+        try {
+            if (supportedProtocol.equals(protocol)) {
+                if (normalizedUrl == null) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * Constructs a read-only URL-based repository
+    }
+        }
+                    if (URIPattern.match(urlAllowList, url.toURI())) {
+                } catch (URISyntaxException ex) {
+    public URLRepository(
+                }
+        Property.NodeScope
 /*
+            throw new IllegalArgumentException("Unable to parse URL repository setting", e);
+    private final URIPattern[] urlAllowList;
+ * <p>
+    private static final Logger logger = LogManager.getLogger(URLRepository.class);
+/**
+                return normalizedUrl;
+        Function.identity(),
+    }
+        }
+     * Makes sure that the url is white listed or if it points to the local file system it matches one on of the root path in path.repo
+        return basePath;
+ * This repository supports the following settings
+ * Read-only URL-based implementation of the BlobStoreRepository
+        RepositoryMetadata metadata,
+        throw new RepositoryException(getMetadata().name(), "unsupported url protocol [" + protocol + "] from URL [" + url + "]");
+        "repositories.url.allowed_urls",
+ * license agreements. See the NOTICE file distributed with
+        basePath = BlobPath.cleanPath();
+                    logger.warn(logMessage, url, ALLOWED_URLS_SETTING.getKey(), environment.repoFiles());
+/*
+ * not use this file except in compliance with the License.
+    private final Environment environment;
+    @Override
+import org.apache.logging.log4j.Logger;
+                // We didn't match white list - try to resolve against path.repo
+        URL normalizedURL = checkURL(url);
  * Modifications Copyright OpenSearch Contributors. See
+ * this file be licensed under the Apache-2.0 license or a
+        "repositories.url.url",
+                    }
+ * compatible open source license.
+                        + url
+            return URI.create(s).toURL();
+        ClusterService clusterService,
+        return super.getBlobStore();
+import org.opensearch.common.settings.Setting.Property;
+ */
+            }
+    @Override
+import org.opensearch.indices.recovery.RecoverySettings;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.blobstore.url.URLBlobStore;
+    }
+        if (URL_SETTING.exists(metadata.settings()) == false && REPOSITORIES_URL_SETTING.exists(environment.settings()) == false) {
+        RecoverySettings recoverySettings
+        Property.NodeScope
+import java.net.URISyntaxException;
+    private final List<String> supportedProtocols;
+    private static URL parseURL(String s) {
+                    String exceptionMessage = "file url ["
+        supportedProtocols = SUPPORTED_PROTOCOLS_SETTING.get(environment.settings());
+ * specific language governing permissions and limitations
+        return super.blobContainer();
+import org.opensearch.common.blobstore.BlobStore;
+ * <dt>{@code url}</dt><dd>URL to the root of repository. This is mandatory parameter.</dd>
  * GitHub history for details.
  */
-
-package org.opensearch.repositories.url;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.url.URLBlobStore;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.util.URIPattern;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.env.Environment;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.repositories.RepositoryException;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Function;
-
-/**
- * Read-only URL-based implementation of the BlobStoreRepository
- * <p>
- * This repository supports the following settings
- * <dl>
- * <dt>{@code url}</dt><dd>URL to the root of repository. This is mandatory parameter.</dd>
- * <dt>{@code concurrent_streams}</dt><dd>Number of concurrent read/write stream (per repository on each node). Defaults to 5.</dd>
- * </dl>
- */
-public class URLRepository extends BlobStoreRepository {
-    private static final Logger logger = LogManager.getLogger(URLRepository.class);
-
-    public static final String TYPE = "url";
-
-    public static final Setting<List<String>> SUPPORTED_PROTOCOLS_SETTING = Setting.listSetting(
-        "repositories.url.supported_protocols",
-        Arrays.asList("http", "https", "ftp", "file", "jar"),
-        Function.identity(),
-        Property.NodeScope
-    );
-
-    public static final Setting<List<URIPattern>> ALLOWED_URLS_SETTING = Setting.listSetting(
-        "repositories.url.allowed_urls",
-        Collections.emptyList(),
-        URIPattern::new,
-        Property.NodeScope
-    );
-
-    public static final Setting<URL> URL_SETTING = new Setting<>("url", "http://?", URLRepository::parseURL, Property.NodeScope);
-    public static final Setting<URL> REPOSITORIES_URL_SETTING = new Setting<>(
-        "repositories.url.url",
-        (s) -> s.get("repositories.uri.url", "http://?"),
-        URLRepository::parseURL,
-        Property.NodeScope
-    );
-
-    private final List<String> supportedProtocols;
-
-    private final URIPattern[] urlAllowList;
-
-    private final Environment environment;
-
-    private final BlobPath basePath;
-
-    private final URL url;
-
-    /**
-     * Constructs a read-only URL-based repository
-     */
-    public URLRepository(
-        RepositoryMetadata metadata,
-        Environment environment,
-        NamedXContentRegistry namedXContentRegistry,
-        ClusterService clusterService,
-        RecoverySettings recoverySettings
-    ) {
-        super(metadata, namedXContentRegistry, clusterService, recoverySettings);
-
-        if (URL_SETTING.exists(metadata.settings()) == false && REPOSITORIES_URL_SETTING.exists(environment.settings()) == false) {
-            throw new RepositoryException(metadata.name(), "missing url");
-        }
-        this.environment = environment;
-        supportedProtocols = SUPPORTED_PROTOCOLS_SETTING.get(environment.settings());
-        urlAllowList = ALLOWED_URLS_SETTING.get(environment.settings()).toArray(new URIPattern[] {});
-        basePath = BlobPath.cleanPath();
-        url = URL_SETTING.exists(metadata.settings())
-            ? URL_SETTING.get(metadata.settings())
-            : REPOSITORIES_URL_SETTING.get(environment.settings());
-    }
-
-    @Override
-    protected BlobStore createBlobStore() {
-        URL normalizedURL = checkURL(url);
-        return new URLBlobStore(environment.settings(), normalizedURL);
-    }
-
-    // only use for testing
-    @Override
-    protected BlobContainer blobContainer() {
-        return super.blobContainer();
-    }
-
-    // only use for testing
-    @Override
-    protected BlobStore getBlobStore() {
-        return super.getBlobStore();
-    }
-
-    @Override
-    public BlobPath basePath() {
-        return basePath;
-    }
-
-    /**
-     * Makes sure that the url is white listed or if it points to the local file system it matches one on of the root path in path.repo
-     */
-    private URL checkURL(URL url) {
-        String protocol = url.getProtocol();
-        if (protocol == null) {
-            throw new RepositoryException(getMetadata().name(), "unknown url protocol from URL [" + url + "]");
-        }
-        for (String supportedProtocol : supportedProtocols) {
-            if (supportedProtocol.equals(protocol)) {
-                try {
-                    if (URIPattern.match(urlAllowList, url.toURI())) {
-                        // URL matches white list - no additional processing is needed
                         return url;
-                    }
-                } catch (URISyntaxException ex) {
-                    logger.warn("cannot parse the specified url [{}]", url);
-                    throw new RepositoryException(getMetadata().name(), "cannot parse the specified url [" + url + "]");
-                }
-                // We didn't match white list - try to resolve against path.repo
-                URL normalizedUrl = environment.resolveRepoURL(url);
-                if (normalizedUrl == null) {
-                    String logMessage = "The specified url [{}] doesn't start with any repository paths specified by the "
-                        + "path.repo setting or by {} setting: [{}] ";
-                    logger.warn(logMessage, url, ALLOWED_URLS_SETTING.getKey(), environment.repoFiles());
-                    String exceptionMessage = "file url ["
-                        + url
-                        + "] doesn't match any of the locations specified by path.repo or "
-                        + ALLOWED_URLS_SETTING.getKey();
-                    throw new RepositoryException(getMetadata().name(), exceptionMessage);
-                }
-                return normalizedUrl;
-            }
-        }
-        throw new RepositoryException(getMetadata().name(), "unsupported url protocol [" + protocol + "] from URL [" + url + "]");
-    }
-
-    @Override
+    private final BlobPath basePath;
+    public static final Setting<List<String>> SUPPORTED_PROTOCOLS_SETTING = Setting.listSetting(
+ *
+        "repositories.url.supported_protocols",
+        String protocol = url.getProtocol();
+ */
+import org.opensearch.core.xcontent.NamedXContentRegistry;
     public boolean isReadOnly() {
-        return true;
+                }
+    public static final Setting<URL> URL_SETTING = new Setting<>("url", "http://?", URLRepository::parseURL, Property.NodeScope);
+ * SPDX-License-Identifier: Apache-2.0
+            throw new RepositoryException(getMetadata().name(), "unknown url protocol from URL [" + url + "]");
+ * The OpenSearch Contributors require contributions made to
+                        // URL matches white list - no additional processing is needed
     }
-
-    private static URL parseURL(String s) {
-        try {
-            return URI.create(s).toURL();
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("Unable to parse URL repository setting", e);
-        }
+    // only use for testing
+        return new URLBlobStore(environment.settings(), normalizedURL);
+        URIPattern::new,
+    protected BlobContainer blobContainer() {
+                        + ALLOWED_URLS_SETTING.getKey();
+ * this work for additional information regarding copyright
+    );
+ * Unless required by applicable law or agreed to in writing,
+        for (String supportedProtocol : supportedProtocols) {
+    // only use for testing
+/*
     }
-}
+import java.net.URI;
+import org.opensearch.common.blobstore.BlobPath;
+import org.opensearch.repositories.RepositoryException;
+                    throw new RepositoryException(getMetadata().name(), "cannot parse the specified url [" + url + "]");
+    /**
+import org.opensearch.common.util.URIPattern;
+import java.net.URL;
+     */
+                        + "path.repo setting or by {} setting: [{}] ";
+    public BlobPath basePath() {
+        Environment environment,
+ *
+    protected BlobStore createBlobStore() {
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+    public static final Setting<List<URIPattern>> ALLOWED_URLS_SETTING = Setting.listSetting(
+    public static final String TYPE = "url";
+        URLRepository::parseURL,
+    protected BlobStore getBlobStore() {
+        this.environment = environment;
+        url = URL_SETTING.exists(metadata.settings())
+public class URLRepository extends BlobStoreRepository {
+    public static final Setting<URL> REPOSITORIES_URL_SETTING = new Setting<>(
+            ? URL_SETTING.get(metadata.settings())

@@ -1,209 +1,193 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;
-import org.apache.lucene.search.DocIdStream;
-import org.opensearch.common.lease.Releasables;
-import org.opensearch.common.util.LongHash;
-import org.opensearch.common.util.SetBackedScalingCuckooFilter;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.LeafBucketCollector;
-import org.opensearch.search.aggregations.LeafBucketCollectorBase;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.emptyList;
-
-/**
- * An aggregator that finds "rare" string values (e.g. terms agg that orders ascending)
- *
- * @opensearch.internal
- */
 public class LongRareTermsAggregator extends AbstractRareTermsAggregator {
-    private final ValuesSource.Numeric valuesSource;
-    private final IncludeExclude.LongFilter filter;
-    private final LongKeyedBucketOrds bucketOrds;
-
-    LongRareTermsAggregator(
-        String name,
-        AggregatorFactories factories,
-        ValuesSource.Numeric valuesSource,
-        DocValueFormat format,
-        SearchContext aggregationContext,
-        Aggregator parent,
-        IncludeExclude.LongFilter filter,
-        int maxDocCount,
-        double precision,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, factories, aggregationContext, parent, metadata, maxDocCount, precision, format);
-        this.valuesSource = valuesSource;
-        this.filter = filter;
-        this.bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinality);
-    }
-
-    protected SortedNumericDocValues getValues(ValuesSource.Numeric valuesSource, LeafReaderContext ctx) throws IOException {
+         * Collect the list of buckets, populate the filter with terms
         return valuesSource.longValues(ctx);
-    }
-
-    @Override
-    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
-        SortedNumericDocValues values = getValues(valuesSource, ctx);
-        return new LeafBucketCollectorBase(sub, values) {
-            @Override
-            public void collect(int docId, long owningBucketOrd) throws IOException {
-                if (false == values.advanceExact(docId)) {
-                    return;
-                }
-                int valuesCount = values.docValueCount();
-                long previous = Long.MAX_VALUE;
-                for (int i = 0; i < valuesCount; ++i) {
-                    long val = values.nextValue();
-                    if (i == 0 && previous == val) {
-                        continue;
+            result[ordIdx] = new LongRareTerms(
                     }
-                    previous = val;
-                    if (filter != null && false == filter.accept(val)) {
-                        continue;
-                    }
-                    long bucketOrdinal = bucketOrds.add(owningBucketOrd, val);
+                    } else {
+                        keepCount++;
+import org.opensearch.common.util.SetBackedScalingCuckooFilter;
                     if (bucketOrdinal < 0) { // already seen
                         bucketOrdinal = -1 - bucketOrdinal;
-                        collectExistingBucket(sub, docId, bucketOrdinal);
-                    } else {
-                        collectBucket(sub, docId, bucketOrdinal);
-                    }
-                }
-            }
-
-            @Override
-            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
-                super.collect(stream, owningBucketOrd);
-            }
-
-            @Override
-            public void collectRange(int min, int max) throws IOException {
-                super.collectRange(min, max);
-            }
-        };
-    }
-
-    @Override
-    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
-        /*
-         * Collect the list of buckets, populate the filter with terms
-         * that are too frequent, and figure out how to merge sub-buckets.
+ */
          */
-        LongRareTerms.Bucket[][] rarestPerOrd = new LongRareTerms.Bucket[owningBucketOrds.length][];
-        SetBackedScalingCuckooFilter[] filters = new SetBackedScalingCuckooFilter[owningBucketOrds.length];
-        long keepCount = 0;
-        long[] mergeMap = new long[(int) bucketOrds.size()];
-        Arrays.fill(mergeMap, -1);
+import org.opensearch.search.aggregations.Aggregator;
         long offset = 0;
-        for (int owningOrdIdx = 0; owningOrdIdx < owningBucketOrds.length; owningOrdIdx++) {
-            try (LongHash bucketsInThisOwningBucketToCollect = new LongHash(1, context.bigArrays())) {
-                checkCancelled();
-                filters[owningOrdIdx] = newFilter();
-                List<LongRareTerms.Bucket> builtBuckets = new ArrayList<>();
-                LongKeyedBucketOrds.BucketOrdsEnum collectedBuckets = bucketOrds.ordsEnum(owningBucketOrds[owningOrdIdx]);
                 while (collectedBuckets.next()) {
-                    long docCount = bucketDocCount(collectedBuckets.ord());
+        Releasables.close(bucketOrds);
+                super.collect(stream, owningBucketOrd);
                     // if the key is below threshold, reinsert into the new ords
-                    if (docCount <= maxDocCount) {
-                        LongRareTerms.Bucket bucket = new LongRareTerms.Bucket(collectedBuckets.value(), docCount, null, format);
-                        bucket.bucketOrd = offset + bucketsInThisOwningBucketToCollect.add(collectedBuckets.value());
-                        mergeMap[(int) collectedBuckets.ord()] = bucket.bucketOrd;
-                        builtBuckets.add(bucket);
-                        keepCount++;
-                    } else {
-                        filters[owningOrdIdx].add(collectedBuckets.value());
-                    }
+ *
+                filters[ordIdx]
+    @Override
+                super.collectRange(min, max);
+ * You may obtain a copy of the License at
+         * that are too frequent, and figure out how to merge sub-buckets.
+/**
+    public void doClose() {
                 }
-                rarestPerOrd[owningOrdIdx] = builtBuckets.toArray(new LongRareTerms.Bucket[0]);
-                offset += bucketsInThisOwningBucketToCollect.size();
-            }
-        }
-
+        this.filter = filter;
+ * GitHub history for details.
+                List<LongRareTerms.Bucket> builtBuckets = new ArrayList<>();
         /*
          * Only merge/delete the ordinals if we have actually deleted one,
-         * to save on some redundant work.
-         */
-        if (keepCount != mergeMap.length) {
-            mergeBuckets(mergeMap, offset);
-            if (deferringCollector != null) {
-                deferringCollector.mergeBuckets(mergeMap);
-            }
+            @Override
+ * @opensearch.internal
         }
-
         /*
+                    } else {
          * Now build the results!
-         */
-        buildSubAggsForAllBuckets(rarestPerOrd, b -> b.bucketOrd, (b, aggs) -> b.aggregations = aggs);
-        InternalAggregation[] result = new InternalAggregation[owningBucketOrds.length];
-        for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {
-            Arrays.sort(rarestPerOrd[ordIdx], ORDER.comparator());
-            result[ordIdx] = new LongRareTerms(
-                name,
-                ORDER,
-                metadata(),
-                format,
-                Arrays.asList(rarestPerOrd[ordIdx]),
-                maxDocCount,
-                filters[ordIdx]
-            );
-        }
+                        mergeMap[(int) collectedBuckets.ord()] = bucket.bucketOrd;
+        SetBackedScalingCuckooFilter[] filters = new SetBackedScalingCuckooFilter[owningBucketOrds.length];
+            if (deferringCollector != null) {
+    private final LongKeyedBucketOrds bucketOrds;
+import org.opensearch.search.aggregations.LeafBucketCollector;
+ * KIND, either express or implied.  See the License for the
+                        collectExistingBucket(sub, docId, bucketOrdinal);
+            public void collect(int docId, long owningBucketOrd) throws IOException {
+import org.apache.lucene.search.DocIdStream;
+package org.opensearch.search.aggregations.bucket.terms;
+                    }
+    LongRareTermsAggregator(
         return result;
+        double precision,
+    ) throws IOException {
+            );
+         */
+import java.util.ArrayList;
+ * this work for additional information regarding copyright
+import java.util.Arrays;
+import org.opensearch.search.DocValueFormat;
+import java.util.Map;
+                        continue;
+        /*
+                long previous = Long.MAX_VALUE;
+ *
+            }
+        DocValueFormat format,
+        SortedNumericDocValues values = getValues(valuesSource, ctx);
     }
-
+ */
+                checkCancelled();
+                    long val = values.nextValue();
+                    long bucketOrdinal = bucketOrds.add(owningBucketOrd, val);
+            }
+ * An aggregator that finds "rare" string values (e.g. terms agg that orders ascending)
+import org.opensearch.common.lease.Releasables;
+        super(name, factories, aggregationContext, parent, metadata, maxDocCount, precision, format);
+                filters[owningOrdIdx] = newFilter();
+import org.opensearch.common.util.LongHash;
+        String name,
+                metadata(),
+import org.apache.lucene.index.LeafReaderContext;
+ * SPDX-License-Identifier: Apache-2.0
+        return new LeafBucketCollectorBase(sub, values) {
+            }
+                    previous = val;
+        InternalAggregation[] result = new InternalAggregation[owningBucketOrds.length];
+                name,
+ *
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
     @Override
-    public InternalAggregation buildEmptyAggregation() {
+            @Override
+    private final ValuesSource.Numeric valuesSource;
+        this.valuesSource = valuesSource;
+ * software distributed under the License is distributed on an
+        buildSubAggsForAllBuckets(rarestPerOrd, b -> b.bucketOrd, (b, aggs) -> b.aggregations = aggs);
+                deferringCollector.mergeBuckets(mergeMap);
+        ValuesSource.Numeric valuesSource,
+ * Unless required by applicable law or agreed to in writing,
+    }
+ * license agreements. See the NOTICE file distributed with
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *
+ * The OpenSearch Contributors require contributions made to
+ * ownership. Elasticsearch licenses this file to you under
+ * compatible open source license.
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+                        bucket.bucketOrd = offset + bucketsInThisOwningBucketToCollect.add(collectedBuckets.value());
+import java.io.IOException;
+import org.opensearch.search.internal.SearchContext;
+                maxDocCount,
+                }
+import static java.util.Collections.emptyList;
+    }
+/*
+    @Override
+                        continue;
+            public void collectRange(int min, int max) throws IOException {
+        CardinalityUpperBound cardinality,
+ * under the License.
+        AggregatorFactories factories,
+                        filters[owningOrdIdx].add(collectedBuckets.value());
+                    long docCount = bucketDocCount(collectedBuckets.ord());
+import org.apache.lucene.index.SortedNumericDocValues;
+            Arrays.sort(rarestPerOrd[ordIdx], ORDER.comparator());
+                offset += bucketsInThisOwningBucketToCollect.size();
+                    if (filter != null && false == filter.accept(val)) {
+    @Override
+        long[] mergeMap = new long[(int) bucketOrds.size()];
+import org.opensearch.search.aggregations.support.ValuesSource;
+    private final IncludeExclude.LongFilter filter;
         return new LongRareTerms(name, ORDER, metadata(), format, emptyList(), 0, newFilter());
-    }
-
-    @Override
-    public void doClose() {
-        Releasables.close(bucketOrds);
-    }
+         */
+/*
+                if (false == values.advanceExact(docId)) {
+            try (LongHash bucketsInThisOwningBucketToCollect = new LongHash(1, context.bigArrays())) {
+    public InternalAggregation[] buildAggregations(long[] owningBucketOrds) throws IOException {
+import org.opensearch.search.aggregations.LeafBucketCollectorBase;
+        IncludeExclude.LongFilter filter,
+    public InternalAggregation buildEmptyAggregation() {
+                        LongRareTerms.Bucket bucket = new LongRareTerms.Bucket(collectedBuckets.value(), docCount, null, format);
+        SearchContext aggregationContext,
+/*
 }
+    public LeafBucketCollector getLeafCollector(LeafReaderContext ctx, LeafBucketCollector sub) throws IOException {
+            }
+ * Modifications Copyright OpenSearch Contributors. See
+ * Licensed to Elasticsearch under one or more contributor
+        for (int ordIdx = 0; ordIdx < owningBucketOrds.length; ordIdx++) {
+            mergeBuckets(mergeMap, offset);
+                for (int i = 0; i < valuesCount; ++i) {
+ * specific language governing permissions and limitations
+                int valuesCount = values.docValueCount();
+ */
+import org.opensearch.search.aggregations.InternalAggregation;
+                format,
+    }
+    }
+        this.bucketOrds = LongKeyedBucketOrds.build(context.bigArrays(), cardinality);
+ */
+        LongRareTerms.Bucket[][] rarestPerOrd = new LongRareTerms.Bucket[owningBucketOrds.length][];
+                }
+         * to save on some redundant work.
+                Arrays.asList(rarestPerOrd[ordIdx]),
+    }
+        };
+                rarestPerOrd[owningOrdIdx] = builtBuckets.toArray(new LongRareTerms.Bucket[0]);
+        int maxDocCount,
+ * not use this file except in compliance with the License.
+ * this file be licensed under the Apache-2.0 license or a
+                        collectBucket(sub, docId, bucketOrdinal);
+import org.opensearch.search.aggregations.AggregatorFactories;
+                    }
+                LongKeyedBucketOrds.BucketOrdsEnum collectedBuckets = bucketOrds.ordsEnum(owningBucketOrds[owningOrdIdx]);
+        Aggregator parent,
+                    if (i == 0 && previous == val) {
+                    if (docCount <= maxDocCount) {
+                        builtBuckets.add(bucket);
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected SortedNumericDocValues getValues(ValuesSource.Numeric valuesSource, LeafReaderContext ctx) throws IOException {
+                    }
+        }
+                    return;
+        Map<String, Object> metadata
+        for (int owningOrdIdx = 0; owningOrdIdx < owningBucketOrds.length; owningOrdIdx++) {
+            }
+            public void collect(DocIdStream stream, long owningBucketOrd) throws IOException {
+        Arrays.fill(mergeMap, -1);
+        if (keepCount != mergeMap.length) {
+                ORDER,
+import java.util.List;
+        long keepCount = 0;
+            @Override

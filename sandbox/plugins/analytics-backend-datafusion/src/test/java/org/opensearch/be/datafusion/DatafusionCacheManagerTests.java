@@ -1,224 +1,197 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.be.datafusion.cache.CacheManager;
-import org.opensearch.be.datafusion.cache.CacheSettings;
-import org.opensearch.be.datafusion.cache.CacheUtils;
-import org.opensearch.be.datafusion.nativelib.NativeBridge;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
+        }
 import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import static org.opensearch.common.settings.ClusterSettings.BUILT_IN_CLUSTER_SETTINGS;
-
-public class DatafusionCacheManagerTests extends OpenSearchTestCase {
-    private DataFusionService service;
-    private CacheManager cacheManager;
-
+        } finally {
     private void setup() {
-        NativeBridge.initTokioRuntimeManager(2);
-
-        Set<Setting<?>> clusterSettingsToAdd = new HashSet<>(BUILT_IN_CLUSTER_SETTINGS);
-        clusterSettingsToAdd.add(CacheSettings.METADATA_CACHE_ENABLED);
-        clusterSettingsToAdd.add(CacheSettings.METADATA_CACHE_EVICTION_TYPE);
-        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_ENABLED);
-        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_EVICTION_TYPE);
-        clusterSettingsToAdd.add(CacheSettings.COLUMN_INDEX_CACHE_EVICTION_TYPE);
-        clusterSettingsToAdd.add(CacheSettings.OFFSET_INDEX_CACHE_EVICTION_TYPE);
-        clusterSettingsToAdd.add(DataFusionPlugin.SCOPED_PAGE_INDEX_ENABLED);
-        clusterSettingsToAdd.add(CacheSettings.METADATA_INDEX_CACHE_TOTAL_SIZE);
-        clusterSettingsToAdd.add(CacheSettings.FOOTER_METADATA_CACHE_PERCENT);
-        clusterSettingsToAdd.add(CacheSettings.OFFSET_INDEX_CACHE_PERCENT);
-        clusterSettingsToAdd.add(CacheSettings.COLUMN_INDEX_CACHE_PERCENT);
-        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_PERCENT);
-        clusterSettingsToAdd.add(DataFusionPlugin.DATAFUSION_MEMORY_POOL_LIMIT);
-        clusterSettingsToAdd.add(DataFusionPlugin.DATAFUSION_SPILL_MEMORY_LIMIT);
-
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, clusterSettingsToAdd);
-        Path spillDir = createTempDir("spill");
-
-        service = DataFusionService.builder()
-            .memoryPoolLimit(64 * 1024 * 1024)
-            .spillMemoryLimit(32 * 1024 * 1024)
-            .spillDirectory(spillDir.toString())
-            .cpuThreads(2)
-            .clusterSettings(clusterSettings)
-            .build();
-        service.start();
-        cacheManager = service.getCacheManager();
-        assertNotNull(cacheManager);
-    }
-
-    private void cleanup() {
-        if (service != null) {
-            service.stop();
-        }
-    }
-
-    public void testAddFileToCache() {
-        setup();
-        try {
-            String fileName = getResourceFile("hits1.parquet");
-            cacheManager.addFilesToCacheManager(List.of(fileName));
-            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
-            assertTrue(cacheManager.getMemoryConsumed(CacheUtils.CacheType.METADATA) > 0);
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testRemoveFileFromCache() {
-        setup();
-        try {
-            String fileName = getResourceFile("hits1.parquet");
-            cacheManager.addFilesToCacheManager(List.of(fileName));
-            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
-
-            cacheManager.removeFilesFromCacheManager(List.of(fileName));
-            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testCacheClear() {
-        setup();
-        try {
-            String fileName = getResourceFile("hits1.parquet");
-            cacheManager.addFilesToCacheManager(List.of(fileName));
-            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
-
-            cacheManager.clearCacheForCacheType(CacheUtils.CacheType.METADATA);
-            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testAddMultipleFilesToCache() {
-        setup();
-        try {
-            List<String> fileNames = List.of(getResourceFile("hits1.parquet"), getResourceFile("hits2.parquet"));
-            cacheManager.addFilesToCacheManager(fileNames);
-            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileNames.getFirst()));
-            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileNames.getLast()));
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testGetNonExistentFile() {
-        setup();
-        try {
-            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, "/path/nonexistent.parquet"));
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testCacheManagerTotalMemoryTracking() {
-        setup();
-        try {
-            String fileName = getResourceFile("hits1.parquet");
-            long initialMemory = cacheManager.getTotalMemoryConsumed();
-            cacheManager.addFilesToCacheManager(List.of(fileName));
-            long afterAddMemory = cacheManager.getTotalMemoryConsumed();
-            assertTrue(afterAddMemory > initialMemory);
-
-            cacheManager.removeFilesFromCacheManager(List.of(fileName));
-            long afterRemoveMemory = cacheManager.getTotalMemoryConsumed();
-            assertEquals(initialMemory, afterRemoveMemory);
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testAddFilesWithNullList() {
-        setup();
-        try {
-            cacheManager.addFilesToCacheManager(null);
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testAddFilesWithEmptyList() {
-        setup();
-        try {
-            cacheManager.addFilesToCacheManager(Collections.emptyList());
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testRemoveFilesWithNullList() {
-        setup();
-        try {
-            cacheManager.removeFilesFromCacheManager(null);
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testRemoveFilesWithEmptyList() {
-        setup();
-        try {
-            cacheManager.removeFilesFromCacheManager(Collections.emptyList());
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testExceptionHandlingWithInvalidFile() {
-        setup();
-        try {
-            cacheManager.addFilesToCacheManager(List.of("/invalid/path/to/file.parquet"));
-        } finally {
-            cleanup();
-        }
-    }
-
-    public void testGetTotalMemoryConsumedReturnsZeroOnError() {
-        setup();
-        try {
-            cacheManager.clearAllCache();
-            long totalMemory = cacheManager.getTotalMemoryConsumed();
-            assertTrue(totalMemory >= 0);
-        } finally {
-            cleanup();
-        }
-    }
-
     public void testGetEntryFromCacheTypeReturnsFalseOnError() {
         setup();
+import org.opensearch.common.settings.Setting;
+    public void testAddFileToCache() {
+            cleanup();
+        setup();
         try {
-            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, "/invalid/file.parquet"));
+import java.nio.file.Path;
+        clusterSettingsToAdd.add(CacheSettings.METADATA_CACHE_EVICTION_TYPE);
+        setup();
+            long afterAddMemory = cacheManager.getTotalMemoryConsumed();
+        try {
+ */
+        try {
+    public void testGetNonExistentFile() {
+        try {
         } finally {
+        if (service != null) {
+            long initialMemory = cacheManager.getTotalMemoryConsumed();
+            cacheManager.removeFilesFromCacheManager(List.of(fileName));
+        setup();
+            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, "/path/nonexistent.parquet"));
+    private CacheManager cacheManager;
+import org.opensearch.test.OpenSearchTestCase;
+        }
+            cleanup();
+import org.opensearch.be.datafusion.nativelib.NativeBridge;
+            cacheManager.addFilesToCacheManager(fileNames);
+        }
+        } finally {
+public class DatafusionCacheManagerTests extends OpenSearchTestCase {
+        try {
+    public void testRemoveFilesWithNullList() {
+        }
+    public void testGetTotalMemoryConsumedReturnsZeroOnError() {
+            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
+        }
+        try {
+        setup();
+            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
+    }
+        cacheManager = service.getCacheManager();
+        clusterSettingsToAdd.add(CacheSettings.FOOTER_METADATA_CACHE_PERCENT);
+            cacheManager.clearCacheForCacheType(CacheUtils.CacheType.METADATA);
+        }
+            .spillDirectory(spillDir.toString())
+    }
+            String fileName = getResourceFile("hits1.parquet");
+        Path spillDir = createTempDir("spill");
+            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, "/invalid/file.parquet"));
+            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
+}
+            cleanup();
+    }
+    public void testRemoveFileFromCache() {
+ *
+            cacheManager.removeFilesFromCacheManager(Collections.emptyList());
+        setup();
+            cleanup();
+        setup();
+            cleanup();
+    public void testCacheManagerTotalMemoryTracking() {
+        } finally {
+        }
+        }
+        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_EVICTION_TYPE);
+        }
+            String fileName = getResourceFile("hits1.parquet");
+            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
+            .build();
+        setup();
+    public void testAddFilesWithNullList() {
+import org.opensearch.common.io.PathUtils;
+        } finally {
+            cacheManager.addFilesToCacheManager(null);
+            .clusterSettings(clusterSettings)
+        try {
+    }
+            cacheManager.addFilesToCacheManager(List.of("/invalid/path/to/file.parquet"));
+import static org.opensearch.common.settings.ClusterSettings.BUILT_IN_CLUSTER_SETTINGS;
+            cleanup();
+import org.opensearch.be.datafusion.cache.CacheManager;
+        try {
+    }
+    }
+            .memoryPoolLimit(64 * 1024 * 1024)
+import java.util.Set;
+        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_PERCENT);
+        NativeBridge.initTokioRuntimeManager(2);
+import java.util.HashSet;
+ * The OpenSearch Contributors require contributions made to
+            cleanup();
+    }
+import java.util.List;
+        } finally {
+            .spillMemoryLimit(32 * 1024 * 1024)
+            service.stop();
+            assertFalse(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileName));
+            assertEquals(initialMemory, afterRemoveMemory);
+ * SPDX-License-Identifier: Apache-2.0
+        }
+        try {
+    }
+            cacheManager.clearAllCache();
+            .cpuThreads(2)
+        try {
+        clusterSettingsToAdd.add(DataFusionPlugin.SCOPED_PAGE_INDEX_ENABLED);
+            long totalMemory = cacheManager.getTotalMemoryConsumed();
+        setup();
+        } finally {
+        }
+    private DataFusionService service;
+            throw new IllegalArgumentException("Resource not found: " + fileName, e);
+import java.util.Collections;
+    }
+    public void testAddFilesWithEmptyList() {
+package org.opensearch.be.datafusion;
+        setup();
+            cacheManager.removeFilesFromCacheManager(List.of(fileName));
+        setup();
+        service = DataFusionService.builder()
+        } finally {
+            assertTrue(afterAddMemory > initialMemory);
+        }
+    public void testRemoveFilesWithEmptyList() {
+    }
+        clusterSettingsToAdd.add(CacheSettings.METADATA_INDEX_CACHE_TOTAL_SIZE);
             cleanup();
         }
-    }
-
-    private String getResourceFile(String fileName) {
-        try {
-            return PathUtils.get(getClass().getClassLoader().getResource(fileName).toURI()).toString();
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Resource not found: " + fileName, e);
+        Set<Setting<?>> clusterSettingsToAdd = new HashSet<>(BUILT_IN_CLUSTER_SETTINGS);
+    public void testAddMultipleFilesToCache() {
+            cleanup();
+        setup();
+            cleanup();
+import org.opensearch.be.datafusion.cache.CacheUtils;
+/*
+            cacheManager.addFilesToCacheManager(List.of(fileName));
+            cacheManager.removeFilesFromCacheManager(null);
+            cacheManager.addFilesToCacheManager(Collections.emptyList());
         }
+        setup();
+            String fileName = getResourceFile("hits1.parquet");
+import org.opensearch.be.datafusion.cache.CacheSettings;
+import org.opensearch.common.settings.ClusterSettings;
+        try {
+        clusterSettingsToAdd.add(CacheSettings.COLUMN_INDEX_CACHE_PERCENT);
     }
-}
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, clusterSettingsToAdd);
+    }
+    }
+        } finally {
+            return PathUtils.get(getClass().getClassLoader().getResource(fileName).toURI()).toString();
+            List<String> fileNames = List.of(getResourceFile("hits1.parquet"), getResourceFile("hits2.parquet"));
+        try {
+            cleanup();
+        clusterSettingsToAdd.add(CacheSettings.STATISTICS_CACHE_ENABLED);
+        assertNotNull(cacheManager);
+            cacheManager.addFilesToCacheManager(List.of(fileName));
+    private String getResourceFile(String fileName) {
+        } finally {
+        clusterSettingsToAdd.add(CacheSettings.OFFSET_INDEX_CACHE_PERCENT);
+ * this file be licensed under the Apache-2.0 license or a
+            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileNames.getFirst()));
+            assertTrue(totalMemory >= 0);
+    }
+            assertTrue(cacheManager.getEntryFromCacheType(CacheUtils.CacheType.METADATA, fileNames.getLast()));
+        } finally {
+            long afterRemoveMemory = cacheManager.getTotalMemoryConsumed();
+ * compatible open source license.
+        clusterSettingsToAdd.add(CacheSettings.METADATA_CACHE_ENABLED);
+        clusterSettingsToAdd.add(DataFusionPlugin.DATAFUSION_MEMORY_POOL_LIMIT);
+    private void cleanup() {
+        try {
+        } finally {
+            String fileName = getResourceFile("hits1.parquet");
+        }
+        } catch (URISyntaxException e) {
+        service.start();
+            cleanup();
+        try {
+        } finally {
+            cleanup();
+    }
+            cacheManager.addFilesToCacheManager(List.of(fileName));
+        clusterSettingsToAdd.add(DataFusionPlugin.DATAFUSION_SPILL_MEMORY_LIMIT);
+    public void testCacheClear() {
+            cacheManager.addFilesToCacheManager(List.of(fileName));
+    }
+            assertTrue(cacheManager.getMemoryConsumed(CacheUtils.CacheType.METADATA) > 0);
+        clusterSettingsToAdd.add(CacheSettings.OFFSET_INDEX_CACHE_EVICTION_TYPE);
+    public void testExceptionHandlingWithInvalidFile() {
+        clusterSettingsToAdd.add(CacheSettings.COLUMN_INDEX_CACHE_EVICTION_TYPE);
+import java.net.URISyntaxException;

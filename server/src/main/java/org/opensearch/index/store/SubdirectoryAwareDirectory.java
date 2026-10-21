@@ -1,194 +1,176 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.store;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.index.shard.ShardPath;
-
-import java.io.IOException;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-/**
- * A Lucene Directory implementation that handles files in subdirectories.
- *
- * This directory wrapper enables file operations across subdirectories within
- * the shard data path. It resolves paths, creates necessary directory structures,
- * and delegates actual file operations to appropriate filesystem locations.
- */
-public class SubdirectoryAwareDirectory extends FilterDirectory {
+                }
     private static final Logger logger = LogManager.getLogger(SubdirectoryAwareDirectory.class);
-    private static final Set<String> EXCLUDED_SUBDIRECTORIES = Set.of("index/", "translog/", "_state/", "lucene/");
-    private final ShardPath shardPath;
-    private final Path fsDataPath;
-
-    /**
-     * Constructor for SubdirectoryAwareDirectory.
-     *
-     * @param delegate the delegate directory
-     * @param shardPath the shard path
-     */
-    public SubdirectoryAwareDirectory(Directory delegate, ShardPath shardPath) {
-        super(delegate);
-        this.shardPath = shardPath;
-        Directory unwrapped = FilterDirectory.unwrap(delegate);
-        if (unwrapped instanceof FSDirectory fsDir) {
-            this.fsDataPath = fsDir.getDirectory().getParent();
-        } else {
-            this.fsDataPath = shardPath.getDataPath();
-        }
-    }
-
-    @Override
-    public IndexInput openInput(String name, IOContext context) throws IOException {
-        return super.openInput(parseFilePath(name), context);
-    }
-
-    @Override
-    public IndexOutput createOutput(String name, IOContext context) throws IOException {
+                    String dirName = subdir.getFileName().toString() + "/";
+        super.deleteFile(parseFilePath(name));
         String targetFilePath = parseFilePath(name);
-        Path targetFile = Path.of(targetFilePath);
-        Files.createDirectories(targetFile.getParent());
-        return super.createOutput(targetFilePath, context);
+            @Override
+     */
+            try (var stream = Files.newDirectoryStream(fsDataPath, Files::isDirectory)) {
+import java.nio.file.attribute.BasicFileAttributes;
+        super(delegate);
+     * {@link #fsDataPath} (they live outside the delegate FSDirectory's root). Index-local
+    @Override
+     * <p>{@link #fsDataPath} is derived from the FSDirectory's own path to ensure it shares
+    public IndexOutput createOutput(String name, IOContext context) throws IOException {
+                    return FileVisitResult.CONTINUE;
+     */
+        this.shardPath = shardPath;
+     * files are delegated to the underlying FSDirectory via {@code super.sync()}.
+            logger.trace("Resolved path: {} for file: {}", resolved, name);
+            return shardPath.getDataPath().resolve(fileName).toString();
+            this.fsDataPath = shardPath.getDataPath();
+import java.io.IOException;
+ * the shard data path. It resolves paths, creates necessary directory structures,
+import java.nio.file.Path;
+     * the same filesystem provider as the delegate — required for correct behavior under
+     * Syncs file data to durable storage. Subdirectory files are fsync'd directly against
+import org.apache.logging.log4j.LogManager;
+        if (indexFiles.isEmpty() == false) {
+                for (Path subdir : stream) {
     }
-
+        // Get subdirectory files by scanning all subdirectories
+        }
+        Directory unwrapped = FilterDirectory.unwrap(delegate);
+import java.nio.file.FileVisitResult;
+                }
+        Files.createDirectories(targetFile.getParent());
+            } else {
+    }
+public class SubdirectoryAwareDirectory extends FilterDirectory {
+                    }
+    /**
+        return allFiles.stream().sorted().toArray(String[]::new);
+     * Lucene's mock filesystem wrappers in tests.
+                indexFiles.add(resolved.toString());
+    private final ShardPath shardPath;
+                throw e;
+ * The OpenSearch Contributors require contributions made to
+import org.apache.lucene.store.IndexOutput;
+import java.nio.file.SimpleFileVisitor;
+        }
+        super.syncMetaData();
+ */
+import org.apache.lucene.store.IndexInput;
+ * compatible open source license.
+                    // Only add files that are in subdirectories (have a parent directory)
+        return super.openInput(parseFilePath(name), context);
+                        }
+            // File path (e.g., "subdirectory/segments_1" or "subdirectory/recovery.xxx.segments_1")
+        addSubdirectoryFiles(allFiles);
+        } else {
+import java.util.ArrayList;
+            public FileVisitResult visitFileFailed(Path file, IOException e) throws IOException {
+    private String parseFilePath(String fileName) {
+/*
+     */
+    private static final Set<String> EXCLUDED_SUBDIRECTORIES = Set.of("index/", "translog/", "_state/", "lucene/");
+        return super.fileLength(parseFilePath(name));
+        Files.walkFileTree(dataPath, new SimpleFileVisitor<>() {
+import org.apache.lucene.store.IOContext;
+/**
+ * This directory wrapper enables file operations across subdirectories within
+    }
+        return super.createOutput(targetFilePath, context);
+                IOUtils.fsync(resolved, false);
+     *
+                }
+            @Override
+    @Override
+     * Syncs directory metadata (directory entries) for both the index directory and all
+        Path dataPath = shardPath.getDataPath();
+    public void sync(Collection<String> names) throws IOException {
+                        // Exclude index dir (handled in super.listAll()), translog dir, and _state dir
     @Override
     public void deleteFile(String name) throws IOException {
-        super.deleteFile(parseFilePath(name));
-    }
-
     @Override
-    public long fileLength(String name) throws IOException {
-        return super.fileLength(parseFilePath(name));
-    }
-
-    /**
-     * Syncs file data to durable storage. Subdirectory files are fsync'd directly against
-     * {@link #fsDataPath} (they live outside the delegate FSDirectory's root). Index-local
-     * files are delegated to the underlying FSDirectory via {@code super.sync()}.
-     *
-     * <p>{@link #fsDataPath} is derived from the FSDirectory's own path to ensure it shares
-     * the same filesystem provider as the delegate — required for correct behavior under
-     * Lucene's mock filesystem wrappers in tests.
-     */
-    @Override
-    public void sync(Collection<String> names) throws IOException {
-        List<String> indexFiles = new ArrayList<>();
-        Path indexDir = shardPath.resolveIndex();
-        for (String name : names) {
-            Path resolved = fsDataPath.resolve(parseFilePath(name));
-            logger.trace("Resolved path: {} for file: {}", resolved, name);
-            if (resolved.startsWith(indexDir)) {
-                indexFiles.add(resolved.toString());
-                logger.trace("Added to index file: {}", resolved);
-            } else {
-                IOUtils.fsync(resolved, false);
             }
-        }
-        if (indexFiles.isEmpty() == false) {
-            super.sync(indexFiles);
-        }
-    }
-
-    /**
-     * Syncs directory metadata (directory entries) for both the index directory and all
-     * non-excluded subdirectories under the shard data path. This ensures that file
-     * creation is durable — a crash after {@link #sync} but before {@code syncMetaData}
-     * could leave file bytes on disk but directory entries missing.
-     */
-    @Override
-    public void syncMetaData() throws IOException {
-        super.syncMetaData();
-        if (Files.isDirectory(fsDataPath)) {
-            try (var stream = Files.newDirectoryStream(fsDataPath, Files::isDirectory)) {
-                for (Path subdir : stream) {
-                    String dirName = subdir.getFileName().toString() + "/";
-                    if (EXCLUDED_SUBDIRECTORIES.contains(dirName) == false) {
-                        IOUtils.fsync(subdir, true);
-                    }
-                }
-            }
-        }
-    }
-
-    @Override
-    public void rename(String source, String dest) throws IOException {
-        super.rename(parseFilePath(source), parseFilePath(dest));
-    }
-
-    @Override
-    public String[] listAll() throws IOException {
-        // Get files from the delegate (regular index files)
-        String[] delegateFiles = super.listAll();
-
-        // Get subdirectory files by scanning all subdirectories
-        Set<String> allFiles = new HashSet<>(Arrays.asList(delegateFiles));
-        addSubdirectoryFiles(allFiles);
-
-        return allFiles.stream().sorted().toArray(String[]::new);
-    }
-
-    private void addSubdirectoryFiles(Set<String> allFiles) throws IOException {
-        Path dataPath = shardPath.getDataPath();
-        Files.walkFileTree(dataPath, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (attrs.isRegularFile()) {
-                    Path relativePath = dataPath.relativize(file);
-                    // Only add files that are in subdirectories (have a parent directory)
-                    if (relativePath.getParent() != null) {
                         String relativePathStr = relativePath.toString();
-                        // Exclude index dir (handled in super.listAll()), translog dir, and _state dir
-                        if (EXCLUDED_SUBDIRECTORIES.stream().noneMatch(relativePathStr::startsWith)) {
-                            allFiles.add(relativePathStr);
-                        }
+import java.util.Arrays;
+     * non-excluded subdirectories under the shard data path. This ensures that file
+        Path indexDir = shardPath.resolveIndex();
+    private void addSubdirectoryFiles(Set<String> allFiles) throws IOException {
+import org.opensearch.common.util.io.IOUtils;
+                    if (EXCLUDED_SUBDIRECTORIES.contains(dirName) == false) {
+    private final Path fsDataPath;
+import java.util.List;
+            super.sync(indexFiles);
+import java.util.Set;
+        if (Path.of(fileName).getParent() != null) {
+        }
+     *
+        for (String name : names) {
+    }
+     * could leave file bytes on disk but directory entries missing.
+    public long fileLength(String name) throws IOException {
+    }
+            // Simple filename (e.g., "segments_1") - resolve relative to the shard's index directory
                     }
-                }
-                return FileVisitResult.CONTINUE;
+                logger.trace("Added to index file: {}", resolved);
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+        }
+     * Constructor for SubdirectoryAwareDirectory.
+    }
+ * this file be licensed under the Apache-2.0 license or a
+    @Override
+                    if (relativePath.getParent() != null) {
+ *
+        List<String> indexFiles = new ArrayList<>();
+        }
+    public void syncMetaData() throws IOException {
+        // Get files from the delegate (regular index files)
+                    Path relativePath = dataPath.relativize(file);
+     * creation is durable — a crash after {@link #sync} but before {@code syncMetaData}
+import org.opensearch.index.shard.ShardPath;
+    }
+     * @param shardPath the shard path
+ *
+import java.util.Collection;
+    }
+                            allFiles.add(relativePathStr);
+        });
             }
-
-            @Override
-            public FileVisitResult visitFileFailed(Path file, IOException e) throws IOException {
+                return FileVisitResult.CONTINUE;
                 if (e instanceof NoSuchFileException) {
                     logger.debug("Skipping inaccessible file during size estimation: {}", file);
-                    return FileVisitResult.CONTINUE;
-                }
-                throw e;
-            }
-        });
+package org.opensearch.index.store;
     }
-
-    private String parseFilePath(String fileName) {
-        if (Path.of(fileName).getParent() != null) {
-            // File path (e.g., "subdirectory/segments_1" or "subdirectory/recovery.xxx.segments_1")
-            return shardPath.getDataPath().resolve(fileName).toString();
-        } else {
-            // Simple filename (e.g., "segments_1") - resolve relative to the shard's index directory
             return shardPath.resolveIndex().resolve(fileName).toString();
-        }
+import org.apache.lucene.store.Directory;
+import java.nio.file.NoSuchFileException;
+    @Override
+     * @param delegate the delegate directory
+import org.apache.lucene.store.FSDirectory;
+    @Override
+    public IndexInput openInput(String name, IOContext context) throws IOException {
+    public String[] listAll() throws IOException {
+    /**
+            }
+                        if (EXCLUDED_SUBDIRECTORIES.stream().noneMatch(relativePathStr::startsWith)) {
+            }
+import org.apache.logging.log4j.Logger;
+        super.rename(parseFilePath(source), parseFilePath(dest));
+import java.nio.file.Files;
+        if (unwrapped instanceof FSDirectory fsDir) {
+ * SPDX-License-Identifier: Apache-2.0
+        Path targetFile = Path.of(targetFilePath);
+        Set<String> allFiles = new HashSet<>(Arrays.asList(delegateFiles));
     }
+    @Override
+                if (attrs.isRegularFile()) {
+    public SubdirectoryAwareDirectory(Directory delegate, ShardPath shardPath) {
+    /**
+import java.util.HashSet;
+import org.apache.lucene.store.FilterDirectory;
+            if (resolved.startsWith(indexDir)) {
 }
+    }
+        String[] delegateFiles = super.listAll();
+        if (Files.isDirectory(fsDataPath)) {
+ * and delegates actual file operations to appropriate filesystem locations.
+ * A Lucene Directory implementation that handles files in subdirectories.
+        } else {
+            Path resolved = fsDataPath.resolve(parseFilePath(name));
+                        IOUtils.fsync(subdir, true);
+    public void rename(String source, String dest) throws IOException {
+            this.fsDataPath = fsDir.getDirectory().getParent();
+ */

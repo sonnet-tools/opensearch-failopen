@@ -1,325 +1,282 @@
-/*
+        });
+                            ((InjectorImpl) binding.getInjector()).initializeBinding(binding, errors.withSource(source));
+                    putBinding(binding);
+                InternalFactory<T> factory = new InternalFactoryToProviderAdapter<>(initializable, source);
+            }
+ * limitations under the License.
+            }
+            bindExposed(privateElements, key);
+ *
+            MembersInjector.class,
+ * distributed under the License is distributed on an "AS IS" BASIS,
+            }
+                Provider<? extends T> provider = binding.getProviderInstance();
+                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
+        }
+        void notify(Errors errors);
+import org.opensearch.common.inject.spi.ConstructorBinding;
+            @Override
+    public Boolean visit(PrivateElements privateElements) {
+        final Scoping scoping = Scopes.makeInjectable(((BindingImpl<?>) command).getScoping(), injector, errors);
+            @Override
+            Binder.class,
+            @Override
+            return;
+                throw new IllegalArgumentException("Cannot apply a non-module element");
+import org.opensearch.common.inject.internal.LinkedProviderBindingImpl;
+        putBinding(new ExposedBindingImpl<>(injector, privateElements.getExposedSource(key), key, exposedKeyFactory, privateElements));
+            @Override
+    private boolean isOkayDuplicate(Binding<?> original, BindingImpl<?> binding) {
+            ExposedBindingImpl<?> exposed = (ExposedBindingImpl<?>) original;
+class BindingProcessor extends AbstractProcessor {
+                }
+                    }
+ * @author crazybob@google.com (Bob Lee)
+ * Modifications Copyright OpenSearch Contributors. See
+                    binding = injector.createUnitializedBinding(key, scoping, source, errors);
+                putBinding(new LinkedBindingImpl<>(injector, key, source, scopedFactory, scoping, linkedKey));
+                Key<? extends Provider<? extends T>> providerKey = binding.getProviderKey();
+                    injector,
+                T instance = binding.getInstance();
+import org.opensearch.common.inject.spi.InjectionPoint;
+        final Key<T> key = command.getKey();
+                throw new IllegalArgumentException("Cannot apply a non-module element");
+            Binding.class,
+import java.util.List;
+                return null;
+                if (key.hasAnnotationType()) {
+        if (original instanceof ExposedBindingImpl) {
+    private <T> void bindExposed(PrivateElements privateElements, Key<T> key) {
+            public Void visit(ProviderInstanceBinding<? extends T> binding) {
+                );
+import java.util.ArrayList;
+ * you may not use this file except in compliance with the License.
+ *
+ */
+                Initializable<Provider<? extends T>> initializable = initializer.<Provider<? extends T>>requestInjection(
+        Class<?> rawType = key.getRawType();
+ */
+            AbstractModule.class,
+import static org.opensearch.common.util.set.Sets.newHashSet;
+            public Void visit(UntargettedBinding<? extends T> untargetted) {
+ * compatible open source license.
+import org.opensearch.common.inject.internal.Scoping;
+    @Override
+            errors.bindingToProvider();
+                    injectionPoints
+ *
+                    putBinding(invalidBinding(injector, key, source));
+                Set<InjectionPoint> injectionPoints = binding.getInjectionPoints();
+        return false;
+                InternalFactory<? extends T> scopedFactory = Scopes.scope(
+            public Void visit(ConvertedConstantBinding<? extends T> binding) {
+    private final Initializer initializer;
+        }
+    @Override
+    }
+        Annotations.checkForMisplacedScopeAnnotations(key.getRawType(), source, errors);
+            Provider.class,
+ * this file be licensed under the Apache-2.0 license or a
+            creationListener.notify(errors);
+     * @param original the binding in the parent injector (candidate for an exposing binding)
+    }
+        Key<?> key = binding.getKey();
+ *
+                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
+package org.opensearch.common.inject;
+    }
+    private final List<CreationListener> creationListeners = new ArrayList<>();
+ * Unless required by applicable law or agreed to in writing, software
+ */
+                errors.missingConstantValues();
+}
+    interface CreationListener {
+            }
+                    scoping
+        creationListeners.add(exposedKeyFactory);
+            @Override
+        command.acceptTargetVisitor(new BindingTargetVisitor<T, Void>() {
+    /**
+        injector.state.parent().denylist(key);
+    // classes, but we can't easily block the whole package because of
+            errors.cannotBindToGuiceType(rawType.getSimpleName());
+                    @Override
+                final BindingImpl<T> binding;
+            } else {
+        newHashSet(
+                    errors.missingImplementation(key);
+                throw new IllegalArgumentException("Cannot apply a non-module element");
+                // This cast is safe after the preceding check.
+import org.opensearch.common.inject.internal.InternalFactory;
+                            errors.merge(e.getErrors());
+import org.opensearch.common.inject.spi.ProviderBinding;
+    BindingProcessor(Errors errors, Initializer initializer) {
+        return true;
+                // Example: bind(Date.class).annotatedWith(Red.class);
+import org.opensearch.common.inject.internal.ErrorsException;
+                    putBinding(invalidBinding(injector, key, source));
+        }
+/**
+            return (exposedFrom == binding.getInjector());
+     * @param binding  the binding to check (candidate for the exposed binding)
+import org.opensearch.common.inject.internal.LinkedBindingImpl;
+     * We tolerate duplicate bindings only if one exposes the other.
+import org.opensearch.common.inject.internal.InstanceBindingImpl;
+        final Object source = command.getSource();
+                putBinding(new ProviderInstanceBindingImpl<>(injector, key, source, scopedFactory, scoping, provider, injectionPoints));
+    public void runCreationListeners() {
+                    provider,
+                creationListeners.add(factory);
+            if (command instanceof ProviderInstanceBinding
+                }
+        return new UntargettedBindingImpl<>(injector, key, source);
+ * GitHub history for details.
+        if (original != null && !isOkayDuplicate(original, binding)) {
+import org.opensearch.common.inject.spi.PrivateElements;
+    }
+    private static final Set<Class<?>> FORBIDDEN_TYPES = unmodifiableSet(
+                        try {
+            Scope.class,
+import org.opensearch.common.inject.spi.LinkedKeyBinding;
+    }
+                && ((ProviderInstanceBinding<?>) command).getProviderInstance() instanceof ProviderMethod) {
+            errors.bindingAlreadySet(key, original.getSource());
+                return null;
+    // TODO(jessewilson): fix BuiltInModule, then add Stage
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+import org.opensearch.common.inject.internal.ProviderMethod;
+                uninitializedBindings.add(new Runnable() {
+        if (rawType == Provider.class) {
+                    source,
+                } catch (ErrorsException e) {
+    private void putBinding(BindingImpl<?> binding) {
  * SPDX-License-Identifier: Apache-2.0
+                    return null;
+ * You may obtain a copy of the License at
+                // @ImplementedBy annotation or something.
+    <T> UntargettedBindingImpl<T> invalidBinding(InjectorImpl injector, Key<T> key, Object source) {
+        }
+            Injector.class,
+            public Void visit(ExposedBinding<? extends T> binding) {
+import java.util.Set;
+        injector.state.putBinding(key, binding);
+import org.opensearch.common.inject.spi.UntargettedBinding;
+                Key<? extends T> linkedKey = binding.getLinkedKey();
+                FactoryProxy<T> factory = new FactoryProxy<>(injector, key, linkedKey, source);
+            return true;
+            return;
+                    errors.recursiveBinding();
+                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
+    }
+            TypeLiteral.class
+ */
+            }
+import org.opensearch.common.inject.spi.ExposedBinding;
+        ExposedKeyFactory<T> exposedKeyFactory = new ExposedKeyFactory<>(key, privateElements);
+                });
+ * Licensed under the Apache License, Version 2.0 (the "License");
+/*
+                throw new IllegalArgumentException("Cannot apply a non-module element");
+            public Void visit(InstanceBinding<? extends T> binding) {
+import org.opensearch.common.inject.internal.ExposedBindingImpl;
+                    key,
+        if (Void.class.equals(command.getKey().getRawType())) {
  *
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
+        // prevent the parent from creating a JIT binding for this key
 /*
- * Copyright (C) 2008 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.inject;
-
-import org.opensearch.common.inject.internal.Annotations;
-import org.opensearch.common.inject.internal.BindingImpl;
 import org.opensearch.common.inject.internal.Errors;
-import org.opensearch.common.inject.internal.ErrorsException;
-import org.opensearch.common.inject.internal.ExposedBindingImpl;
-import org.opensearch.common.inject.internal.InstanceBindingImpl;
-import org.opensearch.common.inject.internal.InternalFactory;
-import org.opensearch.common.inject.internal.LinkedBindingImpl;
-import org.opensearch.common.inject.internal.LinkedProviderBindingImpl;
-import org.opensearch.common.inject.internal.ProviderInstanceBindingImpl;
-import org.opensearch.common.inject.internal.ProviderMethod;
-import org.opensearch.common.inject.internal.Scoping;
-import org.opensearch.common.inject.internal.UntargettedBindingImpl;
-import org.opensearch.common.inject.spi.BindingTargetVisitor;
-import org.opensearch.common.inject.spi.ConstructorBinding;
-import org.opensearch.common.inject.spi.ConvertedConstantBinding;
-import org.opensearch.common.inject.spi.ExposedBinding;
-import org.opensearch.common.inject.spi.InjectionPoint;
-import org.opensearch.common.inject.spi.InstanceBinding;
-import org.opensearch.common.inject.spi.LinkedKeyBinding;
-import org.opensearch.common.inject.spi.PrivateElements;
-import org.opensearch.common.inject.spi.ProviderBinding;
 import org.opensearch.common.inject.spi.ProviderInstanceBinding;
-import org.opensearch.common.inject.spi.ProviderKeyBinding;
-import org.opensearch.common.inject.spi.UntargettedBinding;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-import static java.util.Collections.unmodifiableSet;
-import static org.opensearch.common.util.set.Sets.newHashSet;
-
-/**
- * Handles {@link Binder#bind} and {@link Binder#bindConstant} elements.
  *
- * @author crazybob@google.com (Bob Lee)
- * @author jessewilson@google.com (Jesse Wilson)
- *
- * @opensearch.internal
- */
-class BindingProcessor extends AbstractProcessor {
-
-    private final List<CreationListener> creationListeners = new ArrayList<>();
-    private final Initializer initializer;
-    private final List<Runnable> uninitializedBindings = new ArrayList<>();
-
-    BindingProcessor(Errors errors, Initializer initializer) {
-        super(errors);
-        this.initializer = initializer;
-    }
-
-    @Override
-    public <T> Boolean visit(Binding<T> command) {
-        final Object source = command.getSource();
-
-        if (Void.class.equals(command.getKey().getRawType())) {
-            if (command instanceof ProviderInstanceBinding
-                && ((ProviderInstanceBinding<?>) command).getProviderInstance() instanceof ProviderMethod) {
-                errors.voidProviderMethod();
-            } else {
-                errors.missingConstantValues();
             }
-            return true;
-        }
-
-        final Key<T> key = command.getKey();
-        Class<? super T> rawType = key.getTypeLiteral().getRawType();
-
-        if (rawType == Provider.class) {
-            errors.bindingToProvider();
-            return true;
-        }
-
-        validateKey(command.getSource(), command.getKey());
-
-        final Scoping scoping = Scopes.makeInjectable(((BindingImpl<?>) command).getScoping(), injector, errors);
-
-        command.acceptTargetVisitor(new BindingTargetVisitor<T, Void>() {
-
-            @Override
-            public Void visit(InstanceBinding<? extends T> binding) {
                 Set<InjectionPoint> injectionPoints = binding.getInjectionPoints();
-                T instance = binding.getInstance();
+        for (Key<?> key : privateElements.getExposedKeys()) {
+    private final List<Runnable> uninitializedBindings = new ArrayList<>();
+        }
+                // Error: Missing implementation.
+/*
+ * @opensearch.internal
+                }
+ * @author jessewilson@google.com (Jesse Wilson)
+                        }
+            }
+import org.opensearch.common.inject.spi.InstanceBinding;
+import static java.util.Collections.unmodifiableSet;
+        return false; // leave the private elements for the PrivateElementsProcessor to handle
+                );
+            InjectorImpl exposedFrom = (InjectorImpl) exposed.getPrivateElements().getInjector();
+     * A listener for a process creation
+     * @opensearch.internal
+            public Void visit(LinkedKeyBinding<? extends T> binding) {
+        for (Runnable initializer : uninitializedBindings) {
+    // all our unit tests.
+            public Void visit(ProviderKeyBinding<? extends T> binding) {
+        Binding<?> original = injector.state.getExplicitBinding(key);
+                putBinding(new InstanceBindingImpl<>(injector, key, source, scopedFactory, injectionPoints, instance));
+ * See the License for the specific language governing permissions and
+            initializer.run();
+            Key.class,
+import org.opensearch.common.inject.internal.BindingImpl;
+    }
+            public Void visit(ProviderBinding<? extends T> binding) {
+    }
+            @Override
                 Initializable<T> ref = initializer.requestInjection(injector, instance, source, injectionPoints);
                 ConstantFactory<? extends T> factory = new ConstantFactory<>(ref);
-                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
-                putBinding(new InstanceBindingImpl<>(injector, key, source, scopedFactory, injectionPoints, instance));
-                return null;
-            }
-
-            @Override
-            public Void visit(ProviderInstanceBinding<? extends T> binding) {
-                Provider<? extends T> provider = binding.getProviderInstance();
-                Set<InjectionPoint> injectionPoints = binding.getInjectionPoints();
-                Initializable<Provider<? extends T>> initializable = initializer.<Provider<? extends T>>requestInjection(
-                    injector,
-                    provider,
-                    source,
-                    injectionPoints
-                );
-                InternalFactory<T> factory = new InternalFactoryToProviderAdapter<>(initializable, source);
-                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
-                putBinding(new ProviderInstanceBindingImpl<>(injector, key, source, scopedFactory, scoping, provider, injectionPoints));
-                return null;
-            }
-
-            @Override
-            public Void visit(ProviderKeyBinding<? extends T> binding) {
-                Key<? extends Provider<? extends T>> providerKey = binding.getProviderKey();
-                BoundProviderFactory<T> boundProviderFactory = new BoundProviderFactory<>(injector, providerKey, source);
-                creationListeners.add(boundProviderFactory);
-                InternalFactory<? extends T> scopedFactory = Scopes.scope(
-                    key,
-                    injector,
-                    (InternalFactory<? extends T>) boundProviderFactory,
-                    scoping
-                );
-                putBinding(new LinkedProviderBindingImpl<>(injector, key, source, scopedFactory, scoping, providerKey));
-                return null;
-            }
-
-            @Override
-            public Void visit(LinkedKeyBinding<? extends T> binding) {
-                Key<? extends T> linkedKey = binding.getLinkedKey();
+                    return null;
                 if (key.equals(linkedKey)) {
-                    errors.recursiveBinding();
-                }
-
-                FactoryProxy<T> factory = new FactoryProxy<>(injector, key, linkedKey, source);
-                creationListeners.add(factory);
-                InternalFactory<? extends T> scopedFactory = Scopes.scope(key, injector, factory, scoping);
-                putBinding(new LinkedBindingImpl<>(injector, key, source, scopedFactory, scoping, linkedKey));
-                return null;
-            }
-
-            @Override
-            public Void visit(UntargettedBinding<? extends T> untargetted) {
-                // Error: Missing implementation.
-                // Example: bind(Date.class).annotatedWith(Red.class);
-                // We can't assume abstract types aren't injectable. They may have an
-                // @ImplementedBy annotation or something.
-                if (key.hasAnnotationType()) {
-                    errors.missingImplementation(key);
-                    putBinding(invalidBinding(injector, key, source));
-                    return null;
-                }
-
-                // This cast is safe after the preceding check.
-                final BindingImpl<T> binding;
-                try {
-                    binding = injector.createUnitializedBinding(key, scoping, source, errors);
-                    putBinding(binding);
-                } catch (ErrorsException e) {
-                    errors.merge(e.getErrors());
-                    putBinding(invalidBinding(injector, key, source));
-                    return null;
-                }
-
-                uninitializedBindings.add(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            ((InjectorImpl) binding.getInjector()).initializeBinding(binding, errors.withSource(source));
-                        } catch (ErrorsException e) {
-                            errors.merge(e.getErrors());
-                        }
-                    }
-                });
-
-                return null;
-            }
-
-            @Override
-            public Void visit(ExposedBinding<? extends T> binding) {
-                throw new IllegalArgumentException("Cannot apply a non-module element");
-            }
-
-            @Override
-            public Void visit(ConvertedConstantBinding<? extends T> binding) {
-                throw new IllegalArgumentException("Cannot apply a non-module element");
-            }
-
-            @Override
-            public Void visit(ConstructorBinding<? extends T> binding) {
-                throw new IllegalArgumentException("Cannot apply a non-module element");
-            }
-
-            @Override
-            public Void visit(ProviderBinding<? extends T> binding) {
-                throw new IllegalArgumentException("Cannot apply a non-module element");
-            }
-        });
-
-        return true;
-    }
-
-    @Override
-    public Boolean visit(PrivateElements privateElements) {
-        for (Key<?> key : privateElements.getExposedKeys()) {
-            bindExposed(privateElements, key);
-        }
-        return false; // leave the private elements for the PrivateElementsProcessor to handle
-    }
-
-    private <T> void bindExposed(PrivateElements privateElements, Key<T> key) {
-        ExposedKeyFactory<T> exposedKeyFactory = new ExposedKeyFactory<>(key, privateElements);
-        creationListeners.add(exposedKeyFactory);
-        putBinding(new ExposedBindingImpl<>(injector, privateElements.getExposedSource(key), key, exposedKeyFactory, privateElements));
-    }
-
-    private <T> void validateKey(Object source, Key<T> key) {
-        Annotations.checkForMisplacedScopeAnnotations(key.getRawType(), source, errors);
-    }
-
-    <T> UntargettedBindingImpl<T> invalidBinding(InjectorImpl injector, Key<T> key, Object source) {
-        return new UntargettedBindingImpl<>(injector, key, source);
-    }
-
-    public void initializeBindings() {
-        for (Runnable initializer : uninitializedBindings) {
-            initializer.run();
-        }
-    }
-
-    public void runCreationListeners() {
         for (CreationListener creationListener : creationListeners) {
-            creationListener.notify(errors);
-        }
-    }
-
-    private void putBinding(BindingImpl<?> binding) {
-        Key<?> key = binding.getKey();
-
-        Class<?> rawType = key.getRawType();
-        if (FORBIDDEN_TYPES.contains(rawType)) {
-            errors.cannotBindToGuiceType(rawType.getSimpleName());
-            return;
-        }
-
-        Binding<?> original = injector.state.getExplicitBinding(key);
-        if (original != null && !isOkayDuplicate(original, binding)) {
-            errors.bindingAlreadySet(key, original.getSource());
-            return;
-        }
-
-        // prevent the parent from creating a JIT binding for this key
-        injector.state.parent().denylist(key);
-        injector.state.putBinding(key, binding);
-    }
-
-    /**
-     * We tolerate duplicate bindings only if one exposes the other.
-     *
-     * @param original the binding in the parent injector (candidate for an exposing binding)
-     * @param binding  the binding to check (candidate for the exposed binding)
-     */
-    private boolean isOkayDuplicate(Binding<?> original, BindingImpl<?> binding) {
-        if (original instanceof ExposedBindingImpl) {
-            ExposedBindingImpl<?> exposed = (ExposedBindingImpl<?>) original;
-            InjectorImpl exposedFrom = (InjectorImpl) exposed.getPrivateElements().getInjector();
-            return (exposedFrom == binding.getInjector());
-        }
-        return false;
-    }
-
-    // It's unfortunate that we have to maintain a denylist of specific
-    // classes, but we can't easily block the whole package because of
-    // all our unit tests.
-    private static final Set<Class<?>> FORBIDDEN_TYPES = unmodifiableSet(
-        newHashSet(
-            AbstractModule.class,
-            Binder.class,
-            Binding.class,
-            Injector.class,
-            Key.class,
-            MembersInjector.class,
+import org.opensearch.common.inject.spi.BindingTargetVisitor;
+                return null;
+            public Void visit(ConstructorBinding<? extends T> binding) {
+                return null;
             Module.class,
-            Provider.class,
-            Scope.class,
-            TypeLiteral.class
-        )
-    );
-    // TODO(jessewilson): fix BuiltInModule, then add Stage
-
-    /**
-     * A listener for a process creation
+                BoundProviderFactory<T> boundProviderFactory = new BoundProviderFactory<>(injector, providerKey, source);
+            @Override
+import org.opensearch.common.inject.spi.ConvertedConstantBinding;
+                errors.voidProviderMethod();
+                    (InternalFactory<? extends T>) boundProviderFactory,
+                        } catch (ErrorsException e) {
      *
-     * @opensearch.internal
      */
-    interface CreationListener {
-        void notify(Errors errors);
+        }
+     *
+                return null;
+            }
+                try {
+        )
+ * Copyright (C) 2008 Google Inc.
+import org.opensearch.common.inject.spi.ProviderKeyBinding;
     }
-}
+     */
+    }
+ * http://www.apache.org/licenses/LICENSE-2.0
+                    injector,
+import org.opensearch.common.inject.internal.Annotations;
+ * Handles {@link Binder#bind} and {@link Binder#bindConstant} elements.
+        }
+        }
+        Class<? super T> rawType = key.getTypeLiteral().getRawType();
+    public <T> Boolean visit(Binding<T> command) {
+                creationListeners.add(boundProviderFactory);
+        this.initializer = initializer;
+                // We can't assume abstract types aren't injectable. They may have an
+import org.opensearch.common.inject.internal.UntargettedBindingImpl;
+        validateKey(command.getSource(), command.getKey());
+            }
+    );
+            @Override
+                    public void run() {
+    private <T> void validateKey(Object source, Key<T> key) {
+        if (FORBIDDEN_TYPES.contains(rawType)) {
+        super(errors);
+            return true;
+    // It's unfortunate that we have to maintain a denylist of specific
+            }
+    public void initializeBindings() {
+            @Override
+                    errors.merge(e.getErrors());
+    }
+    /**
+                putBinding(new LinkedProviderBindingImpl<>(injector, key, source, scopedFactory, scoping, providerKey));
+import org.opensearch.common.inject.internal.ProviderInstanceBindingImpl;

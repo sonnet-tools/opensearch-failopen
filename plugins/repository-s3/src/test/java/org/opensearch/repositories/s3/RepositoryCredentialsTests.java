@@ -1,353 +1,306 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.s3;
-
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
-import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
-import software.amazon.awssdk.services.s3.DelegatingS3Client;
-import software.amazon.awssdk.services.s3.S3Client;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.metadata.RepositoryMetadata;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.settings.MockSecureSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.plugins.ExtensiblePlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.rest.AbstractRestChannel;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.RestResponse;
-import org.opensearch.rest.action.admin.cluster.RestGetRepositoriesAction;
-import org.opensearch.secure_sm.AccessController;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.test.OpenSearchSingleNodeTestCase;
-import org.opensearch.test.rest.FakeRestRequest;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.opensearch.repositories.s3.S3ClientSettings.ACCESS_KEY_SETTING;
-import static org.opensearch.repositories.s3.S3ClientSettings.SECRET_KEY_SETTING;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-
-@SuppressWarnings("removal")
-@SuppressForbidden(reason = "test requires to set a System property to allow insecure settings when running in IDE")
-public class RepositoryCredentialsTests extends OpenSearchSingleNodeTestCase implements ConfigPathSupport {
-
-    static {
-        AccessController.doPrivileged(() -> {
-            // required for client settings overwriting when running in IDE
-            System.setProperty("opensearch.allow_insecure_settings", "true");
-        });
+        assertThat(repositories.repository(repositoryName), notNullValue());
+                assertThat(credentials.accessKeyId(), is("secure_default_key"));
+                @Override
     }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Collections.singleton(ProxyS3RepositoryPlugin.class);
-    }
-
-    @Override
-    protected boolean resetNodeAfterTest() {
-        return true;
-    }
-
-    @Override
-    protected Settings nodeSettings() {
-        final MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString(ACCESS_KEY_SETTING.getConcreteSettingForNamespace("default").getKey(), "secure_default_key");
-        secureSettings.setString(SECRET_KEY_SETTING.getConcreteSettingForNamespace("default").getKey(), "secure_default_secret");
-        secureSettings.setString(ACCESS_KEY_SETTING.getConcreteSettingForNamespace("other").getKey(), "secure_other_key");
-        secureSettings.setString(SECRET_KEY_SETTING.getConcreteSettingForNamespace("other").getKey(), "secure_other_secret");
-
-        return Settings.builder().setSecureSettings(secureSettings).put(super.nodeSettings()).build();
-    }
-
-    public void testRepositoryCredentialsOverrideSecureCredentials() {
-        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
-        final String repositoryName = "repo-creds-override";
-        final Settings.Builder repositorySettings = Settings.builder()
-            // repository settings for credentials override node secure settings
             .put(S3Repository.ACCESS_KEY_SETTING.getKey(), "insecure_aws_key")
-            .put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret");
-
-        final String clientName = randomFrom("default", "other", null);
-        if (clientName != null) {
-            repositorySettings.put(S3Repository.CLIENT_NAME.getKey(), clientName);
-        }
-        createRepository(repositoryName, repositorySettings.build());
-
-        final RepositoriesService repositories = getInstanceFromNode(RepositoriesService.class);
-        assertThat(repositories.repository(repositoryName), notNullValue());
-        assertThat(repositories.repository(repositoryName), instanceOf(S3Repository.class));
-
-        final S3Repository repository = (S3Repository) repositories.repository(repositoryName);
-        try (final AmazonS3Reference clientReference = repository.createBlobStore().clientReference()) {
-            S3Client client = clientReference.get();
-            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
-
-            final AwsCredentials credentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
-            assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
-            assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
-        }
-
-        assertWarnings(
-            "[secret_key] setting was deprecated in OpenSearch and will be removed in a future release!"
-                + " See the breaking changes documentation for the next major version.",
-            "Using s3 access/secret key from repository settings. Instead store these in named clients and"
-                + " the opensearch keystore for secure settings.",
-            "[access_key] setting was deprecated in OpenSearch and will be removed in a future release!"
-                + " See the breaking changes documentation for the next major version."
-        );
-    }
-
-    public void testReinitSecureCredentials() {
-        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
-        final String clientName = randomFrom("default", "other");
-
-        final Settings.Builder repositorySettings = Settings.builder();
-        final boolean hasInsecureSettings = randomBoolean();
-        if (hasInsecureSettings) {
-            // repository settings for credentials override node secure settings
-            repositorySettings.put(S3Repository.ACCESS_KEY_SETTING.getKey(), "insecure_aws_key");
-            repositorySettings.put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret");
-        } else {
-            repositorySettings.put(S3Repository.CLIENT_NAME.getKey(), clientName);
-        }
-
-        final String repositoryName = "repo-reinit-creds";
-        createRepository(repositoryName, repositorySettings.build());
-
-        final RepositoriesService repositories = getInstanceFromNode(RepositoriesService.class);
-        assertThat(repositories.repository(repositoryName), notNullValue());
-        assertThat(repositories.repository(repositoryName), instanceOf(S3Repository.class));
-
-        final S3Repository repository = (S3Repository) repositories.repository(repositoryName);
-        try (AmazonS3Reference clientReference = ((S3BlobStore) repository.blobStore()).clientReference()) {
-            final S3Client client = clientReference.get();
-            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
-
-            final AwsCredentials credentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
-            if (hasInsecureSettings) {
-                assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
-                assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
-            } else if ("other".equals(clientName)) {
-                assertThat(credentials.accessKeyId(), is("secure_other_key"));
-                assertThat(credentials.secretAccessKey(), is("secure_other_secret"));
-            } else {
-                assertThat(credentials.accessKeyId(), is("secure_default_key"));
-                assertThat(credentials.secretAccessKey(), is("secure_default_secret"));
             }
-
-            // new settings
-            final MockSecureSettings newSecureSettings = new MockSecureSettings();
-            newSecureSettings.setString("s3.client." + clientName + ".access_key", "new_secret_aws_key");
-            newSecureSettings.setString("s3.client." + clientName + ".secret_key", "new_secret_aws_secret");
-            final Settings newSettings = Settings.builder().setSecureSettings(newSecureSettings).build();
-            // reload S3 plugin settings
-            final PluginsService plugins = getInstanceFromNode(PluginsService.class);
-            final ProxyS3RepositoryPlugin plugin = plugins.filterPlugins(ProxyS3RepositoryPlugin.class).get(0);
-            plugin.reload(newSettings);
-
-            // check the not-yet-closed client reference still has the same credentials
-            if (hasInsecureSettings) {
-                assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
-                assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
-            } else if ("other".equals(clientName)) {
-                assertThat(credentials.accessKeyId(), is("secure_other_key"));
-                assertThat(credentials.secretAccessKey(), is("secure_other_secret"));
-            } else {
-                assertThat(credentials.accessKeyId(), is("secure_default_key"));
-                assertThat(credentials.secretAccessKey(), is("secure_default_secret"));
-            }
-        }
-
-        // check credentials have been updated
-        try (AmazonS3Reference clientReference = ((S3BlobStore) repository.blobStore()).clientReference()) {
-            final S3Client client = clientReference.get();
-            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
-
-            final AwsCredentials newCredentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
-            if (hasInsecureSettings) {
-                assertThat(newCredentials.accessKeyId(), is("insecure_aws_key"));
-                assertThat(newCredentials.secretAccessKey(), is("insecure_aws_secret"));
-            } else {
-                assertThat(newCredentials.accessKeyId(), is("new_secret_aws_key"));
-                assertThat(newCredentials.secretAccessKey(), is("new_secret_aws_secret"));
-            }
-        }
-
-        if (hasInsecureSettings) {
-            assertWarnings(
-                "[secret_key] setting was deprecated in OpenSearch and will be removed in a future release!"
-                    + " See the breaking changes documentation for the next major version.",
-                "Using s3 access/secret key from repository settings. Instead store these in named clients and"
-                    + " the opensearch keystore for secure settings.",
-                "[access_key] setting was deprecated in OpenSearch and will be removed in a future release!"
-                    + " See the breaking changes documentation for the next major version."
-            );
-        }
-    }
-
-    public void testInsecureRepositoryCredentials() throws Exception {
-        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
-        final String repositoryName = "repo-insecure-creds";
-        createRepository(
-            repositoryName,
-            Settings.builder()
-                .put(S3Repository.ACCESS_KEY_SETTING.getKey(), "insecure_aws_key")
-                .put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret")
-                .build()
-        );
-
-        final RestRequest fakeRestRequest = new FakeRestRequest();
-        fakeRestRequest.params().put("repository", repositoryName);
-        final RestGetRepositoriesAction action = new RestGetRepositoriesAction(getInstanceFromNode(SettingsFilter.class));
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicReference<AssertionError> error = new AtomicReference<>();
-        action.handleRequest(fakeRestRequest, new AbstractRestChannel(fakeRestRequest, true) {
-            @Override
-            public void sendResponse(RestResponse response) {
-                try {
-                    String responseAsString = response.content().utf8ToString();
-                    assertThat(responseAsString, containsString(repositoryName));
-                    assertThat(responseAsString, not(containsString("insecure_")));
-                } catch (final AssertionError ex) {
-                    error.set(ex);
-                }
+import org.opensearch.indices.recovery.RecoverySettings;
+import org.opensearch.rest.AbstractRestChannel;
                 latch.countDown();
-            }
-        }, getInstanceFromNode(NodeClient.class));
-
-        latch.await();
-        if (error.get() != null) {
-            throw error.get();
-        }
-
-        assertWarnings(
-            "Using s3 access/secret key from repository settings. Instead store these in named clients and"
-                + " the opensearch keystore for secure settings."
+            RecoverySettings recoverySettings
+ * Unless required by applicable law or agreed to in writing,
+@SuppressForbidden(reason = "test requires to set a System property to allow insecure settings when running in IDE")
+            System.setProperty("opensearch.allow_insecure_settings", "true");
+            @Override
+                    assertThat(responseAsString, not(containsString("insecure_")));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.rest.RestRequest;
         );
-    }
-
-    private void createRepository(final String name, final Settings repositorySettings) {
-        Settings.Builder settings = Settings.builder().put(repositorySettings);
-        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), name, S3Repository.TYPE, false, settings);
-    }
-
-    /**
-     * A S3 repository plugin that keeps track of the credentials used to build an AmazonS3 client
-     */
-    public static final class ProxyS3RepositoryPlugin extends S3RepositoryPlugin {
-
         public ProxyS3RepositoryPlugin(Settings settings, Path configPath) {
-            super(settings, configPath, new ProxyS3Service(configPath), new S3AsyncService(configPath));
+                null,
+            @Override
+            throw error.get();
+            assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
         }
-
-        @Override
+                null
+        assertThat(repositories.repository(repositoryName), instanceOf(S3Repository.class));
+import java.util.concurrent.atomic.AtomicReference;
+            "Using s3 access/secret key from repository settings. Instead store these in named clients and"
+    }
+ * specific language governing permissions and limitations
+        }
+    public static final class ProxyS3RepositoryPlugin extends S3RepositoryPlugin {
+ * software distributed under the License is distributed on an
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+import org.apache.logging.log4j.Logger;
         public void loadExtensions(ExtensiblePlugin.ExtensionLoader loader) {
+import static org.hamcrest.Matchers.containsString;
+        Settings.Builder settings = Settings.builder().put(repositorySettings);
+    /**
+import java.util.concurrent.CountDownLatch;
+            } else {
+            repositoryName,
             // No-op in tests — avoids interference with async client initialization
         }
-
-        @Override
-        protected S3Repository createRepository(
-            RepositoryMetadata metadata,
-            NamedXContentRegistry registry,
-            ClusterService clusterService,
-            RecoverySettings recoverySettings
-        ) {
-            return new S3Repository(
-                metadata,
-                registry,
-                service,
-                clusterService,
-                recoverySettings,
-                null,
-                null,
-                null,
-                null,
-                null,
-                false,
-                null,
-                null,
-                null
-            ) {
-                @Override
-                protected void assertSnapshotOrGenericThread() {
-                    // eliminate thread name check as we create repo manually on test/main threads
-                }
-            };
-        }
-
-        public static final class ClientAndCredentials extends DelegatingS3Client {
-            final AwsCredentialsProvider credentials;
-
-            ClientAndCredentials(S3Client delegate, AwsCredentialsProvider credentials) {
-                super(delegate);
-                this.credentials = credentials;
-            }
-        }
-
-        public static final class ProxyS3Service extends S3Service {
-
-            private static final Logger logger = LogManager.getLogger(ProxyS3Service.class);
-
-            ProxyS3Service(final Path configPath) {
-                super(configPath);
-            }
-
-            @Override
-            AmazonS3WithCredentials buildClient(final S3ClientSettings clientSettings) {
-                final AmazonS3WithCredentials client = AccessController.doPrivileged(() -> super.buildClient(clientSettings));
-                final AwsCredentialsProvider credentials = buildCredentials(logger, clientSettings);
-                return AmazonS3WithCredentials.create(new ClientAndCredentials(client.client(), credentials), credentials);
-            }
-
+                assertThat(newCredentials.secretAccessKey(), is("new_secret_aws_secret"));
         }
     }
+            // check the not-yet-closed client reference still has the same credentials
+    protected boolean resetNodeAfterTest() {
+                assertThat(credentials.secretAccessKey(), is("secure_other_secret"));
+package org.opensearch.repositories.s3;
+    }
+ * GitHub history for details.
+    }
+        secureSettings.setString(SECRET_KEY_SETTING.getConcreteSettingForNamespace("other").getKey(), "secure_other_secret");
+    @Override
+            repositorySettings.put(S3Repository.ACCESS_KEY_SETTING.getKey(), "insecure_aws_key");
+        final RepositoriesService repositories = getInstanceFromNode(RepositoriesService.class);
+        }
+        }
+                assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
+                null,
+                this.credentials = credentials;
+        final String repositoryName = "repo-reinit-creds";
+                assertThat(credentials.accessKeyId(), is("secure_other_key"));
+            super(settings, configPath, new ProxyS3Service(configPath), new S3AsyncService(configPath));
+                null,
+        final S3Repository repository = (S3Repository) repositories.repository(repositoryName);
+        }
+ */
+import org.apache.logging.log4j.LogManager;
+            "Using s3 access/secret key from repository settings. Instead store these in named clients and"
+        }
+        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
+            final ProxyS3RepositoryPlugin plugin = plugins.filterPlugins(ProxyS3RepositoryPlugin.class).get(0);
+ */
+                return AmazonS3WithCredentials.create(new ClientAndCredentials(client.client(), credentials), credentials);
+        );
+            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
+                    + " See the breaking changes documentation for the next major version.",
+                super(delegate);
+                + " the opensearch keystore for secure settings."
+import org.opensearch.secure_sm.AccessController;
+                clusterService,
+        assertWarnings(
+        @Override
+            // new settings
+                }
+        final Settings.Builder repositorySettings = Settings.builder();
+        secureSettings.setString(ACCESS_KEY_SETTING.getConcreteSettingForNamespace("default").getKey(), "secure_default_key");
+                metadata,
+import static org.hamcrest.Matchers.is;
+        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), name, S3Repository.TYPE, false, settings);
+import org.opensearch.common.settings.Settings;
+            final S3Client client = clientReference.get();
+            // repository settings for credentials override node secure settings
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.rest.RestResponse;
+            // required for client settings overwriting when running in IDE
+        assertThat(repositories.repository(repositoryName), instanceOf(S3Repository.class));
+import org.opensearch.plugins.PluginsService;
+                assertThat(credentials.secretAccessKey(), is("secure_default_secret"));
+import software.amazon.awssdk.services.s3.DelegatingS3Client;
+            S3Client client = clientReference.get();
+ */
+import org.opensearch.cluster.metadata.RepositoryMetadata;
+import org.opensearch.test.OpenSearchSingleNodeTestCase;
+     */
+                assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
+            }
+    protected Settings nodeSettings() {
+ * under the License.
+        });
+import org.opensearch.test.rest.FakeRestRequest;
+                assertThat(newCredentials.accessKeyId(), is("insecure_aws_key"));
+            );
+            assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
+import org.opensearch.common.settings.MockSecureSettings;
+        return Collections.singleton(ProxyS3RepositoryPlugin.class);
+ * Modifications Copyright OpenSearch Contributors. See
+        final AtomicReference<AssertionError> error = new AtomicReference<>();
+        public static final class ClientAndCredentials extends DelegatingS3Client {
+        secureSettings.setString(ACCESS_KEY_SETTING.getConcreteSettingForNamespace("other").getKey(), "secure_other_key");
+            private static final Logger logger = LogManager.getLogger(ProxyS3Service.class);
+        return Settings.builder().setSecureSettings(secureSettings).put(super.nodeSettings()).build();
+        try (AmazonS3Reference clientReference = ((S3BlobStore) repository.blobStore()).clientReference()) {
+        createRepository(repositoryName, repositorySettings.build());
+        secureSettings.setString(SECRET_KEY_SETTING.getConcreteSettingForNamespace("default").getKey(), "secure_default_secret");
+                assertThat(credentials.accessKeyId(), is("secure_other_key"));
+            ClusterService clusterService,
+            } else if ("other".equals(clientName)) {
+                super(configPath);
+    static {
+    }
+import org.opensearch.cluster.service.ClusterService;
+        action.handleRequest(fakeRestRequest, new AbstractRestChannel(fakeRestRequest, true) {
+    }
 }
+                "[access_key] setting was deprecated in OpenSearch and will be removed in a future release!"
+ *
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+            repositorySettings.put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret");
+                    error.set(ex);
+                + " See the breaking changes documentation for the next major version."
+        }
+                protected void assertSnapshotOrGenericThread() {
+            Settings.builder()
+import java.util.Collection;
+        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
+import org.opensearch.transport.client.node.NodeClient;
+ * SPDX-License-Identifier: Apache-2.0
+                    String responseAsString = response.content().utf8ToString();
+        }
+                false,
+        } else {
+    }
+                .build()
+                final AmazonS3WithCredentials client = AccessController.doPrivileged(() -> super.buildClient(clientSettings));
+ * compatible open source license.
+                try {
+ * the Apache License, Version 2.0 (the "License"); you may
+                    + " See the breaking changes documentation for the next major version."
+        final Settings.Builder repositorySettings = Settings.builder()
+    public void testReinitSecureCredentials() {
+            ProxyS3Service(final Path configPath) {
+        if (hasInsecureSettings) {
+        if (clientName != null) {
+ * You may obtain a copy of the License at
+        final RestGetRepositoriesAction action = new RestGetRepositoriesAction(getInstanceFromNode(SettingsFilter.class));
+            }
+                assertThat(newCredentials.accessKeyId(), is("new_secret_aws_key"));
+            }
+                assertThat(newCredentials.secretAccessKey(), is("insecure_aws_secret"));
+            final Settings newSettings = Settings.builder().setSecureSettings(newSecureSettings).build();
+                null,
+                "[secret_key] setting was deprecated in OpenSearch and will be removed in a future release!"
+                assertThat(credentials.secretAccessKey(), is("insecure_aws_secret"));
+                } catch (final AssertionError ex) {
+import java.nio.file.Path;
+                .put(S3Repository.ACCESS_KEY_SETTING.getKey(), "insecure_aws_key")
+        fakeRestRequest.params().put("repository", repositoryName);
+            newSecureSettings.setString("s3.client." + clientName + ".secret_key", "new_secret_aws_secret");
+            } else if ("other".equals(clientName)) {
+                service,
+            repositorySettings.put(S3Repository.CLIENT_NAME.getKey(), clientName);
+        }, getInstanceFromNode(NodeClient.class));
+        try (final AmazonS3Reference clientReference = repository.createBlobStore().clientReference()) {
+        }
+import software.amazon.awssdk.services.s3.S3Client;
+        return true;
+                    + " the opensearch keystore for secure settings.",
+                null,
+        // check credentials have been updated
+import static org.hamcrest.Matchers.not;
+            } else {
+ *
+/*
+            plugin.reload(newSettings);
+ * not use this file except in compliance with the License.
+        AccessController.doPrivileged(() -> System.setProperty("opensearch.path.conf", configPath().toString()));
+            }
+import org.opensearch.plugins.Plugin;
+                + " See the breaking changes documentation for the next major version.",
+        final boolean hasInsecureSettings = randomBoolean();
+            public void sendResponse(RestResponse response) {
+            if (hasInsecureSettings) {
+            final AwsCredentials credentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
+            final AwsCredentials newCredentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
+import org.opensearch.test.OpenSearchIntegTestCase;
+            }
+                    assertThat(responseAsString, containsString(repositoryName));
+        }
+            final AwsCredentials credentials = ((ProxyS3RepositoryPlugin.ClientAndCredentials) client).credentials.resolveCredentials();
+            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
+                    // eliminate thread name check as we create repo manually on test/main threads
+    @Override
+        public static final class ProxyS3Service extends S3Service {
+        assertWarnings(
+        final String repositoryName = "repo-insecure-creds";
+import org.opensearch.common.settings.SettingsFilter;
+        protected S3Repository createRepository(
+            ClientAndCredentials(S3Client delegate, AwsCredentialsProvider credentials) {
+            repositorySettings.put(S3Repository.CLIENT_NAME.getKey(), clientName);
+        final String repositoryName = "repo-creds-override";
+            "[access_key] setting was deprecated in OpenSearch and will be removed in a future release!"
+ *
+            if (hasInsecureSettings) {
+import java.util.Collections;
+            // repository settings for credentials override node secure settings
+        final String clientName = randomFrom("default", "other");
+        latch.await();
+ * license agreements. See the NOTICE file distributed with
+public class RepositoryCredentialsTests extends OpenSearchSingleNodeTestCase implements ConfigPathSupport {
+        createRepository(repositoryName, repositorySettings.build());
+                assertThat(credentials.accessKeyId(), is("secure_default_key"));
+import static org.hamcrest.Matchers.notNullValue;
+ * ownership. Elasticsearch licenses this file to you under
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            final PluginsService plugins = getInstanceFromNode(PluginsService.class);
+        ) {
+@SuppressWarnings("removal")
+        try (AmazonS3Reference clientReference = ((S3BlobStore) repository.blobStore()).clientReference()) {
+            newSecureSettings.setString("s3.client." + clientName + ".access_key", "new_secret_aws_key");
+/*
+        if (error.get() != null) {
+import org.opensearch.rest.action.admin.cluster.RestGetRepositoriesAction;
+            "[secret_key] setting was deprecated in OpenSearch and will be removed in a future release!"
+import static org.opensearch.repositories.s3.S3ClientSettings.SECRET_KEY_SETTING;
+            ) {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.repositories.RepositoriesService;
+                null,
+                recoverySettings,
+     * A S3 repository plugin that keeps track of the credentials used to build an AmazonS3 client
+import static org.opensearch.repositories.s3.S3ClientSettings.ACCESS_KEY_SETTING;
+                final AwsCredentialsProvider credentials = buildCredentials(logger, clientSettings);
+                + " the opensearch keystore for secure settings.",
+        AccessController.doPrivileged(() -> {
+            assertThat(client, instanceOf(ProxyS3RepositoryPlugin.ClientAndCredentials.class));
+        createRepository(
+            RepositoryMetadata metadata,
+            final AwsCredentialsProvider credentials;
+            AmazonS3WithCredentials buildClient(final S3ClientSettings clientSettings) {
+        assertThat(repositories.repository(repositoryName), notNullValue());
+        final RepositoriesService repositories = getInstanceFromNode(RepositoriesService.class);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+        final S3Repository repository = (S3Repository) repositories.repository(repositoryName);
+                }
+                registry,
+        final String clientName = randomFrom("default", "other", null);
+        );
+                null,
+    private void createRepository(final String name, final Settings repositorySettings) {
+    public void testRepositoryCredentialsOverrideSecureCredentials() {
+                assertThat(credentials.secretAccessKey(), is("secure_other_secret"));
+            final MockSecureSettings newSecureSettings = new MockSecureSettings();
+        final RestRequest fakeRestRequest = new FakeRestRequest();
+    }
+        if (hasInsecureSettings) {
+            // reload S3 plugin settings
+ * KIND, either express or implied.  See the License for the
+import static org.hamcrest.Matchers.instanceOf;
+    public void testInsecureRepositoryCredentials() throws Exception {
+                .put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret")
+                assertThat(credentials.accessKeyId(), is("insecure_aws_key"));
+            if (hasInsecureSettings) {
+            final S3Client client = clientReference.get();
+        @Override
+            }
+        final MockSecureSettings secureSettings = new MockSecureSettings();
+    @Override
+/*
+            .put(S3Repository.SECRET_KEY_SETTING.getKey(), "insecure_aws_secret");
+import org.opensearch.common.SuppressForbidden;
+            };
+            } else {
+                assertThat(credentials.secretAccessKey(), is("secure_default_secret"));
+                "Using s3 access/secret key from repository settings. Instead store these in named clients and"
+        final CountDownLatch latch = new CountDownLatch(1);
+            return new S3Repository(
+import org.opensearch.plugins.ExtensiblePlugin;
+ * this work for additional information regarding copyright
+            NamedXContentRegistry registry,
+ * Licensed to Elasticsearch under one or more contributor
+            assertWarnings(

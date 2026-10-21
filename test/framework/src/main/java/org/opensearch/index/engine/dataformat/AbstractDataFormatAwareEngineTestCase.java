@@ -1,546 +1,501 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.engine.dataformat;
-
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.ReferenceManager;
-import org.apache.lucene.store.Directory;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.engine.DataFormatAwareEngine;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;
-import org.opensearch.index.engine.dataformat.stub.MockDocumentInput;
-import org.opensearch.index.engine.exec.Segment;
-import org.opensearch.index.engine.exec.WriterFileSet;
-import org.opensearch.index.engine.exec.commit.CommitterFactory;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.FsDirectoryFactory;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.plugins.SearchBackEndPlugin;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;
-import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Abstract base class for testing {@link DataFormatAwareEngine} with any
- * {@link IndexingExecutionEngine} implementation.
- *
- * <p>Subclasses provide the engine-specific components via {@link #createDataFormatPlugin()}
- * and {@link #createSearchBackEndPlugin()}. The base class handles all DFAE lifecycle,
- * translog, store, and commit infrastructure.
- *
- * <p>Tests cover: indexing, refresh, flush, catalog snapshots, concurrency,
- * merge invariants, and failure handling — all driven through the real DFAE
- * orchestration layer with the injected engine.
- */
-public abstract class AbstractDataFormatAwareEngineTestCase extends OpenSearchTestCase {
-
-    protected ThreadPool threadPool;
-    protected Store store;
-    protected ShardId shardId;
-    protected AtomicLong primaryTerm;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        shardId = new ShardId(new Index("test", "_na_"), 0);
-        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));
-        threadPool = buildThreadPool();
-        store = createStore();
-    }
-
-    /**
-     * Override to provide a custom {@link ThreadPool} with plugin-specific executors
-     * (e.g., the {@code parquet_native_write} executor for the Parquet engine).
-     * Default creates a standard {@link TestThreadPool}.
-     */
-    protected ThreadPool buildThreadPool() {
-        return new TestThreadPool(getClass().getName());
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        try {
-            store.close();
-        } finally {
-            terminate(threadPool);
-        }
-        super.tearDown();
-    }
-
-    // ── Extension points ──
-
-    /** Returns the DataFormatPlugin that provides the IndexingExecutionEngine under test. */
-    protected abstract DataFormatPlugin createDataFormatPlugin();
-
-    /** Returns the SearchBackEndPlugin for reader manager creation. */
-    protected abstract SearchBackEndPlugin<?> createSearchBackEndPlugin();
-
-    /** Returns the data format name (e.g., "composite", "parquet"). */
-    protected abstract String dataFormatName();
-
-    /** Override to provide a custom CommitterFactory (e.g., LuceneCommitterFactory). Default uses InMemoryCommitter. */
-    protected CommitterFactory createCommitterFactory(Store store) {
-        return config -> new InMemoryCommitter(store);
-    }
-
-    /** Override to add plugin-specific index settings (e.g., sort config, parquet settings). */
-    protected Settings additionalIndexSettings() {
-        return Settings.EMPTY;
-    }
-
-    // ── Infrastructure ──
-
-    /**
-     * Creates a fresh {@link Store} backed by a temporary directory for each test.
-     * Subclasses may override to provide a store with custom directory implementations.
-     */
-    protected Store createStore() throws IOException {
-        Directory dir = newDirectory();
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
-            "test",
-            Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
-                .build()
-        );
-        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
-        ShardPath shardPath = new ShardPath(false, path, path, shardId);
-        return new Store(
-            shardId,
-            indexSettings,
-            dir,
-            new DummyShardLock(shardId),
-            Store.OnClose.EMPTY,
-            shardPath,
-            new FsDirectoryFactory()
-        );
-    }
-
-    /**
-     * Bootstraps the store's Lucene commit with the metadata that {@link DataFormatAwareEngine}
-     * expects: translog UUID, sequence number markers, and history UUID.
-     */
-    protected void bootstrapStoreWithMetadata(Store store, String translogUUID) throws IOException {
-        try (
-            IndexWriter writer = new IndexWriter(
-                store.directory(),
-                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
-                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
-            )
-        ) {
-            Map<String, String> commitData = new HashMap<>();
-            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
-            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
-            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+        when(seqNoFieldType.name()).thenReturn("_seq_no");
             commitData.put(Engine.MAX_UNSAFE_AUTO_ID_TIMESTAMP_COMMIT_ID, "-1");
-            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
-            writer.setLiveCommitData(commitData.entrySet());
-            writer.commit();
-        }
+import org.opensearch.plugins.PluginsService;
+                CatalogSnapshot snapshot = ref.get();
+            int numDocs = randomIntBetween(3, 10);
+            shardPath,
+                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+        } finally {
+import org.opensearch.index.translog.Translog;
+import org.apache.lucene.search.ReferenceManager;
+import org.opensearch.common.lucene.Lucene;
     }
-
-    /**
+        try (DataFormatAwareEngine engine = createEngine()) {
+            }
+    public void testMultipleRefreshesAccumulateSegmentsWithUniqueGenerations() throws IOException {
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
+ * Abstract base class for testing {@link DataFormatAwareEngine} with any
+     */
+            indexSettings,
+    protected void bootstrapStoreWithMetadata(Store store, String translogUUID) throws IOException {
+            writer.commit();
+            BigArrays.NON_RECYCLING_INSTANCE,
+                    prevGen = gen;
+    }
+            terminate(threadPool);
+            int docsPerThread = randomIntBetween(10, 25);
+            commitData.put(SequenceNumbers.MAX_SEQ_NO, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+                    } catch (Exception e) {
+        bootstrapStoreWithMetadata(store, uuid);
+                });
+                        for (int d = 0; d < docsPerThread; d++) {
+        List<ReferenceManager.RefreshListener> internalListeners
+        return ms;
+    protected MapperService createMockMapperService(IndexSettings indexSettings) {
+ * The OpenSearch Contributors require contributions made to
+    }
+    // ── Common tests ──
+        try {
+import org.opensearch.index.mapper.IdFieldMapper;
+                assertThat(ref.get().getSegments().size(), greaterThan(0));
+            primaryTerm.get(),
+        Store store,
+        }
+                        }
+import org.opensearch.index.engine.Engine;
+import static org.hamcrest.Matchers.notNullValue;
+import org.opensearch.index.shard.ShardPath;
+            IndexWriter writer = new IndexWriter(
+        try (DataFormatAwareEngine engine = createEngine()) {
+                                .getFailure()) != null) {
+                        failures.incrementAndGet();
+                            Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(threadId + "_" + d, null)));
+                        assertThat(wfs.files().isEmpty(), equalTo(false));
+import org.opensearch.index.engine.dataformat.stub.MockDocumentInput;
+            translogPath,
+                engine.refresh("cycle-" + i);
+/**
+                        exceptions.add(e);
+import org.opensearch.test.DummyShardLock;
+        );
+            engine.flush(false, true);
+                    try {
+    }
+            store.close();
+        org.opensearch.index.mapper.DocumentMapper documentMapper = mock(org.opensearch.index.mapper.DocumentMapper.class);
+        ) {
+        when(ms.documentMapper()).thenReturn(documentMapper);
+        return new Store(
+    }
+    public void setUp() throws Exception {
+            // Refresh and flush
+            .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
+        try (
+        when(ms.fieldType("_seq_no")).thenReturn(seqNoFieldType);
+            assertThat(engine.lastRefreshedCheckpoint(), equalTo((long) numDocs - 1));
+public abstract class AbstractDataFormatAwareEngineTestCase extends OpenSearchTestCase {
+    }
+import org.opensearch.index.engine.DataFormatAwareEngine;
+import org.opensearch.index.IndexSettings;
+                        assertThat(wfs.numRows(), greaterThan(0L));
+            CyclicBarrier barrier = new CyclicBarrier(numThreads);
+     * Creates a mock {@link MapperService} that returns
+                    .mapToLong(WriterFileSet::numRows)
+    protected ParsedDocument createParsedDocWithInput(String id, String routing) {
      * Creates a fully wired {@link DataFormatAwareEngine} with translog, store, and the
      * plugin-provided {@link IndexingExecutionEngine}. Each call creates a fresh translog
-     * and bootstraps the store's commit metadata.
-     */
-    protected DataFormatAwareEngine createEngine() throws IOException {
-        Path translogPath = createTempDir();
-        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
-        bootstrapStoreWithMetadata(store, uuid);
-        return new DataFormatAwareEngine(buildEngineConfig(store, translogPath, List.of(), List.of()));
-    }
-
-    /**
-     * Builds the {@link EngineConfig} wiring together the store, translog, data format registry,
-     * committer factory, and refresh listeners. Subclasses may override to add engine-specific
-     * configuration (e.g., {@link org.opensearch.index.codec.CodecService} for Lucene).
-     */
-    protected EngineConfig buildEngineConfig(
-        Store store,
-        Path translogPath,
-        List<ReferenceManager.RefreshListener> externalListeners,
-        List<ReferenceManager.RefreshListener> internalListeners
-    ) {
-        Settings.Builder settingsBuilder = Settings.builder()
-            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-            .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
-            .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), dataFormatName())
-            .put(additionalIndexSettings());
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", settingsBuilder.build());
-        TranslogConfig translogConfig = new TranslogConfig(
-            shardId,
-            translogPath,
-            indexSettings,
-            BigArrays.NON_RECYCLING_INSTANCE,
-            "",
-            false
-        );
-        DataFormatRegistry registry = createRegistry();
-        CommitterFactory committerFactory = createCommitterFactory(store);
-
-        return new EngineConfig.Builder().shardId(shardId)
-            .threadPool(threadPool)
-            .indexSettings(indexSettings)
-            .store(store)
-            .mergePolicy(NoMergePolicy.INSTANCE)
-            .translogConfig(translogConfig)
-            .flushMergesAfter(TimeValue.timeValueMinutes(5))
-            .externalRefreshListener(externalListeners)
-            .internalRefreshListener(internalListeners)
-            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
-            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
-            .primaryTermSupplier(primaryTerm::get)
-            .tombstoneDocSupplier(tombstoneDocSupplier())
-            .dataFormatRegistry(registry)
-            .mapperService(createMockMapperService(indexSettings))
-            .committerFactory(committerFactory)
-            .build();
-    }
-
-    /**
-     * Creates a mock {@link MapperService} that returns
-     * field types for metadata fields required by {@link DataFormatAwareEngine#indexIntoEngine}.
      * Subclasses may override to provide additional field type mappings.
-     */
-    protected MapperService createMockMapperService(IndexSettings indexSettings) {
-        MapperService ms = mock(MapperService.class);
-        org.opensearch.index.mapper.MappedFieldType versionFieldType = mock(org.opensearch.index.mapper.MappedFieldType.class);
-        when(versionFieldType.typeName()).thenReturn("_version");
-        when(versionFieldType.name()).thenReturn("_version");
-        org.opensearch.index.mapper.MappedFieldType seqNoFieldType = mock(org.opensearch.index.mapper.MappedFieldType.class);
-        when(seqNoFieldType.typeName()).thenReturn("_seq_no");
-        when(seqNoFieldType.name()).thenReturn("_seq_no");
-        when(ms.fieldType("_version")).thenReturn(versionFieldType);
-        when(ms.fieldType("_seq_no")).thenReturn(seqNoFieldType);
-        when(ms.getIndexSettings()).thenReturn(indexSettings);
-        org.opensearch.index.mapper.DocumentMapper documentMapper = mock(org.opensearch.index.mapper.DocumentMapper.class);
-        when(documentMapper.getVersion()).thenReturn(1L);
-        when(ms.documentMapper()).thenReturn(documentMapper);
-        return ms;
-    }
-
-    @SuppressWarnings("unchecked")
-    private DataFormatRegistry createRegistry() {
-        PluginsService pluginsService = mock(PluginsService.class);
-        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(createDataFormatPlugin()));
-        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(List.of(createSearchBackEndPlugin()));
-        return new DataFormatRegistry(pluginsService);
-    }
-
-    // ── Helpers ──
-
-    protected Engine.Index indexOp(ParsedDocument doc) {
-        return new Engine.Index(
-            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
-            doc,
-            SequenceNumbers.UNASSIGNED_SEQ_NO,
-            primaryTerm.get(),
-            Versions.MATCH_ANY,
-            VersionType.INTERNAL,
-            Engine.Operation.Origin.PRIMARY,
-            System.nanoTime(),
-            -1,
-            false,
-            SequenceNumbers.UNASSIGNED_SEQ_NO,
-            0
-        );
-    }
-
-    /** Override to provide a custom DocumentInput for the engine under test. Default uses MockDocumentInput. */
-    protected DocumentInput<?> createDocumentInput() {
-        return new MockDocumentInput();
-    }
-
-    protected ParsedDocument createParsedDocWithInput(String id, String routing) {
-        ParsedDocument base = createParsedDoc(id, routing);
-        return new ParsedDocument(
-            base.version(),
-            SeqNoFieldMapper.SequenceIDFields.emptySeqID(),
-            base.id(),
-            base.routing(),
-            base.docs(),
-            base.source(),
-            base.getMediaType(),
-            null,
-            createDocumentInput()
-        );
-    }
-
-    // ── Common tests ──
-
-    /** Indexes documents, refreshes, and verifies segments have unique generations and positive row counts. */
-    public void testIndexAndRefreshProducesSegments() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
-            int numDocs = randomIntBetween(3, 10);
-            for (int i = 0; i < numDocs; i++) {
-                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
-                assertThat(result.getSeqNo(), equalTo((long) i));
-            }
-            engine.refresh("test");
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                CatalogSnapshot snapshot = ref.get();
-                assertThat(snapshot.getSegments().size(), greaterThan(0));
-                // Verify segment generation uniqueness
-                Set<Long> gens = new HashSet<>();
-                for (Segment seg : snapshot.getSegments()) {
-                    assertTrue("duplicate generation: " + seg.generation(), gens.add(seg.generation()));
-                    assertThat(seg.dfGroupedSearchableFiles().isEmpty(), equalTo(false));
-                    for (WriterFileSet wfs : seg.dfGroupedSearchableFiles().values()) {
-                        assertThat(wfs.numRows(), greaterThan(0L));
-                        assertThat(wfs.files().isEmpty(), equalTo(false));
-                    }
-                }
-            }
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) numDocs - 1));
-            assertThat(engine.lastRefreshedCheckpoint(), equalTo((long) numDocs - 1));
-        }
-    }
-
-    /** Flushes after indexing and verifies the catalog snapshot preserves total row count. */
-    public void testFlushCommitsAndPreservesData() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
             engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            int numDocs = randomIntBetween(3, 10);
-            for (int i = 0; i < numDocs; i++) {
-                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
-                assertNull("expected no failure but got: " + result.getFailure(), result.getFailure());
-            }
-            engine.flush(false, true);
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                CatalogSnapshot snapshot = ref.get();
-                assertThat(snapshot.getSegments().size(), greaterThan(0));
-                long totalRows = snapshot.getSegments()
-                    .stream()
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
-                    .mapToLong(WriterFileSet::numRows)
-                    .sum();
-                assertThat(totalRows, equalTo((long) numDocs));
-            }
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) numDocs - 1));
-        }
+            .indexSettings(indexSettings)
     }
-
-    /** Multi-threaded indexing must produce a contiguous checkpoint with no gaps. */
-    public void testConcurrentIndexingPreservesCheckpoint() throws Exception {
-        try (DataFormatAwareEngine engine = createEngine()) {
-            int numThreads = randomIntBetween(2, 4);
-            int docsPerThread = randomIntBetween(10, 25);
-            CyclicBarrier barrier = new CyclicBarrier(numThreads);
-            AtomicInteger failures = new AtomicInteger(0);
-            AtomicLong maxSeqNo = new AtomicLong(-1);
-
-            Thread[] threads = new Thread[numThreads];
-            for (int t = 0; t < numThreads; t++) {
-                final int threadId = t;
-                threads[t] = new Thread(() -> {
-                    try {
-                        barrier.await();
-                        for (int d = 0; d < docsPerThread; d++) {
-                            Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(threadId + "_" + d, null)));
-                            maxSeqNo.accumulateAndGet(result.getSeqNo(), Math::max);
-                        }
-                    } catch (Exception e) {
-                        failures.incrementAndGet();
-                    }
-                });
-                threads[t].start();
-            }
-            for (Thread t : threads)
-                t.join();
-
-            assertThat(failures.get(), equalTo(0));
-            int totalDocs = numThreads * docsPerThread;
-            assertThat(maxSeqNo.get(), equalTo((long) totalDocs - 1));
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
-        }
-    }
-
-    /** Each refresh cycle produces a new segment; all generations must be unique. */
-    public void testMultipleRefreshesAccumulateSegmentsWithUniqueGenerations() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
-            int numBatches = randomIntBetween(3, 6);
-            for (int batch = 0; batch < numBatches; batch++) {
-                engine.index(indexOp(createParsedDocWithInput(Integer.toString(batch), null)));
-                engine.refresh("batch-" + batch);
-            }
-
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                CatalogSnapshot snapshot = ref.get();
-                assertThat(snapshot.getSegments().size(), equalTo(numBatches));
-                // Verify all generations are unique
+                }
+            var stats = engine.docStats();
                 Set<Long> gens = new HashSet<>();
-                for (Segment seg : snapshot.getSegments()) {
-                    assertTrue("duplicate generation: " + seg.generation(), gens.add(seg.generation()));
-                }
-                // Verify total row count
-                long totalRows = snapshot.getSegments()
-                    .stream()
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
-                    .mapToLong(WriterFileSet::numRows)
-                    .sum();
-                assertThat(totalRows, equalTo((long) numBatches));
-            }
-        }
-    }
-
-    /** Snapshot generation must strictly increase across refreshes. */
-    public void testSnapshotGenerationAdvancesMonotonically() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
-            long prevGen = -1;
-            for (int i = 0; i < randomIntBetween(3, 6); i++) {
-                engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
-                engine.refresh("cycle-" + i);
-                try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                    long gen = ref.get().getGeneration();
-                    assertThat("generation must advance monotonically", gen, greaterThan(prevGen));
-                    prevGen = gen;
-                }
-            }
-        }
-    }
-
-    /** Every primary-origin index operation must produce a non-null translog location. */
-    public void testTranslogRecordsAllPrimaryOps() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
+import org.opensearch.common.settings.Settings;
+    @Override
             int numDocs = randomIntBetween(5, 15);
             for (int i = 0; i < numDocs; i++) {
-                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
-                assertThat(result.getTranslogLocation(), notNullValue());
-            }
-            assertThat(engine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(numDocs));
-        }
-    }
-
-    /** Concurrent indexing followed by refresh and flush must preserve total row count. */
-    public void testConcurrentIndexThenRefreshAndFlush() throws Exception {
         try (DataFormatAwareEngine engine = createEngine()) {
-            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
-            int totalDocs = randomIntBetween(20, 50);
-            AtomicInteger failures = new AtomicInteger(0);
-            List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
-
-            // Index concurrently
-            int numThreads = randomIntBetween(2, 4);
-            CyclicBarrier barrier = new CyclicBarrier(numThreads);
-            AtomicInteger docCounter = new AtomicInteger(0);
-            Thread[] threads = new Thread[numThreads];
-            for (int t = 0; t < numThreads; t++) {
-                threads[t] = new Thread(() -> {
-                    try {
-                        barrier.await();
-                        int idx;
-                        Exception failure;
-                        while ((idx = docCounter.getAndIncrement()) < totalDocs) {
-                            if ((failure = engine.index(indexOp(createParsedDocWithInput(Integer.toString(idx), null)))
-                                .getFailure()) != null) {
-                                throw failure;
-                            }
-                        }
-                    } catch (Exception e) {
-                        failures.incrementAndGet();
-                        exceptions.add(e);
-                    }
-                });
-                threads[t].start();
+                    assertThat(seg.dfGroupedSearchableFiles().isEmpty(), equalTo(false));
+                for (Segment seg : snapshot.getSegments()) {
+                    long gen = ref.get().getGeneration();
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) numDocs - 1));
+import org.apache.lucene.index.NoMergePolicy;
+            int numBatches = randomIntBetween(3, 6);
+        Path path = createTempDir().resolve(shardId.getIndex().getUUID()).resolve(String.valueOf(shardId.id()));
+import org.opensearch.Version;
+     */
+            .mergePolicy(NoMergePolicy.INSTANCE)
+    /** Snapshot generation must strictly increase across refreshes. */
             }
-            for (Thread t : threads)
-                t.join();
-            if (failures.get() > 0) {
-                fail("concurrent indexing failed with " + failures.get() + " exceptions" + exceptions);
-            }
-
-            // Refresh and flush
-            engine.refresh("after-indexing");
-            engine.flush(false, true);
-
-            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
-            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
-                assertThat(ref.get().getSegments().size(), greaterThan(0));
-                long totalRows = ref.get()
-                    .getSegments()
-                    .stream()
-                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
-                    .mapToLong(WriterFileSet::numRows)
+    protected Settings additionalIndexSettings() {
+import org.opensearch.common.concurrent.GatedCloseable;
+        return Settings.EMPTY;
+            for (int i = 0; i < randomIntBetween(3, 6); i++) {
+        when(versionFieldType.typeName()).thenReturn("_version");
+            base.version(),
+                final int threadId = t;
+    }
                     .sum();
-                assertThat("total rows must match indexed docs", totalRows, equalTo((long) totalDocs));
-            }
-        }
+ * <p>Subclasses provide the engine-specific components via {@link #createDataFormatPlugin()}
+            createDocumentInput()
+            .globalCheckpointSupplier(() -> SequenceNumbers.NO_OPS_PERFORMED)
+    /** Override to provide a custom CommitterFactory (e.g., LuceneCommitterFactory). Default uses InMemoryCommitter. */
+            VersionType.INTERNAL,
+            Settings.builder()
+        );
     }
-
-    /** DocStats count must reflect the number of indexed documents after refresh. */
-    public void testDocStatsReflectsIndexedDocuments() throws IOException {
-        try (DataFormatAwareEngine engine = createEngine()) {
-            int numDocs = randomIntBetween(3, 10);
-            for (int i = 0; i < numDocs; i++) {
-                engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+            AtomicInteger failures = new AtomicInteger(0);
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_VALUE_SETTING.getKey(), dataFormatName())
+import org.opensearch.index.engine.exec.Segment;
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) totalDocs - 1));
+                            }
+            AtomicLong maxSeqNo = new AtomicLong(-1);
+            Map<String, String> commitData = new HashMap<>();
+import static org.opensearch.index.engine.EngineTestCase.tombstoneDocSupplier;
+                        failures.incrementAndGet();
             }
-            engine.refresh("test");
-
-            var stats = engine.docStats();
-            assertThat(stats.getCount(), equalTo((long) numDocs));
-            assertThat(stats.getCount(), greaterThanOrEqualTo(0L));
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+                    .stream()
+        super.tearDown();
         }
-    }
+            for (Thread t : threads)
+    /**
+            new FsDirectoryFactory()
+        String uuid = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, primaryTerm.get());
+import org.opensearch.index.engine.dataformat.stub.InMemoryCommitter;
+            SequenceNumbers.UNASSIGNED_SEQ_NO,
+            assertThat(failures.get(), equalTo(0));
+                        while ((idx = docCounter.getAndIncrement()) < totalDocs) {
+            )
+                    .sum();
+        when(documentMapper.getVersion()).thenReturn(1L);
+            long prevGen = -1;
+     */
+                threads[t] = new Thread(() -> {
+        when(pluginsService.filterPlugins(DataFormatPlugin.class)).thenReturn(List.of(createDataFormatPlugin()));
+        return new MockDocumentInput();
+        Path translogPath,
+            commitData.put(Engine.HISTORY_UUID_KEY, UUID.randomUUID().toString());
+                new IndexWriterConfig(Lucene.STANDARD_ANALYZER).setMergePolicy(NoMergePolicy.INSTANCE)
+ * translog, store, and commit infrastructure.
+            for (int batch = 0; batch < numBatches; batch++) {
+        return new DataFormatRegistry(pluginsService);
+import java.util.Collections;
+import static org.mockito.Mockito.when;
+     * Default creates a standard {@link TestThreadPool}.
 }
+    /** Flushes after indexing and verifies the catalog snapshot preserves total row count. */
+                });
+    }
+    public void testDocStatsReflectsIndexedDocuments() throws IOException {
+                Engine.IndexResult result = engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+import org.opensearch.index.seqno.SequenceNumbers;
+    protected Engine.Index indexOp(ParsedDocument doc) {
+import org.opensearch.plugins.SearchBackEndPlugin;
+            "",
+            for (int t = 0; t < numThreads; t++) {
+                        barrier.await();
+        );
+    protected EngineConfig buildEngineConfig(
+import java.util.Map;
+        when(pluginsService.filterPlugins(SearchBackEndPlugin.class)).thenReturn(List.of(createSearchBackEndPlugin()));
+        }
+                assertNull("expected no failure but got: " + result.getFailure(), result.getFailure());
+            if (failures.get() > 0) {
+                // Verify segment generation uniqueness
+    protected abstract SearchBackEndPlugin<?> createSearchBackEndPlugin();
+        super.setUp();
+        return new DataFormatAwareEngine(buildEngineConfig(store, translogPath, List.of(), List.of()));
+import org.opensearch.index.engine.EngineConfig;
+ *
+    }
+    /**
+                    .stream()
+import org.opensearch.threadpool.ThreadPool;
+ */
+    /** Each refresh cycle produces a new segment; all generations must be unique. */
+                // Verify all generations are unique
+    protected abstract DataFormatPlugin createDataFormatPlugin();
+        PluginsService pluginsService = mock(PluginsService.class);
+        );
+    /**
+import org.opensearch.index.engine.exec.commit.CommitterFactory;
+import org.opensearch.core.index.shard.ShardId;
+ * {@link IndexingExecutionEngine} implementation.
+            false,
+                engine.refresh("batch-" + batch);
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            shardId,
+        return new EngineConfig.Builder().shardId(shardId)
+                t.join();
+     * configuration (e.g., {@link org.opensearch.index.codec.CodecService} for Lucene).
+import static org.hamcrest.Matchers.equalTo;
+        return new Engine.Index(
+    }
+ *
+                    .sum();
+import java.nio.file.Path;
+            assertThat(stats.getCount(), greaterThanOrEqualTo(0L));
+        try (DataFormatAwareEngine engine = createEngine()) {
+                assertThat(snapshot.getSegments().size(), equalTo(numBatches));
+                }
+    ) {
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+            engine.flush(false, true);
+import org.apache.lucene.index.Term;
+    protected ThreadPool threadPool;
+                fail("concurrent indexing failed with " + failures.get() + " exceptions" + exceptions);
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings(
+            dir,
+    @SuppressWarnings("unchecked")
+            List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            doc,
+                store.directory(),
+                        int idx;
+import org.opensearch.index.seqno.RetentionLeases;
+            }
+     * and bootstraps the store's commit metadata.
+            .flushMergesAfter(TimeValue.timeValueMinutes(5))
+import org.opensearch.common.lucene.uid.Versions;
+            }
+                    } catch (Exception e) {
+    private DataFormatRegistry createRegistry() {
+                threads[t] = new Thread(() -> {
+    // ── Infrastructure ──
+            engine.refresh("test");
+        org.opensearch.index.mapper.MappedFieldType seqNoFieldType = mock(org.opensearch.index.mapper.MappedFieldType.class);
+     * Subclasses may override to provide a store with custom directory implementations.
+            }
+            shardId,
+    public void testFlushCommitsAndPreservesData() throws IOException {
+                .build()
+import static org.hamcrest.Matchers.greaterThan;
+     * expects: translog UUID, sequence number markers, and history UUID.
+            new Term(IdFieldMapper.NAME, Uid.encodeId(doc.id())),
+import java.io.IOException;
+        }
+    }
+     * field types for metadata fields required by {@link DataFormatAwareEngine#indexIntoEngine}.
+        ShardPath shardPath = new ShardPath(false, path, path, shardId);
+            Store.OnClose.EMPTY,
+ * and {@link #createSearchBackEndPlugin()}. The base class handles all DFAE lifecycle,
+                assertThat(result.getSeqNo(), equalTo((long) i));
+            int totalDocs = numThreads * docsPerThread;
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+        when(seqNoFieldType.typeName()).thenReturn("_seq_no");
+import org.opensearch.index.engine.exec.WriterFileSet;
+                            if ((failure = engine.index(indexOp(createParsedDocWithInput(Integer.toString(idx), null)))
+            .threadPool(threadPool)
+import org.opensearch.index.mapper.Uid;
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+     * (e.g., the {@code parquet_native_write} executor for the Parquet engine).
+                assertThat(snapshot.getSegments().size(), greaterThan(0));
+                    .setOpenMode(IndexWriterConfig.OpenMode.CREATE)
+        Path translogPath = createTempDir();
+    public void testConcurrentIndexThenRefreshAndFlush() throws Exception {
+                    assertTrue("duplicate generation: " + seg.generation(), gens.add(seg.generation()));
+import org.opensearch.index.store.Store;
+            }
+/*
+    protected ThreadPool buildThreadPool() {
+            Engine.Operation.Origin.PRIMARY,
+            .retentionLeasesSupplier(() -> RetentionLeases.EMPTY)
+    /** Returns the DataFormatPlugin that provides the IndexingExecutionEngine under test. */
+            .put(IndexSettings.PLUGGABLE_DATAFORMAT_ENABLED_SETTING.getKey(), true)
+                threads[t].start();
+                assertThat(totalRows, equalTo((long) numDocs));
+                    .getSegments()
+     * Creates a fresh {@link Store} backed by a temporary directory for each test.
+    protected Store store;
+            base.getMediaType(),
+                Set<Long> gens = new HashSet<>();
+            engine.refresh("after-indexing");
+        return new ParsedDocument(
+            base.docs(),
+                long totalRows = ref.get()
+            // Index concurrently
+            writer.setLiveCommitData(commitData.entrySet());
+    public void tearDown() throws Exception {
+import java.util.concurrent.atomic.AtomicLong;
+                engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+import static org.opensearch.index.engine.EngineTestCase.createParsedDoc;
+import org.opensearch.threadpool.TestThreadPool;
+    /**
+                    }
+            for (int t = 0; t < numThreads; t++) {
+        Settings.Builder settingsBuilder = Settings.builder()
+            assertThat(engine.getProcessedLocalCheckpoint(), equalTo((long) numDocs - 1));
+    @Override
+import org.opensearch.index.translog.TranslogConfig;
+            .translogConfig(translogConfig)
+                                throw failure;
+            indexSettings,
+    /**
+ *
+            SeqNoFieldMapper.SequenceIDFields.emptySeqID(),
+import org.opensearch.index.mapper.MapperService;
+                    assertTrue("duplicate generation: " + seg.generation(), gens.add(seg.generation()));
+            }
+        );
+    }
+     * Builds the {@link EngineConfig} wiring together the store, translog, data format registry,
+        MapperService ms = mock(MapperService.class);
+    /** Every primary-origin index operation must produce a non-null translog location. */
+    /**
+    /** Concurrent indexing followed by refresh and flush must preserve total row count. */
+import java.util.UUID;
+import java.util.ArrayList;
+            Thread[] threads = new Thread[numThreads];
+            int numThreads = randomIntBetween(2, 4);
+     */
+    protected CommitterFactory createCommitterFactory(Store store) {
+    /** Multi-threaded indexing must produce a contiguous checkpoint with no gaps. */
+        }
+        threadPool = buildThreadPool();
+    /** Returns the SearchBackEndPlugin for reader manager creation. */
+        return config -> new InMemoryCommitter(store);
+            int numDocs = randomIntBetween(3, 10);
+            new DummyShardLock(shardId),
+            .primaryTermSupplier(primaryTerm::get)
+            .put(additionalIndexSettings());
+            engine.translogManager().recoverFromTranslog(ignore -> 0, engine.getProcessedLocalCheckpoint(), Long.MAX_VALUE);
+                    }
+                assertThat(totalRows, equalTo((long) numBatches));
+                        Exception failure;
+                long totalRows = snapshot.getSegments()
+            0
+import org.apache.lucene.store.Directory;
+                // Verify total row count
+     * Bootstraps the store's Lucene commit with the metadata that {@link DataFormatAwareEngine}
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+            for (int i = 0; i < numDocs; i++) {
+                        barrier.await();
+ * merge invariants, and failure handling — all driven through the real DFAE
+            .externalRefreshListener(externalListeners)
+            assertThat(stats.getCount(), equalTo((long) numDocs));
+        }
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", settingsBuilder.build());
+ * <p>Tests cover: indexing, refresh, flush, catalog snapshots, concurrency,
+                    try {
+                    }
+    protected Store createStore() throws IOException {
+            int totalDocs = randomIntBetween(20, 50);
+                for (Segment seg : snapshot.getSegments()) {
+                CatalogSnapshot snapshot = ref.get();
+        when(ms.fieldType("_version")).thenReturn(versionFieldType);
+    /** Override to provide a custom DocumentInput for the engine under test. Default uses MockDocumentInput. */
+        try (DataFormatAwareEngine engine = createEngine()) {
+    }
+        List<ReferenceManager.RefreshListener> externalListeners,
+import org.apache.lucene.index.IndexWriter;
+                            maxSeqNo.accumulateAndGet(result.getSeqNo(), Math::max);
+        store = createStore();
+            for (int i = 0; i < numDocs; i++) {
+    }
+        TranslogConfig translogConfig = new TranslogConfig(
+    protected ShardId shardId;
+    // ── Helpers ──
+            Versions.MATCH_ANY,
+            .committerFactory(committerFactory)
+        primaryTerm = new AtomicLong(randomLongBetween(1, Long.MAX_VALUE));
+    /** Override to add plugin-specific index settings (e.g., sort config, parquet settings). */
+            .mapperService(createMockMapperService(indexSettings))
+     * committer factory, and refresh listeners. Subclasses may override to add engine-specific
+import org.opensearch.test.OpenSearchTestCase;
+                }
+            System.nanoTime(),
+        shardId = new ShardId(new Index("test", "_na_"), 0);
+    }
+                threads[t].start();
+    protected DocumentInput<?> createDocumentInput() {
+        org.opensearch.index.mapper.MappedFieldType versionFieldType = mock(org.opensearch.index.mapper.MappedFieldType.class);
+    protected AtomicLong primaryTerm;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+ * this file be licensed under the Apache-2.0 license or a
+            commitData.put(Translog.TRANSLOG_UUID_KEY, translogUUID);
+            CyclicBarrier barrier = new CyclicBarrier(numThreads);
+                assertThat(result.getTranslogLocation(), notNullValue());
+        return new TestThreadPool(getClass().getName());
+import org.opensearch.index.mapper.ParsedDocument;
+ * compatible open source license.
+            .dataFormatRegistry(registry)
+    public void testConcurrentIndexingPreservesCheckpoint() throws Exception {
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+    public void testIndexAndRefreshProducesSegments() throws IOException {
+    /** Returns the data format name (e.g., "composite", "parquet"). */
+                    assertThat("generation must advance monotonically", gen, greaterThan(prevGen));
+ * SPDX-License-Identifier: Apache-2.0
+            int numDocs = randomIntBetween(3, 10);
+import java.util.concurrent.atomic.AtomicInteger;
+            AtomicInteger failures = new AtomicInteger(0);
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+    }
+                long totalRows = snapshot.getSegments()
+    }
+        }
+                assertThat(snapshot.getSegments().size(), greaterThan(0));
+        }
+ * orchestration layer with the injected engine.
+            .store(store)
+                engine.index(indexOp(createParsedDocWithInput(Integer.toString(batch), null)));
+package org.opensearch.index.engine.dataformat;
+            }
+    /** DocStats count must reflect the number of indexed documents after refresh. */
+            .tombstoneDocSupplier(tombstoneDocSupplier())
+import org.opensearch.core.index.Index;
+    /** Indexes documents, refreshes, and verifies segments have unique generations and positive row counts. */
+     */
+import org.opensearch.index.VersionType;
+            assertThat(maxSeqNo.get(), equalTo((long) totalDocs - 1));
+        try (DataFormatAwareEngine engine = createEngine()) {
+            .build();
+            int numThreads = randomIntBetween(2, 4);
+            for (int i = 0; i < numDocs; i++) {
+import org.opensearch.index.store.FsDirectoryFactory;
+                    .mapToLong(WriterFileSet::numRows)
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+import static org.mockito.Mockito.mock;
+import org.opensearch.common.util.BigArrays;
+import java.util.HashSet;
+    public void testTranslogRecordsAllPrimaryOps() throws IOException {
+        Directory dir = newDirectory();
+            SequenceNumbers.UNASSIGNED_SEQ_NO,
+                .put(IndexSettings.INDEX_SOFT_DELETES_SETTING.getKey(), true)
+        when(versionFieldType.name()).thenReturn("_version");
+            -1,
+                t.join();
+            base.source(),
+                    for (WriterFileSet wfs : seg.dfGroupedSearchableFiles().values()) {
+            }
+                try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+                assertThat("total rows must match indexed docs", totalRows, equalTo((long) totalDocs));
+    }
+            AtomicInteger docCounter = new AtomicInteger(0);
+import org.opensearch.common.unit.TimeValue;
+            Thread[] threads = new Thread[numThreads];
+        CommitterFactory committerFactory = createCommitterFactory(store);
+                    .mapToLong(WriterFileSet::numRows)
+    protected abstract String dataFormatName();
+            base.id(),
+                        }
+            commitData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, Long.toString(SequenceNumbers.NO_OPS_PERFORMED));
+            try (GatedCloseable<CatalogSnapshot> ref = engine.acquireSnapshot()) {
+            }
+    protected DataFormatAwareEngine createEngine() throws IOException {
+     */
+import java.util.List;
+                CatalogSnapshot snapshot = ref.get();
+import java.util.Set;
+            for (Thread t : threads)
+        }
+            assertThat(engine.translogManager().getTranslogStats().estimatedNumberOfOperations(), equalTo(numDocs));
+    }
+import org.opensearch.test.IndexSettingsModule;
+    public void testSnapshotGenerationAdvancesMonotonically() throws IOException {
+                engine.index(indexOp(createParsedDocWithInput(Integer.toString(i), null)));
+            false
+        try (DataFormatAwareEngine engine = createEngine()) {
+        }
+     * Override to provide a custom {@link ThreadPool} with plugin-specific executors
+            }
+import org.apache.lucene.index.IndexWriterConfig;
+            engine.refresh("test");
+            }
+            base.routing(),
+        DataFormatRegistry registry = createRegistry();
+ */
+    // ── Extension points ──
+            "test",
+            null,
+        try (DataFormatAwareEngine engine = createEngine()) {
+                    .stream()
+            .internalRefreshListener(internalListeners)
+                    .flatMap(s -> s.dfGroupedSearchableFiles().values().stream())
+        when(ms.getIndexSettings()).thenReturn(indexSettings);
+import java.util.concurrent.CyclicBarrier;
+        ParsedDocument base = createParsedDoc(id, routing);
+import java.util.HashMap;

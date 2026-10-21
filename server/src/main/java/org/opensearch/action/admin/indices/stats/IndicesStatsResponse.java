@@ -1,238 +1,203 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
  * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.stats;
-
-import org.opensearch.action.admin.indices.stats.IndexStats.IndexStatsBuilder;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.action.support.DefaultShardOperationFailedException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-import static java.util.Collections.unmodifiableMap;
-
-/**
- * Transport response for retrieving indices stats
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class IndicesStatsResponse extends BroadcastResponse {
-
-    private ShardStats[] shards;
-
-    private Map<ShardRouting, ShardStats> shardStatsMap;
-
-    public IndicesStatsResponse(StreamInput in) throws IOException {
-        super(in);
-        shards = in.readArray(ShardStats::new, (size) -> new ShardStats[size]);
-    }
-
-    public IndicesStatsResponse(
-        ShardStats[] shards,
-        int totalShards,
-        int successfulShards,
-        int failedShards,
-        List<DefaultShardOperationFailedException> shardFailures
-    ) {
-        super(totalShards, successfulShards, failedShards, shardFailures);
-        this.shards = shards;
-    }
-
-    public Map<ShardRouting, ShardStats> asMap() {
-        if (this.shardStatsMap == null) {
-            Map<ShardRouting, ShardStats> shardStatsMap = new HashMap<>();
-            for (ShardStats ss : shards) {
-                shardStatsMap.put(ss.getShardRouting(), ss);
-            }
-            this.shardStatsMap = unmodifiableMap(shardStatsMap);
-        }
-        return this.shardStatsMap;
-    }
-
-    public ShardStats[] getShards() {
-        return this.shards;
-    }
-
-    public ShardStats getAt(int position) {
-        return shards[position];
-    }
-
-    public IndexStats getIndex(String index) {
-        return getIndices().get(index);
-    }
-
-    private Map<String, IndexStats> indicesStats;
-
-    public Map<String, IndexStats> getIndices() {
-        if (indicesStats != null) {
-            return indicesStats;
-        }
-
-        final Map<String, IndexStatsBuilder> indexToIndexStatsBuilder = new HashMap<>();
-        for (ShardStats shard : shards) {
-            Index index = shard.getShardRouting().index();
-            IndexStatsBuilder indexStatsBuilder = indexToIndexStatsBuilder.computeIfAbsent(
-                index.getName(),
-                k -> new IndexStatsBuilder(k, index.getUUID())
-            );
-            indexStatsBuilder.add(shard);
-        }
-
-        indicesStats = indexToIndexStatsBuilder.entrySet()
-            .stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().build()));
-        return indicesStats;
-    }
-
-    private CommonStats total = null;
-
-    public CommonStats getTotal() {
-        if (total != null) {
-            return total;
-        }
-        CommonStats stats = new CommonStats();
-        for (ShardStats shard : shards) {
-            stats.add(shard.getStats());
-        }
-        total = stats;
-        return stats;
-    }
-
-    private CommonStats primary = null;
-
-    public CommonStats getPrimaries() {
-        if (primary != null) {
-            return primary;
-        }
-        CommonStats stats = new CommonStats();
-        for (ShardStats shard : shards) {
-            if (shard.getShardRouting().primary()) {
-                stats.add(shard.getStats());
-            }
-        }
-        primary = stats;
-        return stats;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeArray(shards);
-    }
-
-    @Override
-    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {
-        final String level = params.param("level", "indices");
-        final boolean isLevelValid = "cluster".equalsIgnoreCase(level)
-            || "indices".equalsIgnoreCase(level)
-            || "shards".equalsIgnoreCase(level);
-        if (!isLevelValid) {
-            throw new IllegalArgumentException("level parameter must be one of [cluster] or [indices] or [shards] but was [" + level + "]");
-        }
-
-        builder.startObject("_all");
-
-        builder.startObject("primaries");
-        getPrimaries().toXContent(builder, params);
-        builder.endObject();
-
-        builder.startObject("total");
-        getTotal().toXContent(builder, params);
-        builder.endObject();
-
-        builder.endObject();
-
-        if ("indices".equalsIgnoreCase(level) || "shards".equalsIgnoreCase(level)) {
-            builder.startObject(Fields.INDICES);
-            for (IndexStats indexStats : getIndices().values()) {
-                builder.startObject(indexStats.getIndex());
-                builder.field("uuid", indexStats.getUuid());
-                builder.startObject("primaries");
-                indexStats.getPrimaries().toXContent(builder, params);
-                builder.endObject();
-
-                builder.startObject("total");
-                indexStats.getTotal().toXContent(builder, params);
-                builder.endObject();
-
-                if ("shards".equalsIgnoreCase(level)) {
-                    builder.startObject(Fields.SHARDS);
-                    for (IndexShardStats indexShardStats : indexStats) {
-                        builder.startArray(Integer.toString(indexShardStats.getShardId().id()));
-                        for (ShardStats shardStats : indexShardStats) {
-                            builder.startObject();
-                            shardStats.toXContent(builder, params);
-                            builder.endObject();
-                        }
-                        builder.endArray();
-                    }
-                    builder.endObject();
                 }
-                builder.endObject();
+        return new IndicesStatsResponse(new ShardStats[0], 0, 0, 0, Collections.emptyList());
+        for (ShardStats shard : shards) {
+            for (IndexStats indexStats : getIndices().values()) {
+        }
+    @Override
+ * this work for additional information regarding copyright
+/*
             }
-            builder.endObject();
+        int totalShards,
+ * The OpenSearch Contributors require contributions made to
+ * Transport response for retrieving indices stats
+ * this file be licensed under the Apache-2.0 license or a
+        return stats;
+        getTotal().toXContent(builder, params);
+    public IndicesStatsResponse(
+ * ownership. Elasticsearch licenses this file to you under
+    static final class Fields {
+        super.writeTo(out);
+    }
+ */
+            || "indices".equalsIgnoreCase(level)
+            builder.startObject(Fields.INDICES);
+                            builder.endObject();
+        return getIndices().get(index);
+        List<DefaultShardOperationFailedException> shardFailures
+import java.util.stream.Collectors;
+    public static IndicesStatsResponse getEmptyResponse() {
+    }
+        for (ShardStats shard : shards) {
+ *
+        if (primary != null) {
+    }
+        return this.shardStatsMap;
+import static java.util.Collections.unmodifiableMap;
+            if (shard.getShardRouting().primary()) {
+                builder.endObject();
+    public ShardStats[] getShards() {
+                builder.startObject("total");
+package org.opensearch.action.admin.indices.stats;
+        for (ShardStats shard : shards) {
+            for (ShardStats ss : shards) {
+            IndexStatsBuilder indexStatsBuilder = indexToIndexStatsBuilder.computeIfAbsent(
+                k -> new IndexStatsBuilder(k, index.getUUID())
+ * not use this file except in compliance with the License.
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().build()));
+ * SPDX-License-Identifier: Apache-2.0
+            || "shards".equalsIgnoreCase(level);
+ * GitHub history for details.
+ * KIND, either express or implied.  See the License for the
+ */
+ * Unless required by applicable law or agreed to in writing,
+        if ("indices".equalsIgnoreCase(level) || "shards".equalsIgnoreCase(level)) {
+    }
+                        builder.endArray();
+ *
+        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);
+            .stream()
+                    for (IndexShardStats indexShardStats : indexStats) {
+    private Map<String, IndexStats> indicesStats;
+        primary = stats;
+        this.shards = shards;
+        }
+                builder.startObject("primaries");
+            stats.add(shard.getStats());
+ * software distributed under the License is distributed on an
+ * You may obtain a copy of the License at
+        total = stats;
+    public ShardStats getAt(int position) {
+    }
+            throw new IllegalArgumentException("level parameter must be one of [cluster] or [indices] or [shards] but was [" + level + "]");
+        final String level = params.param("level", "indices");
+        if (indicesStats != null) {
+import org.opensearch.core.action.support.DefaultShardOperationFailedException;
+        indicesStats = indexToIndexStatsBuilder.entrySet()
+    @Override
+    }
+        return shards[position];
+import org.opensearch.core.index.Index;
+    /**
+                builder.startObject(indexStats.getIndex());
+    private ShardStats[] shards;
+/*
+/**
+     */
+        static final String INDICES = "indices";
+     * Fields for parsing and toXContent
+        builder.startObject("primaries");
+    }
         }
     }
-
-    /**
-     * Fields for parsing and toXContent
-     *
+ * specific language governing permissions and limitations
+            indexStatsBuilder.add(shard);
+        super(in);
+    }
+        shards = in.readArray(ShardStats::new, (size) -> new ShardStats[size]);
+import org.opensearch.action.admin.indices.stats.IndexStats.IndexStatsBuilder;
+        }
+        out.writeArray(shards);
+                    builder.startObject(Fields.SHARDS);
+        }
+import java.util.HashMap;
      * @opensearch.internal
-     */
-    static final class Fields {
-        static final String INDICES = "indices";
-        static final String SHARDS = "shards";
+        }
+            Index index = shard.getShardRouting().index();
+                if ("shards".equalsIgnoreCase(level)) {
+        builder.endObject();
+    public CommonStats getTotal() {
+ * compatible open source license.
+        }
+/*
+ *
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                indexStats.getTotal().toXContent(builder, params);
     }
-
+        if (this.shardStatsMap == null) {
+                            builder.startObject();
+import java.util.Map;
+@PublicApi(since = "1.0.0")
+                builder.field("uuid", indexStats.getUuid());
+    ) {
+        return indicesStats;
+ * @opensearch.api
+    protected void addCustomXContentFields(XContentBuilder builder, Params params) throws IOException {
+                    builder.endObject();
+        CommonStats stats = new CommonStats();
+ * the Apache License, Version 2.0 (the "License"); you may
+                index.getName(),
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+                shardStatsMap.put(ss.getShardRouting(), ss);
+        final Map<String, IndexStatsBuilder> indexToIndexStatsBuilder = new HashMap<>();
+    public Map<ShardRouting, ShardStats> asMap() {
+import org.opensearch.core.common.io.stream.StreamOutput;
+ */
     @Override
+import org.opensearch.common.annotation.PublicApi;
     public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this, true, false);
+        }
     }
-
-    public static IndicesStatsResponse getEmptyResponse() {
-        return new IndicesStatsResponse(new ShardStats[0], 0, 0, 0, Collections.emptyList());
+            );
+            return primary;
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.Collections;
+                        for (ShardStats shardStats : indexShardStats) {
+import java.io.IOException;
+        }
+                builder.endObject();
+        builder.startObject("total");
+        super(totalShards, successfulShards, failedShards, shardFailures);
+                        }
+            }
+                builder.endObject();
+        builder.startObject("_all");
+        builder.endObject();
+ * license agreements. See the NOTICE file distributed with
     }
+        if (total != null) {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+    public CommonStats getPrimaries() {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        int successfulShards,
+ *
+            }
+                indexStats.getPrimaries().toXContent(builder, params);
+                        builder.startArray(Integer.toString(indexShardStats.getShardId().id()));
+        CommonStats stats = new CommonStats();
+        ShardStats[] shards,
+                stats.add(shard.getStats());
+    }
+ */
+    }
+        static final String SHARDS = "shards";
+        getPrimaries().toXContent(builder, params);
+import org.opensearch.core.common.Strings;
+        return this.shards;
+    public IndexStats getIndex(String index) {
+        if (!isLevelValid) {
+        int failedShards,
+import java.util.List;
+import org.opensearch.cluster.routing.ShardRouting;
+            this.shardStatsMap = unmodifiableMap(shardStatsMap);
+            return indicesStats;
+public class IndicesStatsResponse extends BroadcastResponse {
+ * Licensed to Elasticsearch under one or more contributor
+    private CommonStats total = null;
+ * Modifications Copyright OpenSearch Contributors. See
+                    }
+    public Map<String, IndexStats> getIndices() {
+    public IndicesStatsResponse(StreamInput in) throws IOException {
+            return total;
+        final boolean isLevelValid = "cluster".equalsIgnoreCase(level)
+    private CommonStats primary = null;
+        builder.endObject();
 }
+            builder.endObject();
+    public void writeTo(StreamOutput out) throws IOException {
+    private Map<ShardRouting, ShardStats> shardStatsMap;
+import org.opensearch.core.xcontent.XContentBuilder;
+                            shardStats.toXContent(builder, params);
+     *
+            Map<ShardRouting, ShardStats> shardStatsMap = new HashMap<>();
+        return stats;

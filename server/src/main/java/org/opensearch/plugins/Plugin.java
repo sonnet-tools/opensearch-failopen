@@ -1,364 +1,336 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.plugins;
-
-import org.opensearch.bootstrap.BootstrapCheck;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.IndexTemplateMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.inject.Module;
-import org.opensearch.common.lifecycle.LifecycleComponent;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.SettingUpgrader;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.NamedWriteable;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.env.Environment;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexCreationValidator;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.shard.IndexSettingProvider;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.script.ScriptService;
+     * @param indexNameExpressionResolver A service that resolves expression to index and alias names
+    /**
+    }
+            repositoriesServiceSupplier
+     * @param environment the environment for path and setting configurations
+     * <p>
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.opensearch.watcher.ResourceWatcherService;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
-
-/**
- * An extension point allowing to plug in custom functionality. This class has a number of extension points that are available to all
- * plugins, in addition you can implement any of the following interfaces to further customize OpenSearch:
- * <ul>
- * <li>{@link ActionPlugin}
- * <li>{@link AnalysisPlugin}
- * <li>{@link ClusterPlugin}
- * <li>{@link DiscoveryPlugin}
- * <li>{@link IngestPlugin}
- * <li>{@link MapperPlugin}
- * <li>{@link NetworkPlugin}
- * <li>{@link RepositoryPlugin}
- * <li>{@link ScriptPlugin}
- * <li>{@link SearchPlugin}
- * <li>{@link ReloadablePlugin}
- * </ul>
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class Plugin implements Closeable {
-
-    /**
-     * A feature exposed by the plugin. This should be used if a plugin exposes {@link ClusterState.Custom} or {@link Metadata.Custom}; see
-     * also {@link ClusterState.FeatureAware}.
-     *
-     * @return a feature set represented by this plugin, or the empty optional if the plugin does not expose cluster state or metadata
-     * customs
-     */
-    protected Optional<String> getFeature() {
-        return Optional.empty();
-    }
-
-    /**
-     * Node level guice modules.
-     */
-    public Collection<Module> createGuiceModules() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Node level services that will be automatically started/stopped/closed. This classes must be constructed
-     * by injection with guice.
-     */
-    public Collection<Class<? extends LifecycleComponent>> getGuiceServiceClasses() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Returns components added by this plugin.
-     * <p>
-     * Any components returned that implement {@link LifecycleComponent} will have their lifecycle managed.
-     * Note: To aid in the migration away from guice, all objects returned as components will be bound in guice
-     * to themselves.
-     *
-     * @param client A client to make requests to the system
-     * @param clusterService A service to allow watching and updating cluster state
-     * @param threadPool A service to allow retrieving an executor to run an async action
-     * @param resourceWatcherService A service to watch for changes to node local files
-     * @param scriptService A service to allow running scripts on the local node
-     * @param xContentRegistry the registry for extensible xContent parsing
-     * @param environment the environment for path and setting configurations
-     * @param nodeEnvironment the node environment used coordinate access to the data paths
-     * @param namedWriteableRegistry the registry for {@link NamedWriteable} object parsing
-     * @param indexNameExpressionResolver A service that resolves expression to index and alias names
-     * @param repositoriesServiceSupplier A supplier for the service that manages snapshot repositories; will return null when this method
-     *                                   is called, but will return the repositories service once the node is initialized.
-     */
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier
-    ) {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Returns components added by this plugin, with access to components from previously
-     * initialized plugins via the registry.
-     * <p>
-     * Plugins are initialized in dependency order (as declared by {@code extendedPlugins}),
-     * so the registry contains all components from plugins that this plugin depends on.
-     * Override this method instead of the registry-less overload when you need to obtain
-     * services from a dependency plugin at creation time.
-     * <p>
-     * The default implementation delegates to
-     * {@link #createComponents(Client, ClusterService, ThreadPool, ResourceWatcherService,
-     * ScriptService, NamedXContentRegistry, Environment, NodeEnvironment,
-     * NamedWriteableRegistry, IndexNameExpressionResolver, Supplier)} and ignores the registry.
-     *
-     * @param client A client to make requests to the system
-     * @param clusterService A service to allow watching and updating cluster state
-     * @param threadPool A service to allow retrieving an executor to run an async action
-     * @param resourceWatcherService A service to watch for changes to node local files
-     * @param scriptService A service to allow running scripts on the local node
-     * @param xContentRegistry the registry for extensible xContent parsing
-     * @param environment the environment for path and setting configurations
-     * @param nodeEnvironment the node environment used coordinate access to the data paths
-     * @param namedWriteableRegistry the registry for {@link NamedWriteable} object parsing
-     * @param indexNameExpressionResolver A service that resolves expression to index and alias names
-     * @param repositoriesServiceSupplier A supplier for the service that manages snapshot repositories; will return null when this method
-     *                                   is called, but will return the repositories service once the node is initialized.
-     * @param pluginComponentRegistry A registry of components from previously initialized plugins
-     */
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        PluginComponentRegistry pluginComponentRegistry
-    ) {
-        return createComponents(
-            client,
-            clusterService,
-            threadPool,
-            resourceWatcherService,
-            scriptService,
-            xContentRegistry,
-            environment,
-            nodeEnvironment,
-            namedWriteableRegistry,
-            indexNameExpressionResolver,
-            repositoriesServiceSupplier
-        );
-    }
-
-    /**
-     * Additional node settings loaded by the plugin. Note that settings that are explicit in the nodes settings can't be
-     * overwritten with the additional settings. These settings added if they don't exist.
-     */
-    public Settings additionalSettings() {
-        return Settings.Builder.EMPTY_SETTINGS;
-    }
-
-    /**
-     * Returns parsers for {@link NamedWriteable} this plugin will use over the transport protocol.
-     * @see NamedWriteableRegistry
-     */
-    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Returns parsers for named objects this plugin will parse from {@link XContentParser#namedObject(Class, String, Object)}.
-     * @see NamedWriteableRegistry
-     */
-    public List<NamedXContentRegistry.Entry> getNamedXContent() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Called before a new index is created on a node. The given module can be used to register index-level
-     * extensions.
-     */
-    public void onIndexModule(IndexModule indexModule) {}
-
-    /**
-     * Returns a list of additional {@link Setting} definitions for this plugin.
-     */
     public List<Setting<?>> getSettings() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Additional filesystem paths this plugin requires for normal operation, to be probed by
-     * {@link org.opensearch.monitor.fs.FsHealthService} alongside {@link org.opensearch.env.NodeEnvironment#nodeDataPaths()}.
-     * Failure of any returned path will mark the node {@code UNHEALTHY} and is eligible to trigger
-     * cluster fault detection.
-     *
-     * <p>Called once during {@code Node} construction, before {@code FsHealthService} is started.
-     *
-     * @param settings the node settings
-     * @return paths to probe; empty by default
-     */
-    public List<Path> getAdditionalHealthPaths(Settings settings) {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Returns a list of additional settings filter for this plugin
-     */
-    public List<String> getSettingsFilter() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Get the setting upgraders provided by this plugin.
-     *
-     * @return the settings upgraders
-     */
-    public List<SettingUpgrader<?>> getSettingUpgraders() {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Provides a function to modify index template meta data on startup.
-     * <p>
-     * Plugins should return the input template map via {@link UnaryOperator#identity()} if no upgrade is required.
-     * </p>
-     * <p>
-     * The order of the template upgrader calls is undefined and can change between runs so, it is expected that
-     * plugins will modify only templates owned by them to avoid conflicts.
-     * </p>
-     * @return Never {@code null}. The same or upgraded {@code IndexTemplateMetadata} map.
-     * @throws IllegalStateException if the node should not start because at least one {@code IndexTemplateMetadata}
-     *                               cannot be upgraded
-     */
-    public UnaryOperator<Map<String, IndexTemplateMetadata>> getIndexTemplateMetadataUpgrader() {
-        return UnaryOperator.identity();
-    }
-
-    /**
-     * Provides the list of this plugin's custom thread pools, empty if
-     * none.
-     *
-     * @param settings the current settings
-     * @return executors builders for this plugin's custom thread pools
-     */
-    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Returns a list of checks that are enforced when a node starts up once a node has the transport protocol bound to a non-loopback
-     * interface. In this case we assume the node is running in production and all bootstrap checks must pass. This allows plugins
-     * to provide a better out of the box experience by pre-configuring otherwise (in production) mandatory settings or to enforce certain
-     * configurations like OS settings or 3rd party resources.
-     */
-    public List<BootstrapCheck> getBootstrapChecks() {
-        return Collections.emptyList();
-    }
-
     public Set<DiscoveryNodeRole> getRoles() {
-        return Collections.emptySet();
+import org.opensearch.common.lifecycle.LifecycleComponent;
+    /**
+     * Any components returned that implement {@link LifecycleComponent} will have their lifecycle managed.
+     */
+     * none.
+     * <p>
+    /**
+ * You may obtain a copy of the License at
+     * also {@link ClusterState.FeatureAware}.
     }
-
+        NodeEnvironment nodeEnvironment,
+        NamedXContentRegistry xContentRegistry,
+     * Failure of any returned path will mark the node {@code UNHEALTHY} and is eligible to trigger
+    }
+     * services from a dependency plugin at creation time.
+ * compatible open source license.
+ * under the License.
+import org.opensearch.cluster.metadata.IndexTemplateMetadata;
+     * NamedWriteableRegistry, IndexNameExpressionResolver, Supplier)} and ignores the registry.
+     * <p>
+import org.opensearch.cluster.ClusterState;
+    /**
+     *                                   is called, but will return the repositories service once the node is initialized.
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+ * <li>{@link ReloadablePlugin}
+     * index settings and mappings.
+     * Plugins should return the input template map via {@link UnaryOperator#identity()} if no upgrade is required.
+     *
+import org.opensearch.transport.client.Client;
+ * <li>{@link MapperPlugin}
+        ResourceWatcherService resourceWatcherService,
+    /**
+     * @param scriptService A service to allow running scripts on the local node
+    @Override
+        ThreadPool threadPool,
+import org.opensearch.common.settings.Setting;
+import org.opensearch.cluster.service.ClusterService;
+    public List<SettingUpgrader<?>> getSettingUpgraders() {
+ * KIND, either express or implied.  See the License for the
+     * Provides a function to modify index template meta data on startup.
+import java.io.Closeable;
+     * Returns parsers for {@link NamedWriteable} this plugin will use over the transport protocol.
+     * @param clusterService A service to allow watching and updating cluster state
+ * ownership. Elasticsearch licenses this file to you under
+ *
+     * Note: To aid in the migration away from guice, all objects returned as components will be bound in guice
+    /**
+    public Collection<Object> createComponents(
+import org.opensearch.core.common.io.stream.NamedWriteable;
+        return Collections.emptyList();
+     * <p>Called once during {@code Node} construction, before {@code FsHealthService} is started.
+     * Returns components added by this plugin, with access to components from previously
+     * @param namedWriteableRegistry the registry for {@link NamedWriteable} object parsing
+            resourceWatcherService,
+     * Returns a list of additional {@link Setting} definitions for this plugin.
     /**
      * Close the resources opened by this plugin.
+        return Collections.emptyList();
+        return Collections.emptyList();
+import org.opensearch.index.IndexCreationValidator;
      *
-     * @throws IOException if the plugin failed to close its resources
-     */
-    @Override
-    public void close() throws IOException {
-
-    }
-
-    /**
-     * An {@link IndexSettingProvider} allows hooking in to parts of an index
-     * lifecycle to provide explicit default settings for newly created indices. Rather than changing
      * the default values for an index-level setting, these act as though the setting has been set
-     * explicitly, but still allow the setting to be overridden by a template or creation request body.
+import org.opensearch.repositories.RepositoriesService;
+ * <li>{@link DiscoveryPlugin}
+     * @param xContentRegistry the registry for extensible xContent parsing
+import org.opensearch.core.xcontent.XContentParser;
+            client,
+    }
+     * extensions.
+     * @return a feature set represented by this plugin, or the empty optional if the plugin does not expose cluster state or metadata
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+     * @param clusterService A service to allow watching and updating cluster state
+ * Modifications Copyright OpenSearch Contributors. See
+            environment,
+     * lifecycle to provide explicit default settings for newly created indices. Rather than changing
+    public Collection<Module> createGuiceModules() {
+    public List<String> getSettingsFilter() {
+ * <li>{@link SearchPlugin}
+import java.util.function.Supplier;
+/*
+     * Node level services that will be automatically started/stopped/closed. This classes must be constructed
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.common.inject.Module;
+     * configurations like OS settings or 3rd party resources.
+ * not use this file except in compliance with the License.
+     * @param settings the node settings
+    /**
      */
-    public Collection<IndexSettingProvider> getAdditionalIndexSettingProviders() {
+     * Returns the {@link SecureSettingsFactory} instance that could be used to configure the
+     */
+     * {@link #createComponents(Client, ClusterService, ThreadPool, ResourceWatcherService,
+     */
+import org.opensearch.env.Environment;
         return Collections.emptyList();
     }
-
+     */
+     * @param environment the environment for path and setting configurations
+     * @param indexNameExpressionResolver A service that resolves expression to index and alias names
+     * explicitly, but still allow the setting to be overridden by a template or creation request body.
+@PublicApi(since = "1.0.0")
+    public Collection<Object> createComponents(
+     */
+ * this file be licensed under the Apache-2.0 license or a
+ * Unless required by applicable law or agreed to in writing,
+     */
+    }
+     * @param resourceWatcherService A service to watch for changes to node local files
+    }
+     * The default implementation delegates to
+     * Node level guice modules.
+ *
+import java.io.IOException;
+        Supplier<RepositoriesService> repositoriesServiceSupplier,
+        return Collections.emptySet();
+    public void onIndexModule(IndexModule indexModule) {}
+import org.opensearch.script.ScriptService;
+        Supplier<RepositoriesService> repositoriesServiceSupplier
+        return Collections.emptyList();
+ * <li>{@link RepositoryPlugin}
+        return UnaryOperator.identity();
+import java.util.List;
+     * @param threadPool A service to allow retrieving an executor to run an async action
+        Client client,
+    /**
+    public List<Path> getAdditionalHealthPaths(Settings settings) {
+     *
+ * <li>{@link IngestPlugin}
+ * An extension point allowing to plug in custom functionality. This class has a number of extension points that are available to all
+    public List<BootstrapCheck> getBootstrapChecks() {
+     * to themselves.
+     * @see NamedWriteableRegistry
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * @param client A client to make requests to the system
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        ClusterService clusterService,
+            namedWriteableRegistry,
+import org.opensearch.index.shard.IndexSettingProvider;
+ * <li>{@link ClusterPlugin}
+     * Returns a list of checks that are enforced when a node starts up once a node has the transport protocol bound to a non-loopback
+     * <p>
+     * @return the settings upgraders
+        return Collections.emptyList();
+    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
+     *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.settings.SettingUpgrader;
+     * {@link org.opensearch.monitor.fs.FsHealthService} alongside {@link org.opensearch.env.NodeEnvironment#nodeDataPaths()}.
+    public Collection<IndexSettingProvider> getAdditionalIndexSettingProviders() {
+     */
+        NamedWriteableRegistry namedWriteableRegistry,
+     * customs
+        Client client,
+     * to provide a better out of the box experience by pre-configuring otherwise (in production) mandatory settings or to enforce certain
+     * Additional filesystem paths this plugin requires for normal operation, to be probed by
+     * Called before a new index is created on a node. The given module can be used to register index-level
+     * A feature exposed by the plugin. This should be used if a plugin exposes {@link ClusterState.Custom} or {@link Metadata.Custom}; see
+import org.opensearch.cluster.metadata.Metadata;
+}
+import java.nio.file.Path;
+    public List<NamedXContentRegistry.Entry> getNamedXContent() {
+        return createComponents(
+import org.opensearch.watcher.ResourceWatcherService;
+            indexNameExpressionResolver,
+/*
+ * this work for additional information regarding copyright
+     * @throws IllegalStateException if the node should not start because at least one {@code IndexTemplateMetadata}
+ * @opensearch.api
+        return Collections.emptyList();
+     * Returns components added by this plugin.
+import org.opensearch.env.NodeEnvironment;
+    public UnaryOperator<Map<String, IndexTemplateMetadata>> getIndexTemplateMetadataUpgrader() {
+     * @param namedWriteableRegistry the registry for {@link NamedWriteable} object parsing
+        ResourceWatcherService resourceWatcherService,
+    public void close() throws IOException {
+     * <p>
+    }
+            scriptService,
+        ThreadPool threadPool,
+     * The order of the template upgrader calls is undefined and can change between runs so, it is expected that
+        return Settings.Builder.EMPTY_SETTINGS;
+     * @param client A client to make requests to the system
+/**
+     * overwritten with the additional settings. These settings added if they don't exist.
+import java.util.Collection;
+    }
+     * @param xContentRegistry the registry for extensible xContent parsing
+ * <li>{@link NetworkPlugin}
+    public Collection<Class<? extends LifecycleComponent>> getGuiceServiceClasses() {
+    public Settings additionalSettings() {
+     *
+    /**
+     * ScriptService, NamedXContentRegistry, Environment, NodeEnvironment,
+ *
+     * @return paths to probe; empty by default
+        PluginComponentRegistry pluginComponentRegistry
+ * specific language governing permissions and limitations
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+    }
+     * cluster fault detection.
+     *                               cannot be upgraded
+import java.util.function.UnaryOperator;
+     *                                   is called, but will return the repositories service once the node is initialized.
+     * </p>
+     *
+        ScriptService scriptService,
+     * @throws IOException if the plugin failed to close its resources
+     * @param repositoriesServiceSupplier A supplier for the service that manages snapshot repositories; will return null when this method
+        return Collections.emptyList();
+        return Optional.empty();
+    protected Optional<String> getFeature() {
+     *
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+     */
+import java.util.Map;
+package org.opensearch.plugins;
+    /**
+        ScriptService scriptService,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+    /**
+/*
+            threadPool,
+    /**
+    }
+            xContentRegistry,
+ */
+        return Collections.emptyList();
+        IndexNameExpressionResolver indexNameExpressionResolver,
+     *
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        NodeEnvironment nodeEnvironment,
+     * @return Never {@code null}. The same or upgraded {@code IndexTemplateMetadata} map.
+     */
+     * Provides the list of this plugin's custom thread pools, empty if
+     * @param repositoriesServiceSupplier A supplier for the service that manages snapshot repositories; will return null when this method
+        return Collections.emptyList();
+ */
+ * <li>{@link ScriptPlugin}
+     * @return executors builders for this plugin's custom thread pools
+    /**
+    /**
+    ) {
+    }
+     * @param settings the current settings
+ *
+     */
+ * <li>{@link ActionPlugin}
+ * software distributed under the License is distributed on an
+     */
+     * plugins will modify only templates owned by them to avoid conflicts.
+     * Get the setting upgraders provided by this plugin.
+        Environment environment,
+import java.util.Set;
+    }
+     * security related components (fe. transports)
+import java.util.Optional;
+     */
+    /**
+     */
+    }
+     * @param threadPool A service to allow retrieving an executor to run an async action
+import org.opensearch.common.annotation.PublicApi;
+ * <li>{@link AnalysisPlugin}
+        );
+    }
+     */
+ * <ul>
+        Environment environment,
+    public Collection<IndexCreationValidator> getIndexCreationValidators() {
+            nodeEnvironment,
+     * so the registry contains all components from plugins that this plugin depends on.
+     * @param nodeEnvironment the node environment used coordinate access to the data paths
+     * @param resourceWatcherService A service to watch for changes to node local files
+     * @return the {@link SecureSettingsFactory} instance
+     * Additional node settings loaded by the plugin. Note that settings that are explicit in the nodes settings can't be
+import org.opensearch.bootstrap.BootstrapCheck;
+    }
+        return Collections.emptyList();
+import org.opensearch.common.settings.Settings;
+     */
+    }
+     * interface. In this case we assume the node is running in production and all bootstrap checks must pass. This allows plugins
+        return Collections.emptyList();
+ * plugins, in addition you can implement any of the following interfaces to further customize OpenSearch:
+     * @param scriptService A service to allow running scripts on the local node
+ * </ul>
+    }
+     */
+     */
+    /**
+ */
+     * by injection with guice.
+     */
+    /**
+     * Returns parsers for named objects this plugin will parse from {@link XContentParser#namedObject(Class, String, Object)}.
+     * An {@link IndexSettingProvider} allows hooking in to parts of an index
+     * @param pluginComponentRegistry A registry of components from previously initialized plugins
+import java.util.Collections;
+ * GitHub history for details.
+import org.opensearch.cluster.node.DiscoveryNodeRole;
+        NamedXContentRegistry xContentRegistry,
+     * </p>
+     */
+import org.opensearch.index.IndexModule;
+     * @see NamedWriteableRegistry
+     * Override this method instead of the registry-less overload when you need to obtain
+            clusterService,
+        return Collections.emptyList();
+public abstract class Plugin implements Closeable {
+    ) {
+        ClusterService clusterService,
+     * Plugins are initialized in dependency order (as declared by {@code extendedPlugins}),
+    public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
+ * The OpenSearch Contributors require contributions made to
+     * initialized plugins via the registry.
     /**
      * Returns {@link IndexCreationValidator} instances that are called during index creation
      * after mappings have been merged, allowing plugins to validate the combination of
-     * index settings and mappings.
-     */
-    public Collection<IndexCreationValidator> getIndexCreationValidators() {
-        return Collections.emptyList();
-    }
-
+     * @param nodeEnvironment the node environment used coordinate access to the data paths
     /**
-     * Returns the {@link SecureSettingsFactory} instance that could be used to configure the
-     * security related components (fe. transports)
-     * @return the {@link SecureSettingsFactory} instance
-     */
-    public Optional<SecureSettingsFactory> getSecureSettingFactory(Settings settings) {
-        return Optional.empty();
+        NamedWriteableRegistry namedWriteableRegistry,
     }
-}
+        return Optional.empty();
+     * Returns a list of additional settings filter for this plugin

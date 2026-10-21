@@ -1,646 +1,585 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.fielddata;
-
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Field.Store;
-import org.apache.lucene.document.SortedSetDocValuesField;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.search.join.QueryBitSetProducer;
-import org.apache.lucene.search.join.ScoreMode;
-import org.apache.lucene.search.join.ToParentBlockJoinQuery;
-import org.apache.lucene.tests.util.TestUtil;
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.UnicodeUtil;
-import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
-import org.opensearch.index.fielddata.fieldcomparator.BytesRefFieldComparatorSource;
-import org.opensearch.index.fielddata.ordinals.GlobalOrdinalsIndexFieldData;
-import org.opensearch.search.MultiValueMode;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.sameInstance;
-
-public abstract class AbstractStringFieldDataTestCase extends AbstractFieldDataImplTestCase {
-    private void addField(Document d, String name, String value) {
-        d.add(new StringField(name, value, Field.Store.YES));
-        d.add(new SortedSetDocValuesField(name, new BytesRef(value)));
-    }
-
-    @Override
-    protected void fillSingleValueAllSet() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "2");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "1");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "3");
-        addField(d, "value", "3");
-        writer.addDocument(d);
-    }
-
-    @Override
-    protected void add2SingleValuedDocumentsAndDeleteOneOfThem() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "2");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        addField(d, "value", "4");
-        writer.addDocument(d);
-
-        writer.commit();
-
-        writer.deleteDocuments(new Term("_id", "1"));
-    }
-
-    @Override
-    protected void fillSingleValueWithMissing() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "2");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        // d.add(new StringField("value", one(), Field.Store.NO)); // MISSING....
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "3");
-        addField(d, "value", "3");
-        writer.addDocument(d);
-    }
-
-    @Override
-    protected void fillMultiValueAllSet() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "2");
-        addField(d, "value", "4");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        addField(d, "value", "1");
-        writer.addDocument(d);
-        writer.commit(); // TODO: Have tests with more docs for sorting
-
-        d = new Document();
-        addField(d, "_id", "3");
-        addField(d, "value", "3");
-        writer.addDocument(d);
-    }
-
-    @Override
-    protected void fillMultiValueWithMissing() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "2");
-        addField(d, "value", "4");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        // d.add(new StringField("value", one(), Field.Store.NO)); // MISSING
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "3");
-        addField(d, "value", "3");
-        writer.addDocument(d);
-    }
-
-    @Override
-    protected void fillAllMissing() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "3");
-        writer.addDocument(d);
-    }
-
-    @Override
-    protected void fillExtendedMvSet() throws Exception {
-        Document d = new Document();
-        addField(d, "_id", "1");
-        addField(d, "value", "02");
-        addField(d, "value", "04");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "2");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "3");
-        addField(d, "value", "03");
-        writer.addDocument(d);
-        writer.commit();
-
-        d = new Document();
-        addField(d, "_id", "4");
-        addField(d, "value", "04");
-        addField(d, "value", "05");
-        addField(d, "value", "06");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "5");
-        addField(d, "value", "06");
-        addField(d, "value", "07");
-        addField(d, "value", "08");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "6");
-        writer.addDocument(d);
-
-        d = new Document();
-        addField(d, "_id", "7");
-        addField(d, "value", "08");
-        addField(d, "value", "09");
-        addField(d, "value", "10");
-        writer.addDocument(d);
-        writer.commit();
-
-        d = new Document();
-        addField(d, "_id", "8");
-        addField(d, "value", "!08");
-        addField(d, "value", "!09");
-        addField(d, "value", "!10");
-        writer.addDocument(d);
-    }
-
-    public void testActualMissingValue() throws IOException {
-        testActualMissingValue(false);
-    }
-
-    public void testActualMissingValueReverse() throws IOException {
-        testActualMissingValue(true);
-    }
-
-    public void testActualMissingValue(boolean reverse) throws IOException {
-        // missing value is set to an actual value
-        final String[] values = new String[randomIntBetween(2, 30)];
-        for (int i = 1; i < values.length; ++i) {
-            values[i] = TestUtil.randomUnicodeString(random());
-        }
-        final int numDocs = scaledRandomIntBetween(10, 3072);
         for (int i = 0; i < numDocs; ++i) {
-            final String value = RandomPicks.randomFrom(random(), values);
-            if (value == null) {
-                writer.addDocument(new Document());
-            } else {
-                Document d = new Document();
-                addField(d, "value", value);
-                writer.addDocument(d);
-            }
-            if (randomInt(10) == 0) {
-                writer.commit();
-            }
-        }
-
-        final IndexFieldData<?> indexFieldData = getForField("value");
-        final String missingValue = values[1];
-        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer));
-        SortField sortField = indexFieldData.sortField(missingValue, MultiValueMode.MIN, null, reverse);
-        TopFieldDocs topDocs = searcher.search(
-            new MatchAllDocsQuery(),
-            randomBoolean() ? numDocs : randomIntBetween(10, numDocs),
-            new Sort(sortField)
-        );
-        assertEquals(numDocs, topDocs.totalHits.value());
-        BytesRef previousValue = reverse ? UnicodeUtil.BIG_TERM : new BytesRef();
-        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
-            final String docValue = searcher.storedFields().document(topDocs.scoreDocs[i].doc).get("value");
-            final BytesRef value = new BytesRef(docValue == null ? missingValue : docValue);
-            if (reverse) {
-                assertTrue(previousValue.compareTo(value) >= 0);
-            } else {
-                assertTrue(previousValue.compareTo(value) <= 0);
-            }
-            previousValue = value;
-        }
-        searcher.getIndexReader().close();
-    }
-
-    public void testSortMissingFirst() throws IOException {
-        testSortMissing(true, false);
-    }
-
-    public void testSortMissingFirstReverse() throws IOException {
-        testSortMissing(true, true);
-    }
-
-    public void testSortMissingLast() throws IOException {
-        testSortMissing(false, false);
-    }
-
-    public void testSortMissingLastReverse() throws IOException {
-        testSortMissing(false, true);
-    }
-
-    public void testSortMissing(boolean first, boolean reverse) throws IOException {
-        final String[] values = new String[randomIntBetween(2, 10)];
-        for (int i = 1; i < values.length; ++i) {
-            values[i] = TestUtil.randomUnicodeString(random());
-        }
-        final int numDocs = scaledRandomIntBetween(10, 3072);
-        for (int i = 0; i < numDocs; ++i) {
-            final String value = RandomPicks.randomFrom(random(), values);
-            if (value == null) {
-                writer.addDocument(new Document());
-            } else {
-                Document d = new Document();
-                addField(d, "value", value);
-                writer.addDocument(d);
-            }
-            if (randomInt(10) == 0) {
-                writer.commit();
-            }
-        }
-        final IndexFieldData<?> indexFieldData = getForField("value");
-        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer));
-        SortField sortField = indexFieldData.sortField(first ? "_first" : "_last", MultiValueMode.MIN, null, reverse);
-        TopFieldDocs topDocs = searcher.search(
-            new MatchAllDocsQuery(),
-            randomBoolean() ? numDocs : randomIntBetween(10, numDocs),
-            new Sort(sortField)
-        );
-        // As of Lucene 9.0.0, totalHits may be a lower bound
-        if (topDocs.totalHits.relation() == TotalHits.Relation.EQUAL_TO) {
-            assertEquals(numDocs, topDocs.totalHits.value());
-        } else {
-            assertTrue(1000 <= topDocs.totalHits.value());
-            assertTrue(numDocs >= topDocs.totalHits.value());
-        }
-        BytesRef previousValue = first ? null : reverse ? UnicodeUtil.BIG_TERM : new BytesRef();
-        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
-            final String docValue = searcher.storedFields().document(topDocs.scoreDocs[i].doc).get("value");
-            if (first && docValue == null) {
-                assertNull(previousValue);
-            } else if (!first && docValue != null) {
-                assertNotNull(previousValue);
-            }
-            final BytesRef value = docValue == null ? null : new BytesRef(docValue);
-            if (previousValue != null && value != null) {
-                if (reverse) {
-                    assertTrue(previousValue.compareTo(value) >= 0);
-                } else {
-                    assertTrue(previousValue.compareTo(value) <= 0);
-                }
-            }
-            previousValue = value;
-        }
-        searcher.getIndexReader().close();
-    }
-
-    public void testNestedSortingMin() throws IOException {
-        testNestedSorting(MultiValueMode.MIN);
-    }
-
-    public void testNestedSortingMax() throws IOException {
-        testNestedSorting(MultiValueMode.MAX);
-    }
-
-    public void testNestedSorting(MultiValueMode sortMode) throws IOException {
-        final String[] values = new String[randomIntBetween(2, 20)];
-        for (int i = 0; i < values.length; ++i) {
-            values[i] = TestUtil.randomSimpleString(random());
-        }
-        final int numParents = scaledRandomIntBetween(10, 3072);
-        List<Document> docs = new ArrayList<>();
-        FixedBitSet parents = new FixedBitSet(64);
-        for (int i = 0; i < numParents; ++i) {
-            docs.clear();
-            final int numChildren = randomInt(4);
-            for (int j = 0; j < numChildren; ++j) {
-                final Document child = new Document();
-                final int numValues = randomInt(3);
-                for (int k = 0; k < numValues; ++k) {
-                    final String value = RandomPicks.randomFrom(random(), values);
-                    addField(child, "text", value);
-                }
-                docs.add(child);
-            }
-            final Document parent = new Document();
-            parent.add(new StringField("type", "parent", Store.YES));
-            final String value = RandomPicks.randomFrom(random(), values);
-            if (value != null) {
-                addField(parent, "text", value);
-            }
-            docs.add(parent);
-            int bit = parents.prevSetBit(parents.length() - 1) + docs.size();
-            parents = FixedBitSet.ensureCapacity(parents, bit);
-            parents.set(bit);
-            writer.addDocuments(docs);
-            if (randomInt(10) == 0) {
-                writer.commit();
-            }
-        }
-        DirectoryReader directoryReader = DirectoryReader.open(writer);
-        directoryReader = OpenSearchDirectoryReader.wrap(directoryReader, new ShardId(indexService.index(), 0));
-        IndexSearcher searcher = new IndexSearcher(directoryReader);
-        IndexFieldData<?> fieldData = getForField("text");
-        final Object missingValue;
-        switch (randomInt(4)) {
-            case 0:
-                missingValue = "_first";
-                break;
-            case 1:
-                missingValue = "_last";
-                break;
-            case 2:
-                missingValue = new BytesRef(RandomPicks.randomFrom(random(), values));
-                break;
-            default:
-                missingValue = new BytesRef(TestUtil.randomSimpleString(random()));
-                break;
-        }
-        Query parentFilter = new TermQuery(new Term("type", "parent"));
-        Query childFilter = Queries.not(parentFilter);
-        Nested nested = createNested(searcher, parentFilter, childFilter);
-        BytesRefFieldComparatorSource nestedComparatorSource = new BytesRefFieldComparatorSource(fieldData, missingValue, sortMode, nested);
-        ToParentBlockJoinQuery query = new ToParentBlockJoinQuery(
-            new ConstantScoreQuery(childFilter),
-            new QueryBitSetProducer(parentFilter),
-            ScoreMode.None
-        );
-        Sort sort = new Sort(new SortField("text", nestedComparatorSource));
-        TopFieldDocs topDocs = searcher.search(query, randomIntBetween(1, numParents), sort);
-        assertTrue(topDocs.scoreDocs.length > 0);
-        BytesRef previous = null;
-        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
-            final int docID = topDocs.scoreDocs[i].doc;
-            assertTrue("expected " + docID + " to be a parent", parents.get(docID));
-            BytesRef cmpValue = null;
-            for (int child = parents.prevSetBit(docID - 1) + 1; child < docID; ++child) {
-                String[] sVals = searcher.storedFields().document(child).getValues("text");
-                final BytesRef[] vals;
-                if (sVals.length == 0) {
-                    vals = new BytesRef[0];
-                } else {
-                    vals = new BytesRef[sVals.length];
-                    for (int j = 0; j < vals.length; ++j) {
-                        vals[j] = new BytesRef(sVals[j]);
-                    }
-                }
-                for (BytesRef value : vals) {
-                    if (cmpValue == null) {
-                        cmpValue = value;
-                    } else if (sortMode == MultiValueMode.MIN && value.compareTo(cmpValue) < 0) {
-                        cmpValue = value;
-                    } else if (sortMode == MultiValueMode.MAX && value.compareTo(cmpValue) > 0) {
-                        cmpValue = value;
-                    }
-                }
-            }
-            if (cmpValue == null) {
-                if ("_first".equals(missingValue)) {
-                    cmpValue = new BytesRef();
-                } else if ("_last".equals(missingValue) == false) {
-                    cmpValue = (BytesRef) missingValue;
-                }
-            }
-            if (previous != null && cmpValue != null) {
-                assertTrue(previous.utf8ToString() + "   /   " + cmpValue.utf8ToString(), previous.compareTo(cmpValue) <= 0);
-            }
-            previous = cmpValue;
-        }
-        searcher.getIndexReader().close();
-    }
-
-    public void testGlobalOrdinals() throws Exception {
-        fillExtendedMvSet();
-        refreshReader();
-        IndexOrdinalsFieldData ifd = getForField("string", "value", hasDocValues());
-        IndexOrdinalsFieldData globalOrdinals = ifd.loadGlobal(topLevelReader);
-        assertNotNull(globalOrdinals.getOrdinalMap());
-        assertThat(topLevelReader.leaves().size(), equalTo(3));
-
-        // First segment
-        assertThat(globalOrdinals, instanceOf(GlobalOrdinalsIndexFieldData.Consumer.class));
-        LeafReaderContext leaf = topLevelReader.leaves().get(0);
-        LeafOrdinalsFieldData afd = globalOrdinals.load(leaf);
-        SortedSetDocValues values = afd.getOrdinalsValues();
-        assertTrue(values.advanceExact(0));
-        long ord = values.nextOrd();
-        assertThat(ord, equalTo(3L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("02"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(5L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("04"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
-        assertFalse(values.advanceExact(1));
-        assertTrue(values.advanceExact(2));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(4L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("03"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
-
-        // Second segment
-        leaf = topLevelReader.leaves().get(1);
-        afd = globalOrdinals.load(leaf);
         values = afd.getOrdinalsValues();
+    }
+        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer));
+        BytesRef previousValue = reverse ? UnicodeUtil.BIG_TERM : new BytesRef();
+        // d.add(new StringField("value", one(), Field.Store.NO)); // MISSING....
+        testActualMissingValue(false);
+        leaf = topLevelReader.leaves().get(1);
+        BytesRefFieldComparatorSource nestedComparatorSource = new BytesRefFieldComparatorSource(fieldData, missingValue, sortMode, nested);
+                if (sVals.length == 0) {
+        testActualMissingValue(true);
+        leaf = topLevelReader.leaves().get(2);
+            randomBoolean() ? numDocs : randomIntBetween(10, numDocs),
+        addField(d, "value", "!10");
+        addField(d, "value", "!08");
+        searcher.getIndexReader().close();
+        addField(d, "value", "2");
+ * GitHub history for details.
+    public void testSortMissingFirstReverse() throws IOException {
+        addField(d, "_id", "2");
+        }
+        writer.addDocument(d);
+        addField(d, "_id", "1");
+import org.apache.lucene.util.Accountable;
+        d = new Document();
+        writer.commit(); // TODO: Have tests with more docs for sorting
+            for (int child = parents.prevSetBit(docID - 1) + 1; child < docID; ++child) {
+    }
+        writer.addDocument(d);
+            }
+        DirectoryReader directoryReader = DirectoryReader.open(writer);
+                } else {
+        Query childFilter = Queries.not(parentFilter);
+        }
+        addField(d, "value", "06");
+        // As of Lucene 9.0.0, totalHits may be a lower bound
+        // d.add(new StringField("value", one(), Field.Store.NO)); // MISSING
+        for (int i = 0; i < values.length; ++i) {
+            final BytesRef value = new BytesRef(docValue == null ? missingValue : docValue);
+        }
+                missingValue = "_last";
+import java.io.IOException;
+                    cmpValue = new BytesRef();
+    }
+                assertTrue(previous.utf8ToString() + "   /   " + cmpValue.utf8ToString(), previous.compareTo(cmpValue) <= 0);
+                break;
+                }
+        assertThat(cachedInstance.getOrdinalMap(), sameInstance(globalOrdinals.getOrdinalMap()));
+        indexService.clearCaches(false, true);
+                if (reverse) {
+                    }
+        List<Document> docs = new ArrayList<>();
+ * license agreements. See the NOTICE file distributed with
+import org.apache.lucene.index.DirectoryReader;
+        IndexOrdinalsFieldData globalOrdinals = ifd.loadGlobal(topLevelReader);
+        final String[] values = new String[randomIntBetween(2, 30)];
         assertTrue(values.advanceExact(0));
+    @Override
+            size = 0;
+import org.apache.lucene.search.Query;
+        addField(d, "value", "2");
+import org.apache.lucene.search.TopFieldDocs;
+            }
+        assertThat(ifd.loadGlobal(topLevelReader), not(sameInstance(globalOrdinals)));
+        afd = globalOrdinals.load(leaf);
+import java.util.List;
+        d = new Document();
+            new ConstantScoreQuery(childFilter),
+        addField(d, "value", "10");
+                    for (int j = 0; j < vals.length; ++j) {
+                assertTrue(previousValue.compareTo(value) >= 0);
+        addField(d, "_id", "3");
+            }
         ord = values.nextOrd();
-        assertThat(ord, equalTo(5L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("04"));
+            }
+            previousValue = value;
+        assertNotNull(globalOrdinals.getOrdinalMap());
+        IndexOrdinalsFieldData ifd = getForField("string", "value", hasDocValues());
+        );
+            }
         ord = values.nextOrd();
-        assertThat(ord, equalTo(6L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("05"));
+import java.util.ArrayList;
+            for (int j = 0; j < numChildren; ++j) {
+        IndexOrdinalsFieldData ifd = getForField("value");
+                addField(parent, "text", value);
+        // 3 b/c 1 segment level caches and 1 top level cache
+        addField(d, "_id", "4");
+        topLevelReader.close();
+        }
+            assertThat(termsEnum.seekExact(new BytesRef("08")), is(true));
+        writer.addDocument(d);
+ * under the License.
+import static org.hamcrest.Matchers.instanceOf;
+            final int numChildren = randomInt(4);
+import org.apache.lucene.search.DocIdSetIterator;
+import org.opensearch.search.MultiValueMode;
+    public void testNestedSortingMax() throws IOException {
+        writer.addDocument(d);
+import org.apache.lucene.search.join.ToParentBlockJoinQuery;
+        addField(d, "_id", "3");
+import org.apache.lucene.search.TermQuery;
         ord = values.nextOrd();
-        assertThat(ord, equalTo(7L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("06"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
-        assertTrue(values.advanceExact(1));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(7L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("06"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(8L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("07"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(9L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("08"));
-        ord = values.nextOrd();
+        addField(d, "value", "04");
+        addField(d, "_id", "8");
+        d.add(new StringField(name, value, Field.Store.YES));
+    public void testActualMissingValue(boolean reverse) throws IOException {
         assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
         assertFalse(values.advanceExact(2));
+        writer.addDocument(d);
+        ord = values.nextOrd();
+        TopFieldDocs topDocs = searcher.search(query, randomIntBetween(1, numParents), sort);
+            if (value != null) {
+        assertThat(ord, equalTo(2L));
+ * KIND, either express or implied.  See the License for the
+        assertBusy(() -> assertEquals(0, indicesFieldDataCache.getCache().count()));
+        d = new Document();
+        d = new Document();
+        addField(d, "_id", "3");
+    public void testSortMissing(boolean first, boolean reverse) throws IOException {
+        assertThat(ord, equalTo(3L));
+            if (randomInt(10) == 0) {
         assertTrue(values.advanceExact(3));
+            docs.add(parent);
+                    final String value = RandomPicks.randomFrom(random(), values);
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("06"));
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("07"));
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!08"));
+                        cmpValue = value;
+            }
+            parents = FixedBitSet.ensureCapacity(parents, bit);
+        assertFalse(values.advanceExact(1));
+            previous = cmpValue;
+        Document d = new Document();
+    }
         ord = values.nextOrd();
         assertThat(ord, equalTo(9L));
+        Sort sort = new Sort(new SortField("text", nestedComparatorSource));
+import org.apache.lucene.document.Field.Store;
+        writer.addDocument(d);
+        addField(d, "value", "4");
+        List<LeafReaderContext> atomicReaderContexts = refreshReader();
+                String[] sVals = searcher.storedFields().document(child).getValues("text");
+        addField(d, "value", "06");
+        final IndexFieldData<?> indexFieldData = getForField("value");
+public abstract class AbstractStringFieldDataTestCase extends AbstractFieldDataImplTestCase {
+            if (value == null) {
+        refreshReader();
+        writer.addDocument(d);
+        BytesRef previousValue = first ? null : reverse ? UnicodeUtil.BIG_TERM : new BytesRef();
         assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("08"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(10L));
+            if (first && docValue == null) {
+        writer.addDocument(d);
+                        cmpValue = value;
+            assertThat(termsEnum.next(), nullValue());
+        writer.addDocument(d);
+    @Override
+    }
+ * software distributed under the License is distributed on an
+            final int docID = topDocs.scoreDocs[i].doc;
+            }
+            final Document parent = new Document();
+        writer.addDocument(d);
+            }
         assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("09"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo(11L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("10"));
-        ord = values.nextOrd();
-        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
-
-        // Third segment
-        leaf = topLevelReader.leaves().get(2);
-        afd = globalOrdinals.load(leaf);
-        values = afd.getOrdinalsValues();
+                    if (cmpValue == null) {
+                for (int k = 0; k < numValues; ++k) {
+    }
+            }
+        final Object missingValue;
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.core.index.shard.ShardId;
+    protected void fillMultiValueWithMissing() throws Exception {
+        IndexOrdinalsFieldData ifd = getForField("string", "value", hasDocValues());
+            new MatchAllDocsQuery(),
+            assertTrue(numDocs >= topDocs.totalHits.value());
+        if (topDocs.totalHits.relation() == TotalHits.Relation.EQUAL_TO) {
+            if (randomInt(10) == 0) {
+import org.apache.lucene.document.StringField;
+                cachedInstance = (IndexOrdinalsFieldData) ramUsage;
+        fillExtendedMvSet();
+ * compatible open source license.
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("06"));
+    public void testTermsEnum() throws Exception {
+        BytesRef previous = null;
+        final int numDocs = scaledRandomIntBetween(10, 3072);
+/*
+                writer.addDocument(new Document());
+            assertThat(size, equalTo(12));
+                    assertTrue(previousValue.compareTo(value) <= 0);
+        addField(d, "value", "3");
+        testSortMissing(true, true);
+                    cmpValue = (BytesRef) missingValue;
+        writer.commit();
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;
         assertTrue(values.advanceExact(0));
         ord = values.nextOrd();
-        assertThat(ord, equalTo(0L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!08"));
+        fillExtendedMvSet();
+ * The OpenSearch Contributors require contributions made to
+        testSortMissing(false, false);
+        for (LeafReaderContext atomicReaderContext : atomicReaderContexts) {
+        addField(d, "value", "3");
+        TopFieldDocs topDocs = searcher.search(
+        addField(d, "value", "4");
+            new Sort(sortField)
+        }
+        assertThat(ord, equalTo(11L));
+        fillExtendedMvSet();
+        addField(d, "_id", "3");
+        assertEquals(numDocs, topDocs.totalHits.value());
+        Query parentFilter = new TermQuery(new Term("type", "parent"));
+import org.apache.lucene.search.Sort;
+        writer.addDocument(d);
+            while (termsEnum.next() != null) {
+            previousValue = value;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            final String value = RandomPicks.randomFrom(random(), values);
+        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
         ord = values.nextOrd();
-        assertThat(ord, equalTo(1L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!09"));
+            randomBoolean() ? numDocs : randomIntBetween(10, numDocs),
+            } else {
+                    addField(child, "text", value);
+import org.opensearch.common.lucene.search.Queries;
+    }
+        writer.addDocument(d);
+                final Document child = new Document();
+            int bit = parents.prevSetBit(parents.length() - 1) + docs.size();
+ * Licensed to Elasticsearch under one or more contributor
+        // Third segment
+        d = new Document();
+        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
+                missingValue = new BytesRef(RandomPicks.randomFrom(random(), values));
+            while (termsEnum.next() != null) {
+            if (cmpValue == null) {
+            assertThat(termsEnum.seekExact(new BytesRef("10")), is(true));
+        assertNotSame(cachedInstance, globalOrdinals);
+                writer.addDocument(d);
+            LeafOrdinalsFieldData afd = ifd.load(atomicReaderContext);
+    @Override
+        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer));
+        d = new Document();
+        writer.addDocument(d);
+    }
+        addField(d, "value", "02");
+/*
+    }
+            }
+            values[i] = TestUtil.randomUnicodeString(random());
+        d = new Document();
+        IndexFieldData<?> fieldData = getForField("text");
+        writer.addDocument(d);
+                    vals = new BytesRef[0];
         ord = values.nextOrd();
-        assertThat(ord, equalTo(2L));
-        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!10"));
+        d.add(new SortedSetDocValuesField(name, new BytesRef(value)));
+            values[i] = TestUtil.randomUnicodeString(random());
+        // First segment
+        // Second segment
+                }
+        FixedBitSet parents = new FixedBitSet(64);
+        assertThat(ord, equalTo(9L));
+        writer.addDocument(d);
+        writer.addDocument(d);
+        TopFieldDocs topDocs = searcher.search(
+ *     http://www.apache.org/licenses/LICENSE-2.0
         ord = values.nextOrd();
         assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
-    }
-
-    public void testTermsEnum() throws Exception {
-        fillExtendedMvSet();
-        writer.forceMerge(1);
-        List<LeafReaderContext> atomicReaderContexts = refreshReader();
-
-        IndexOrdinalsFieldData ifd = getForField("value");
-        for (LeafReaderContext atomicReaderContext : atomicReaderContexts) {
-            LeafOrdinalsFieldData afd = ifd.load(atomicReaderContext);
-
-            TermsEnum termsEnum = afd.getOrdinalsValues().termsEnum();
-            int size = 0;
-            while (termsEnum.next() != null) {
-                size++;
-            }
-            assertThat(size, equalTo(12));
-
-            assertThat(termsEnum.seekExact(new BytesRef("10")), is(true));
-            assertThat(termsEnum.term().utf8ToString(), equalTo("10"));
-            assertThat(termsEnum.next(), nullValue());
-
-            assertThat(termsEnum.seekExact(new BytesRef("08")), is(true));
-            assertThat(termsEnum.term().utf8ToString(), equalTo("08"));
-            size = 0;
-            while (termsEnum.next() != null) {
-                size++;
-            }
-            assertThat(size, equalTo(2));
-
-            termsEnum.seekExact(8);
-            assertThat(termsEnum.term().utf8ToString(), equalTo("07"));
-            size = 0;
-            while (termsEnum.next() != null) {
-                size++;
-            }
-            assertThat(size, equalTo(3));
-        }
-    }
-
+import org.apache.lucene.index.Term;
+            assertTrue("expected " + docID + " to be a parent", parents.get(docID));
+        writer.addDocument(d);
+import org.apache.lucene.index.SortedSetDocValues;
+    public void testSortMissingLastReverse() throws IOException {
+        writer.addDocument(d);
+        testNestedSorting(MultiValueMode.MIN);
     public void testGlobalOrdinalsGetRemovedOnceIndexReaderCloses() throws Exception {
-        fillExtendedMvSet();
-        refreshReader();
-        IndexOrdinalsFieldData ifd = getForField("string", "value", hasDocValues());
-        IndexOrdinalsFieldData globalOrdinals = ifd.loadGlobal(topLevelReader);
-        assertNotNull(globalOrdinals.getOrdinalMap());
-        assertThat(ifd.loadGlobal(topLevelReader).getOrdinalMap(), sameInstance(globalOrdinals.getOrdinalMap()));
-        // 3 b/c 1 segment level caches and 1 top level cache
-        // in case of doc values, we don't cache atomic FD, so only the top-level cache is there
-        assertBusy(() -> assertEquals(hasDocValues() ? 1 : 4, indicesFieldDataCache.getCache().count()));
-
-        IndexOrdinalsFieldData cachedInstance = null;
-        for (Accountable ramUsage : indicesFieldDataCache.getCache().values()) {
-            if (ramUsage instanceof IndexOrdinalsFieldData) {
-                cachedInstance = (IndexOrdinalsFieldData) ramUsage;
+        for (int i = 1; i < values.length; ++i) {
+        );
+            writer.addDocuments(docs);
+        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
+        assertThat(ord, equalTo(0L));
+        for (int i = 0; i < numDocs; ++i) {
+        addField(d, "value", "09");
+        assertThat(topLevelReader.leaves().size(), equalTo(3));
+                    assertTrue(previousValue.compareTo(value) >= 0);
+        ord = values.nextOrd();
                 break;
-            }
+        writer.addDocument(d);
+        writer.addDocument(d);
+            if (previousValue != null && value != null) {
         }
-        assertNotSame(cachedInstance, globalOrdinals);
-        assertThat(cachedInstance.getOrdinalMap(), sameInstance(globalOrdinals.getOrdinalMap()));
-        topLevelReader.close();
-        // Now only 3 segment level entries, only the toplevel reader has been closed, but the segment readers are still used by IW
-        assertEquals(hasDocValues() ? 0L : 3L, indicesFieldDataCache.getCache().count());
-
-        refreshReader();
-        assertThat(ifd.loadGlobal(topLevelReader), not(sameInstance(globalOrdinals)));
-
-        indexService.clearCaches(false, true);
-        assertBusy(() -> assertEquals(0, indicesFieldDataCache.getCache().count()));
+        writer.addDocument(d);
+        LeafReaderContext leaf = topLevelReader.leaves().get(0);
+            if (ramUsage instanceof IndexOrdinalsFieldData) {
+                final int numValues = randomInt(3);
+        assertTrue(values.advanceExact(0));
+        d = new Document();
+        ord = values.nextOrd();
     }
+            if (value == null) {
+    }
+        assertTrue(topDocs.scoreDocs.length > 0);
+import org.opensearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
+                } else if ("_last".equals(missingValue) == false) {
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("10"));
+ *
+        writer.addDocument(d);
+    }
+import org.apache.lucene.document.SortedSetDocValuesField;
+        assertThat(ord, equalTo(5L));
+ * You may obtain a copy of the License at
+import org.apache.lucene.util.UnicodeUtil;
+        addField(d, "value", "03");
+        } else {
+            new QueryBitSetProducer(parentFilter),
+        d = new Document();
+                writer.addDocument(d);
+        addField(d, "_id", "5");
+            new MatchAllDocsQuery(),
 }
+    }
+            } else if (!first && docValue != null) {
+        d = new Document();
+import org.apache.lucene.search.join.ScoreMode;
+        switch (randomInt(4)) {
+import static org.hamcrest.Matchers.nullValue;
+import org.apache.lucene.search.SortField;
+ *
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                writer.commit();
+        for (int i = 1; i < values.length; ++i) {
+ * ownership. Elasticsearch licenses this file to you under
+package org.opensearch.index.fielddata;
+        ord = values.nextOrd();
+            }
+            values[i] = TestUtil.randomSimpleString(random());
+        SortedSetDocValues values = afd.getOrdinalsValues();
+            case 1:
+    private void addField(Document d, String name, String value) {
+        writer.addDocument(d);
+            final BytesRef value = docValue == null ? null : new BytesRef(docValue);
+        final String[] values = new String[randomIntBetween(2, 10)];
+        testNestedSorting(MultiValueMode.MAX);
+        assertTrue(values.advanceExact(2));
+        // missing value is set to an actual value
+        addField(d, "_id", "3");
+                }
+                Document d = new Document();
+        ord = values.nextOrd();
+ * specific language governing permissions and limitations
+        assertBusy(() -> assertEquals(hasDocValues() ? 1 : 4, indicesFieldDataCache.getCache().count()));
+    @Override
+                assertNotNull(previousValue);
+        writer.forceMerge(1);
+            if (randomInt(10) == 0) {
+    protected void fillMultiValueAllSet() throws Exception {
+import org.opensearch.index.fielddata.fieldcomparator.BytesRefFieldComparatorSource;
+        }
+ * Unless required by applicable law or agreed to in writing,
+        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
+            BytesRef cmpValue = null;
+    public void testSortMissingFirst() throws IOException {
+        values = afd.getOrdinalsValues();
+        addField(d, "_id", "2");
+            TermsEnum termsEnum = afd.getOrdinalsValues().termsEnum();
+        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
+        addField(d, "_id", "7");
+        Document d = new Document();
+        }
+        addField(d, "value", "08");
+        addField(d, "_id", "1");
+            assertThat(size, equalTo(3));
+                } else {
+            } else {
+        SortField sortField = indexFieldData.sortField(first ? "_first" : "_last", MultiValueMode.MIN, null, reverse);
+        for (int i = 0; i < topDocs.scoreDocs.length; ++i) {
+            size = 0;
+import org.apache.lucene.index.TermsEnum;
+        assertTrue(values.advanceExact(1));
+    }
+                missingValue = new BytesRef(TestUtil.randomSimpleString(random()));
+        addField(d, "_id", "6");
+                addField(d, "value", value);
+        d = new Document();
+        writer.addDocument(d);
+            while (termsEnum.next() != null) {
+        Document d = new Document();
+    protected void fillSingleValueWithMissing() throws Exception {
+ * SPDX-License-Identifier: Apache-2.0
+import static org.hamcrest.Matchers.is;
+        assertEquals(hasDocValues() ? 0L : 3L, indicesFieldDataCache.getCache().count());
+        writer.commit();
+        addField(d, "value", "1");
+                break;
+        searcher.getIndexReader().close();
+            }
+        ToParentBlockJoinQuery query = new ToParentBlockJoinQuery(
+        assertThat(ord, equalTo(4L));
+        d = new Document();
+        addField(d, "value", "05");
+        writer.commit();
+        IndexOrdinalsFieldData globalOrdinals = ifd.loadGlobal(topLevelReader);
+            termsEnum.seekExact(8);
+        // Now only 3 segment level entries, only the toplevel reader has been closed, but the segment readers are still used by IW
+        SortField sortField = indexFieldData.sortField(missingValue, MultiValueMode.MIN, null, reverse);
+            }
+                Document d = new Document();
+        addField(d, "value", "!09");
+            ScoreMode.None
+        addField(d, "_id", "1");
+        assertThat(ord, equalTo(1L));
+        final String missingValue = values[1];
+    }
+import static org.hamcrest.Matchers.not;
+            assertThat(size, equalTo(2));
+            }
+        d = new Document();
+                    }
+    }
+    protected void fillSingleValueAllSet() throws Exception {
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("05"));
+        ord = values.nextOrd();
+        testSortMissing(true, false);
+                    vals = new BytesRef[sVals.length];
+        assertThat(ord, equalTo(5L));
+        addField(d, "value", "3");
+            case 0:
+            parent.add(new StringField("type", "parent", Store.YES));
+        directoryReader = OpenSearchDirectoryReader.wrap(directoryReader, new ShardId(indexService.index(), 0));
+        final int numParents = scaledRandomIntBetween(10, 3072);
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("03"));
+        assertThat(ord, equalTo(7L));
+            int size = 0;
+        writer.deleteDocuments(new Term("_id", "1"));
+        addField(d, "_id", "1");
+    }
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("04"));
+        IndexOrdinalsFieldData cachedInstance = null;
+        addField(d, "value", "3");
+    public void testGlobalOrdinals() throws Exception {
+        ord = values.nextOrd();
+        final String[] values = new String[randomIntBetween(2, 20)];
+        }
+        Document d = new Document();
+                size++;
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("02"));
+        addField(d, "value", "2");
+        for (Accountable ramUsage : indicesFieldDataCache.getCache().values()) {
+        IndexSearcher searcher = new IndexSearcher(directoryReader);
+    @Override
+                size++;
+        long ord = values.nextOrd();
+            parents.set(bit);
+import org.apache.lucene.search.TotalHits;
+    }
+        addField(d, "_id", "1");
+        addField(d, "value", "2");
+/*
+        d = new Document();
+import org.apache.lucene.document.Field;
+        // in case of doc values, we don't cache atomic FD, so only the top-level cache is there
+    public void testActualMissingValue() throws IOException {
+    }
+        addField(d, "_id", "2");
+        final IndexFieldData<?> indexFieldData = getForField("value");
+        assertNotNull(globalOrdinals.getOrdinalMap());
+                break;
+import org.opensearch.common.lucene.index.OpenSearchDirectoryReader;
+            assertThat(termsEnum.term().utf8ToString(), equalTo("08"));
+    }
+        ord = values.nextOrd();
+        final int numDocs = scaledRandomIntBetween(10, 3072);
+        addField(d, "_id", "1");
+                docs.add(child);
+            final String value = RandomPicks.randomFrom(random(), values);
+        addField(d, "value", "1");
+    public void testActualMissingValueReverse() throws IOException {
+ * Modifications Copyright OpenSearch Contributors. See
+            final String docValue = searcher.storedFields().document(topDocs.scoreDocs[i].doc).get("value");
+        for (int i = 0; i < numParents; ++i) {
+                }
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("04"));
+        );
+    }
+        ord = values.nextOrd();
+        refreshReader();
+ */
+        ord = values.nextOrd();
+        }
+                    } else if (sortMode == MultiValueMode.MAX && value.compareTo(cmpValue) > 0) {
+        assertThat(ord, equalTo(8L));
+import static org.hamcrest.Matchers.sameInstance;
+        assertThat(globalOrdinals, instanceOf(GlobalOrdinalsIndexFieldData.Consumer.class));
+    protected void fillExtendedMvSet() throws Exception {
+            } else {
+        addField(d, "_id", "1");
+            }
+        addField(d, "_id", "2");
+            new Sort(sortField)
+            assertThat(termsEnum.term().utf8ToString(), equalTo("10"));
+            case 2:
+        assertThat(ord, equalTo(7L));
+ */
+                break;
+        d = new Document();
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("08"));
+import org.opensearch.index.fielddata.ordinals.GlobalOrdinalsIndexFieldData;
+import org.apache.lucene.search.join.QueryBitSetProducer;
+        }
+        addField(d, "_id", "1");
+            default:
+                assertNull(previousValue);
+import org.apache.lucene.document.Document;
+        ord = values.nextOrd();
+        Document d = new Document();
+                        vals[j] = new BytesRef(sVals[j]);
+    protected void add2SingleValuedDocumentsAndDeleteOneOfThem() throws Exception {
+        assertThat(ord, equalTo(6L));
+        refreshReader();
+        afd = globalOrdinals.load(leaf);
+    }
+        assertThat(ifd.loadGlobal(topLevelReader).getOrdinalMap(), sameInstance(globalOrdinals.getOrdinalMap()));
+import org.apache.lucene.index.LeafReaderContext;
+        addField(d, "value", "2");
+                writer.addDocument(new Document());
+import org.apache.lucene.search.MatchAllDocsQuery;
+            }
+                }
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!09"));
+        assertThat(values.lookupOrd(ord).utf8ToString(), equalTo("!10"));
+import org.apache.lucene.tests.util.TestUtil;
+        Document d = new Document();
+    @Override
+import static org.hamcrest.Matchers.equalTo;
+ * this file be licensed under the Apache-2.0 license or a
+                if ("_first".equals(missingValue)) {
+                writer.commit();
+            assertTrue(1000 <= topDocs.totalHits.value());
+                        cmpValue = value;
+        d = new Document();
+ * this work for additional information regarding copyright
+                missingValue = "_first";
+        addField(d, "value", "08");
+        addField(d, "_id", "2");
+            if (previous != null && cmpValue != null) {
+                assertTrue(previousValue.compareTo(value) <= 0);
+                addField(d, "value", value);
+        assertThat(ord, equalTo(10L));
+                for (BytesRef value : vals) {
+        addField(d, "_id", "3");
+        writer.addDocument(d);
+ *
+ */
+    @Override
+ * not use this file except in compliance with the License.
+                final BytesRef[] vals;
+        assertThat(ord, equalTo((long) DocIdSetIterator.NO_MORE_DOCS));
+        addField(d, "value", "04");
+        d = new Document();
+        searcher.getIndexReader().close();
+import org.apache.lucene.search.IndexSearcher;
+        d = new Document();
+        addField(d, "value", "4");
+            final String value = RandomPicks.randomFrom(random(), values);
+        addField(d, "_id", "2");
+    protected void fillAllMissing() throws Exception {
+import org.apache.lucene.util.FixedBitSet;
+                size++;
+            final String docValue = searcher.storedFields().document(topDocs.scoreDocs[i].doc).get("value");
+            assertThat(termsEnum.term().utf8ToString(), equalTo("07"));
+        addField(d, "value", "07");
+        testSortMissing(false, true);
+    public void testSortMissingLast() throws IOException {
+            if (reverse) {
+import org.apache.lucene.search.ConstantScoreQuery;
+            docs.clear();
+        }
+    public void testNestedSorting(MultiValueMode sortMode) throws IOException {
+            assertEquals(numDocs, topDocs.totalHits.value());
+    public void testNestedSortingMin() throws IOException {
+            }
+        LeafOrdinalsFieldData afd = globalOrdinals.load(leaf);
+        Nested nested = createNested(searcher, parentFilter, childFilter);
+        Document d = new Document();
+                writer.commit();
+                    } else if (sortMode == MultiValueMode.MIN && value.compareTo(cmpValue) < 0) {
+        ord = values.nextOrd();

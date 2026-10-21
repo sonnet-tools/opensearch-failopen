@@ -1,1435 +1,1355 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.indices.recovery;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.apache.lucene.tests.store.BaseDirectoryWrapper;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.Version;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.action.StepListener;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.ShardRouting;
+                getTestName(),
+                0,
 import org.opensearch.common.Numbers;
-import org.opensearch.common.Randomness;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.concurrent.GatedCloseable;
+            between(1, 8),
+            ackedChunks.addAll(chunksToAck);
+        assertBusy(() -> assertTrue(freed.get()));
+        long mappingVersion = randomNonNegativeLong();
+        final AtomicInteger sentChunks = new AtomicInteger();
+/**
+            void phase1(
+        String syncId = UUIDs.randomBase64UUID();
+            @Override
+            randomNonNegativeLong(),
 import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.store.IndexOutputOutputStream;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.CancellableThreads;
-import org.opensearch.common.util.concurrent.ConcurrentCollections;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.util.FileSystemUtils;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.RecoveryEngineException;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
-import org.opensearch.index.engine.exec.coord.SegmentInfosCatalogSnapshot;
-import org.opensearch.index.mapper.IdFieldMapper;
-import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.ParsedDocument;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.Uid;
-import org.opensearch.index.seqno.ReplicationTracker;
-import org.opensearch.index.seqno.RetentionLease;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SeqNoStats;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardRelocatedException;
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.RunUnderPrimaryPermit;
-import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
-import org.opensearch.test.CorruptionUtils;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;
-import org.opensearch.threadpool.FixedExecutorBuilder;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
+        };
+            ackedChunks.sort(Comparator.comparing(c -> c.chunkNumber));
+            @Override
+        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
+        }
+            ActionListener<Void> listener
+        );
+                received.set(true);
+    recoveries should fail
+                org.apache.lucene.util.Version.LATEST
+            ) {
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
+            newTranslogSnapshot(operations, Collections.emptyList()),
+            endingSeqNo,
 import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
+            threadPool,
+                ActionListener<SendSnapshotResult> listener
+                    multiFileWriter.writeFileChunk(md, position, content, lastChunk);
+                    listener
+            operations.add(op);
+            );
+            @Override
+                ActionListener.completeWith(listener, () -> {
+            assertTrue(wasCancelled.get());
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+        final AtomicBoolean phase2Called = new AtomicBoolean();
+                () -> randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE)
+            @Override
+                });
+                    cancelRecovery.get().run();
+        final IOException unwrappedCorruption = ExceptionsHelper.unwrapCorruption(ex);
+        final IndexShard shard = mock(IndexShard.class);
+        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+                phase2Called.set(true);
+    class TestRecoveryTargetHandler implements RecoveryTargetHandler {
+            shard,
+        final StartRecoveryRequest startRecoveryRequest = getStartRecoveryRequest();
+ * GitHub history for details.
+        );
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
+                    receivedSeqNos.add(operation.seqNo());
+                unrepliedChunks.add(new FileChunkResponse(chunkNumber, listener));
+        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
+            randomNonNegativeLong(),
+            long position,
+                c.listener.onResponse(null);
+ * KIND, either express or implied.  See the License for the
+        sendFilesFuture.actionGet();
+            randomBoolean() || metadataSnapshot.getHistoryUUID() == null ? SequenceNumbers.UNASSIGNED_SEQ_NO : randomNonNegativeLong()
+        AtomicBoolean failedEngine = new AtomicBoolean(false);
+        ) {
+            between(1, 10)
+                    checkpointOnTarget.addAndGet(between(1, 20));
+        final boolean throwCorruptedIndexException = randomBoolean();
+                long maxSeqNoOfUpdatesOrDeletes,
+import static org.mockito.Mockito.doAnswer;
+        final int expectedOps = (int) (endingSeqNo - startingSeqNo + 1);
+        doAnswer(invocation -> {
+        SetOnce<Runnable> cancelRecovery = new SetOnce<>();
+import org.opensearch.cluster.metadata.IndexMetadata;
+        for (StoreFileMetadata md : metadata) {
+        writer.close();
+            ) {
+        );
+import org.opensearch.threadpool.ThreadPool;
+        final Set<Long> seqNos = new HashSet<>();
+        List<StoreFileMetadata> metas = new ArrayList<>();
+        };
+            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
+            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
+                    startingSeqNo,
+        CountDownLatch latch = new CountDownLatch(1);
+        });
+            }
+        assertTrue(failedEngine.get());
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
+        Translog.Snapshot snapshot = newTranslogSnapshot(operations, skipOperations);
+        for (int i = 0; i < numDocs; i++) {
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
+        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
+        long maxSeqNoOfUpdatesOrDeletes = randomBoolean() ? -1 : randomNonNegativeLong();
+        Store store = newStore(createTempDir(), false);
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        if (localCheckpoint != null) {
+                    endingSeqNo,
+                    return null;
+    private Engine.Index getIndex(final String id) {
+        Store store = newStore(tempDir, false);
+        }
+    }
+                BytesReference content,
+            int chunksToSend = Math.min(
+    public void testThrowExceptionOnNoTargetInRouting() throws IOException {
+            maxSeqNoOfUpdatesOrDeletes,
+        }
+        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
+            null,
+        AtomicBoolean received = new AtomicBoolean();
+        AtomicBoolean failedEngine = new AtomicBoolean(false);
+        RetentionLeases retentionLeases = new RetentionLeases(randomNonNegativeLong(), randomNonNegativeLong(), Collections.emptySet());
+        assertFalse(phase1Called.get());
+import org.opensearch.common.util.concurrent.ConcurrentCollections;
+            threadPool,
+            handler.phase1(
+            CRC32 digest = new CRC32();
+ */
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
+        assertThat(result.sentOperations, equalTo(expectedOps));
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+            metas.add(md);
+    public void testSendOperationsConcurrently() throws Throwable {
+            ) {
+import org.opensearch.common.util.CancellableThreads;
+        "index",
+        }
+        ) {}
+        }
+import org.opensearch.index.seqno.ReplicationTracker;
+        final byte[] source = "{}".getBytes(StandardCharsets.UTF_8);
+        };
+                }
+    }
+            this.chunkNumber = chunkNumber;
+        sendFilesLatch.await();
+            between(1, 8),
+            }
+        assertBusy(() -> assertThat(sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks))));
+            }
+                ActionListener<Long> listener
+    }
+        final AtomicBoolean wasFailed = new AtomicBoolean();
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        }
+                StoreFileMetadata md,
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+            void phase1(
+                long receivedMappingVersion,
+            null,
+            null,
+        doAnswer(invocation -> {
+            )
+                    if (operationsToSkip.contains(op)) {
+        replyLatch.await();
+        final Field versionField = new NumericDocValuesField("_version", Versions.MATCH_ANY);
+import org.opensearch.common.UUIDs;
+import org.opensearch.index.translog.Translog;
+                sentSeqNos.add(op.seqNo());
+            assertThat(unrepliedChunks, hasSize(sentChunks.get()));
+            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic()),
+        AtomicBoolean wasCancelled = new AtomicBoolean();
+                ActionListener<Void> listener
+            ) throws IOException {
+            }
+        IndexShard mockShard = mock(IndexShard.class);
+            );
+        });
+                phase2Called.set(true);
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+            }
+    public void testVerifySeqNoStatsWhenRecoverWithSyncId() throws Exception {
+            startingSeqNo,
+        );
+        when(shard.store()).thenReturn(store);
+            ) {
+                );
+        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
+        FileChunkResponse(long chunkNumber, ActionListener<Void> listener) {
+            between(1, 5),
+        MultiFileWriter multiFileWriter = new MultiFileWriter(targetStore, luceneIndex, "", logger, () -> {});
+        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
+            final List<Translog.Operation> operations,
+                int receivedTotalOps,
+                if (randomBoolean()) {
+        public void receiveFileInfo(
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+    /*
+                (p) -> (p.getFileName().toString().equals("write.lock") || p.getFileName().toString().startsWith("extra")) == false
+        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
+import org.apache.lucene.tests.index.RandomIndexWriter;
+        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
+        List<StoreFileMetadata> metas = new ArrayList<>();
+        if (wasFailed.get()) {
+        };
+        for (StoreFileMetadata md : metadata) {
+                phase1Called.set(true);
+        int numDocs = randomIntBetween(10, 100);
+                    cancelRecovery.get().run();
+            }
+                    }
+            if (randomBoolean()) {
+            if (randomBoolean()) {
+        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
+    );
+        cancelingThread.join();
+        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
+                }
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        public void indexTranslogOperations(
+                recoveryExecutor.execute(() -> listener.onResponse(null));
+        int numDocs = between(0, 1000);
+import java.util.Arrays;
+        IndexShard mockShard = mock(IndexShard.class);
+        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
+        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
+ * this work for additional information regarding copyright
+            maxConcurrentChunks,
+            @Override
+        Store.MetadataSnapshot targetStoreMetadata = targetStore.getMetadata();
+        when(shard.state()).thenReturn(IndexShardState.STARTED);
+                    retentionLeases,
+                }
+        assertThat(receivedSeqNos, equalTo(sentSeqNos));
+            RetentionLeases.EMPTY,
+        };
+            ) {
+            assertBusy(() -> {
+            threadPool,
+                long startingSeqNo,
+                boolean lastChunk,
+ * Modifications Copyright OpenSearch Contributors. See
+ * license agreements. See the NOTICE file distributed with
+                    return null;
+                boolean lastChunk,
+                super.phase2(
+            getStartRecoveryRequest(),
+        Store.MetadataSnapshot metadata = store.getMetadata();
+                out.write(buffer);
+                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs),
+                if (randomBoolean()) {
+        MultiFileWriter multiFileWriter = new MultiFileWriter(targetStore, luceneIndex, "", logger, () -> {});
+                long endingSeqNo,
+            @Override
+        assertEquals(0, recoveryDiff.different.size());
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntSupplier;
-import java.util.stream.Collectors;
-import java.util.zip.CRC32;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-/**
- * This covers test cases for {@link RecoverySourceHandler} and {@link LocalStorePeerRecoverySourceHandler}.
- */
-public class LocalStorePeerRecoverySourceHandlerTests extends OpenSearchTestCase {
-    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(
-        "index",
-        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
-    );
-    private final ShardId shardId = new ShardId(INDEX_SETTINGS.getIndex(), 1);
-    private final ClusterSettings service = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-
-    private ThreadPool threadPool;
-    private Executor recoveryExecutor;
-
-    @Before
-    public void setUpThreadPool() {
-        if (randomBoolean()) {
-            threadPool = new TestThreadPool(getTestName());
-            recoveryExecutor = threadPool.generic();
-        } else {
-            // verify that both sending and receiving files can be completed with a single thread
-            threadPool = new TestThreadPool(
-                getTestName(),
-                new FixedExecutorBuilder(Settings.EMPTY, "recovery_executor", between(1, 16), between(16, 128), "recovery_executor")
-            );
-            recoveryExecutor = threadPool.executor("recovery_executor");
-        }
-    }
-
-    @After
-    public void tearDownThreadPool() {
-        terminate(threadPool);
-    }
-
-    public void testSendFiles() throws Throwable {
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        Store store = newStore(createTempDir());
-        Directory dir = store.directory();
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
-        int numDocs = randomIntBetween(10, 100);
-        for (int i = 0; i < numDocs; i++) {
-            Document document = new Document();
-            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
-            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
-            writer.addDocument(document);
-        }
-        writer.commit();
-        writer.close();
-
-        Store.MetadataSnapshot metadata = store.getMetadata();
-        ReplicationLuceneIndex luceneIndex = new ReplicationLuceneIndex();
-        List<StoreFileMetadata> metas = new ArrayList<>();
-        for (StoreFileMetadata md : metadata) {
-            metas.add(md);
-            luceneIndex.addFileDetail(md.name(), md.length(), false);
-        }
-        Store targetStore = newStore(createTempDir());
-        MultiFileWriter multiFileWriter = new MultiFileWriter(targetStore, luceneIndex, "", logger, () -> {});
-        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
-                BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                ActionListener.completeWith(listener, () -> {
-                    multiFileWriter.writeFileChunk(md, position, content, lastChunk);
-                    return null;
-                });
-            }
-        };
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            null,
-            new AsyncRecoveryTarget(target, recoveryExecutor),
-            threadPool,
-            request,
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 5),
-            between(1, 5)
-        );
-        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
-        handler.sendFiles(store, metas.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
-        sendFilesFuture.actionGet();
-        Store.MetadataSnapshot targetStoreMetadata = targetStore.getMetadata();
-        Store.RecoveryDiff recoveryDiff = targetStoreMetadata.recoveryDiff(metadata);
-        assertEquals(metas.size(), recoveryDiff.identical.size());
-        assertEquals(0, recoveryDiff.different.size());
-        assertEquals(0, recoveryDiff.missing.size());
-        IndexReader reader = DirectoryReader.open(targetStore.directory());
-        assertEquals(numDocs, reader.maxDoc());
-        IOUtils.close(reader, store, multiFileWriter, targetStore);
-    }
-
-    public StartRecoveryRequest getStartRecoveryRequest() throws IOException {
-        Store.MetadataSnapshot metadataSnapshot = randomBoolean()
-            ? Store.MetadataSnapshot.EMPTY
-            : new Store.MetadataSnapshot(
-                Collections.emptyMap(),
-                Collections.singletonMap(Engine.HISTORY_UUID_KEY, UUIDs.randomBase64UUID()),
-                randomIntBetween(0, 100)
-            );
-        return new StartRecoveryRequest(
-            shardId,
-            null,
-            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
-            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
-            metadataSnapshot,
-            randomBoolean(),
-            randomNonNegativeLong(),
-            randomBoolean() || metadataSnapshot.getHistoryUUID() == null ? SequenceNumbers.UNASSIGNED_SEQ_NO : randomNonNegativeLong()
-        );
-    }
-
-    public void testSendSnapshotSendsOps() throws IOException {
-        final int fileChunkSizeInBytes = between(1, 4096);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.state()).thenReturn(IndexShardState.STARTED);
-        final List<Translog.Operation> operations = new ArrayList<>();
-        final int initialNumberOfDocs = randomIntBetween(10, 1000);
-        for (int i = 0; i < initialNumberOfDocs; i++) {
-            final Engine.Index index = getIndex(Integer.toString(i));
-            operations.add(new Translog.Index(index, new Engine.IndexResult(1, 1, SequenceNumbers.UNASSIGNED_SEQ_NO, true)));
-        }
-        final int numberOfDocsWithValidSequenceNumbers = randomIntBetween(10, 1000);
+            void phase2(
         for (int i = initialNumberOfDocs; i < initialNumberOfDocs + numberOfDocsWithValidSequenceNumbers; i++) {
-            final Engine.Index index = getIndex(Integer.toString(i));
-            operations.add(new Translog.Index(index, new Engine.IndexResult(1, 1, i - initialNumberOfDocs, true)));
-        }
-        final long startingSeqNo = randomIntBetween(0, numberOfDocsWithValidSequenceNumbers - 1);
-        final long endingSeqNo = randomLongBetween(startingSeqNo, numberOfDocsWithValidSequenceNumbers - 1);
-
-        final Queue<Translog.Operation> shippedOps = ConcurrentCollections.newQueue();
         final AtomicLong checkpointOnTarget = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        RecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+            } else {
+    }
+        Store.RecoveryDiff recoveryDiff = targetStoreMetadata.recoveryDiff(metadata);
+                new SegmentInfosCatalogSnapshot(Lucene.readSegmentInfos(DirectoryReader.listCommits(dir).get(0))),
+            void phase1(
+            between(1, 5)
+                    )
+            int expectedSentChunks = sentChunks.get() + chunksToSend;
             @Override
-            public void indexTranslogOperations(
-                List<Translog.Operation> operations,
-                int totalTranslogOps,
-                long timestamp,
-                long msu,
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<Long> listener
+                assertThat(sentChunks.get(), equalTo(expectedSentChunks));
+                    startingSeqNo,
+            public int totalOperations() {
+                }
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
+                ActionListener<Void> listener
+            between(1, 8),
+        return new Store(shardId, INDEX_SETTINGS, baseDirectoryWrapper, new DummyShardLock(shardId));
+import org.opensearch.common.lucene.uid.Versions;
+    @Before
+                long maxSeenAutoIdTimestamp,
             ) {
                 shippedOps.addAll(operations);
-                if (randomBoolean()) {
-                    checkpointOnTarget.addAndGet(between(1, 20));
-                }
-                listener.onResponse(checkpointOnTarget.get());
-            }
-        };
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic()),
-            threadPool,
-            request,
-            fileChunkSizeInBytes,
-            between(1, 10),
-            between(1, 10)
-        );
-        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> future = new PlainActionFuture<>();
-        handler.phase2(
-            startingSeqNo,
-            endingSeqNo,
-            newTranslogSnapshot(operations, Collections.emptyList()),
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            RetentionLeases.EMPTY,
-            randomNonNegativeLong(),
-            future
-        );
-        final int expectedOps = (int) (endingSeqNo - startingSeqNo + 1);
-        RecoverySourceHandler.SendSnapshotResult result = future.actionGet();
-        assertThat(result.sentOperations, equalTo(expectedOps));
-        List<Translog.Operation> sortedShippedOps = shippedOps.stream()
-            .sorted(Comparator.comparing(Translog.Operation::seqNo))
-            .collect(Collectors.toList());
-        assertThat(shippedOps.size(), equalTo(expectedOps));
-        for (int i = 0; i < shippedOps.size(); i++) {
-            assertThat(sortedShippedOps.get(i), equalTo(operations.get(i + (int) startingSeqNo + initialNumberOfDocs)));
-        }
-        assertThat(result.targetLocalCheckpoint, equalTo(checkpointOnTarget.get()));
-    }
-
-    public void testSendSnapshotStopOnError() throws Exception {
-        final int fileChunkSizeInBytes = between(1, 10 * 1024);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.state()).thenReturn(IndexShardState.STARTED);
-        final List<Translog.Operation> ops = new ArrayList<>();
-        for (int numOps = between(1, 256), i = 0; i < numOps; i++) {
-            final Engine.Index index = getIndex(Integer.toString(i));
-            ops.add(new Translog.Index(index, new Engine.IndexResult(1, 1, i, true)));
-        }
-        final AtomicBoolean wasFailed = new AtomicBoolean();
-        RecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
-            @Override
-            public void indexTranslogOperations(
-                List<Translog.Operation> operations,
-                int totalTranslogOps,
-                long timestamp,
-                long msu,
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<Long> listener
-            ) {
-                if (randomBoolean()) {
-                    listener.onResponse(SequenceNumbers.NO_OPS_PERFORMED);
-                } else {
-                    listener.onFailure(new RuntimeException("test - failed to index"));
-                    wasFailed.set(true);
-                }
-            }
-        };
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic()),
-            threadPool,
-            request,
-            fileChunkSizeInBytes,
-            between(1, 10),
-            between(1, 10)
-        );
-        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> future = new PlainActionFuture<>();
-        final long startingSeqNo = randomLongBetween(0, ops.size() - 1L);
-        final long endingSeqNo = randomLongBetween(startingSeqNo, ops.size() - 1L);
-        handler.phase2(
-            startingSeqNo,
-            endingSeqNo,
-            newTranslogSnapshot(ops, Collections.emptyList()),
-            randomNonNegativeLong(),
-            randomNonNegativeLong(),
-            RetentionLeases.EMPTY,
-            randomNonNegativeLong(),
-            future
-        );
-        if (wasFailed.get()) {
-            final RecoveryEngineException error = expectThrows(RecoveryEngineException.class, future::actionGet);
-            assertThat(error.getMessage(), equalTo("Phase[2] failed to send/replay operations"));
-            assertThat(error.getCause().getMessage(), equalTo("test - failed to index"));
-        }
-    }
-
-    public void testSendOperationsConcurrently() throws Throwable {
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.state()).thenReturn(IndexShardState.STARTED);
-        Set<Long> receivedSeqNos = ConcurrentCollections.newConcurrentSet();
-        long maxSeenAutoIdTimestamp = randomBoolean() ? -1 : randomNonNegativeLong();
-        long maxSeqNoOfUpdatesOrDeletes = randomBoolean() ? -1 : randomNonNegativeLong();
-        RetentionLeases retentionLeases = new RetentionLeases(randomNonNegativeLong(), randomNonNegativeLong(), Collections.emptySet());
-        long mappingVersion = randomNonNegativeLong();
-        AtomicLong localCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
-        int numOps = randomIntBetween(0, 1000);
-        AtomicBoolean received = new AtomicBoolean();
-        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
-            @Override
-            public void indexTranslogOperations(
-                List<Translog.Operation> operations,
-                int receivedTotalOps,
-                long receivedMaxSeenAutoIdTimestamp,
-                long receivedMaxSeqNoOfUpdatesOrDeletes,
-                RetentionLeases receivedRetentionLease,
-                long receivedMappingVersion,
-                ActionListener<Long> listener
-            ) {
-                received.set(true);
-                assertThat(receivedMaxSeenAutoIdTimestamp, equalTo(maxSeenAutoIdTimestamp));
-                assertThat(receivedMaxSeqNoOfUpdatesOrDeletes, equalTo(maxSeqNoOfUpdatesOrDeletes));
-                assertThat(receivedRetentionLease, equalTo(retentionLeases));
-                assertThat(receivedMappingVersion, equalTo(mappingVersion));
-                assertThat(receivedTotalOps, equalTo(numOps));
-                for (Translog.Operation operation : operations) {
-                    receivedSeqNos.add(operation.seqNo());
-                }
-                if (randomBoolean()) {
-                    localCheckpoint.addAndGet(randomIntBetween(1, 100));
-                }
-                listener.onResponse(localCheckpoint.get());
-            }
-        };
-
-        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> sendFuture = new PlainActionFuture<>();
-        long startingSeqNo = randomIntBetween(0, 1000);
-        long endingSeqNo = startingSeqNo + randomIntBetween(0, 10000);
-        List<Translog.Operation> operations = generateOperations(numOps);
-        Randomness.shuffle(operations);
-        List<Translog.Operation> skipOperations = randomSubsetOf(operations);
-        Translog.Snapshot snapshot = newTranslogSnapshot(operations, skipOperations);
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            new AsyncRecoveryTarget(target, recoveryExecutor),
-            threadPool,
-            getStartRecoveryRequest(),
-            between(1, 10 * 1024),
-            between(1, 5),
-            between(1, 5)
-        );
-        handler.phase2(
-            startingSeqNo,
-            endingSeqNo,
-            snapshot,
-            maxSeenAutoIdTimestamp,
-            maxSeqNoOfUpdatesOrDeletes,
-            retentionLeases,
-            mappingVersion,
-            sendFuture
-        );
-        RecoverySourceHandler.SendSnapshotResult sendSnapshotResult = sendFuture.actionGet();
-        assertTrue(received.get());
-        assertThat(sendSnapshotResult.targetLocalCheckpoint, equalTo(localCheckpoint.get()));
-        assertThat(sendSnapshotResult.sentOperations, equalTo(receivedSeqNos.size()));
-        Set<Long> sentSeqNos = new HashSet<>();
-        for (Translog.Operation op : operations) {
-            if (startingSeqNo <= op.seqNo() && op.seqNo() <= endingSeqNo && skipOperations.contains(op) == false) {
-                sentSeqNos.add(op.seqNo());
-            }
-        }
-        assertThat(receivedSeqNos, equalTo(sentSeqNos));
-    }
-
-    private Engine.Index getIndex(final String id) {
-        final ParseContext.Document document = new ParseContext.Document();
-        document.add(new TextField("test", "test", Field.Store.YES));
-        final Field idField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
-        final Field versionField = new NumericDocValuesField("_version", Versions.MATCH_ANY);
-        final SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
-        document.add(idField);
-        document.add(versionField);
-        document.add(seqID.seqNo);
-        document.add(seqID.seqNoDocValue);
-        document.add(seqID.primaryTerm);
-        final BytesReference source = new BytesArray(new byte[] { 1 });
-        final ParsedDocument doc = new ParsedDocument(
-            versionField,
-            seqID,
-            id,
-            null,
-            Arrays.asList(document),
-            source,
-            MediaTypeRegistry.JSON,
-            null
-        );
-        return new Engine.Index(new Term("_id", Uid.encodeId(doc.id())), randomNonNegativeLong(), doc);
-    }
-
-    public void testHandleCorruptedIndexOnSendSendFiles() throws Throwable {
-        Settings settings = Settings.builder()
-            .put("indices.recovery.concurrent_streams", 1)
-            .put("indices.recovery.concurrent_small_file_streams", 1)
-            .build();
-        final RecoverySettings recoverySettings = new RecoverySettings(settings, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        Path tempDir = createTempDir();
-        Store store = newStore(tempDir, false);
-        AtomicBoolean failedEngine = new AtomicBoolean(false);
-        Directory dir = store.directory();
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
-        int numDocs = randomIntBetween(10, 100);
-        for (int i = 0; i < numDocs; i++) {
-            Document document = new Document();
-            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+import org.apache.lucene.document.StringField;
             document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
-            writer.addDocument(document);
-        }
-        writer.commit();
-        writer.close();
-
-        ReplicationLuceneIndex luceneIndex = new ReplicationLuceneIndex();
-        Store.MetadataSnapshot metadata = store.getMetadata();
-        List<StoreFileMetadata> metas = new ArrayList<>();
-        for (StoreFileMetadata md : metadata) {
-            metas.add(md);
-            luceneIndex.addFileDetail(md.name(), md.length(), false);
-        }
-
-        CorruptionUtils.corruptFile(
-            random(),
-            FileSystemUtils.files(
-                tempDir,
-                (p) -> (p.getFileName().toString().equals("write.lock") || p.getFileName().toString().startsWith("extra")) == false
-            )
-        );
-        Store targetStore = newStore(createTempDir(), false);
-        MultiFileWriter multiFileWriter = new MultiFileWriter(targetStore, luceneIndex, "", logger, () -> {});
-        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
-                BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                ActionListener.completeWith(listener, () -> {
-                    multiFileWriter.writeFileChunk(md, position, content, lastChunk);
-                    return null;
-                });
-            }
-        };
-        IndexShard mockShard = mock(IndexShard.class);
-        when(mockShard.shardId()).thenReturn(new ShardId("testIndex", "testUUID", 0));
-        doAnswer(invocation -> {
-            assertFalse(failedEngine.get());
-            failedEngine.set(true);
-            return null;
+import org.opensearch.action.LatchedActionListener;
         }).when(mockShard).failShard(any(), any());
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            mockShard,
-            new AsyncRecoveryTarget(target, recoveryExecutor),
-            threadPool,
-            request,
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 8),
-            between(1, 8)
         );
-        SetOnce<Exception> sendFilesError = new SetOnce<>();
-        CountDownLatch latch = new CountDownLatch(1);
-        handler.sendFiles(
-            store,
-            metas.toArray(new StoreFileMetadata[0]),
-            () -> 0,
-            new LatchedActionListener<>(ActionListener.wrap(r -> sendFilesError.set(null), e -> sendFilesError.set(e)), latch)
-        );
-        latch.await();
-        assertThat(sendFilesError.get(), instanceOf(IOException.class));
-        assertNotNull(ExceptionsHelper.unwrapCorruption(sendFilesError.get()));
-        failedEngine.get();
-        assertTrue(failedEngine.get());
-        // ensure all chunk requests have been completed; otherwise some files on the target are left open.
-        IOUtils.close(() -> terminate(threadPool), () -> threadPool = null);
-        IOUtils.close(store, multiFileWriter, targetStore);
+            boolean lastChunk,
+        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> future = new PlainActionFuture<>();
+        @Override
+        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
+ * the Apache License, Version 2.0 (the "License"); you may
+    /*
     }
-
-    public void testHandleExceptionOnSendFiles() throws Throwable {
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        Path tempDir = createTempDir();
-        Store store = newStore(tempDir, false);
-        AtomicBoolean failedEngine = new AtomicBoolean(false);
-        Directory dir = store.directory();
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
-        int numDocs = randomIntBetween(10, 100);
-        for (int i = 0; i < numDocs; i++) {
-            Document document = new Document();
-            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
-            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
-            writer.addDocument(document);
-        }
-        writer.commit();
-        writer.close();
-
-        Store.MetadataSnapshot metadata = store.getMetadata();
-        List<StoreFileMetadata> metas = new ArrayList<>();
-        for (StoreFileMetadata md : metadata) {
-            metas.add(md);
-        }
-        final boolean throwCorruptedIndexException = randomBoolean();
-        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
-                BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                if (throwCorruptedIndexException) {
-                    listener.onFailure(new RuntimeException(new CorruptIndexException("foo", "bar")));
-                } else {
-                    listener.onFailure(new RuntimeException("boom"));
-                }
-            }
-        };
-        IndexShard mockShard = mock(IndexShard.class);
-        when(mockShard.shardId()).thenReturn(new ShardId("testIndex", "testUUID", 0));
-        doAnswer(invocation -> {
-            assertFalse(failedEngine.get());
-            failedEngine.set(true);
-            return null;
-        }).when(mockShard).failShard(any(), any());
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            mockShard,
-            new AsyncRecoveryTarget(target, recoveryExecutor),
-            threadPool,
-            request,
+            BytesReference content,
+import org.opensearch.index.mapper.Uid;
             Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 10),
-            between(1, 4)
-        );
-        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
-        handler.sendFiles(store, metas.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
-        Exception ex = expectThrows(Exception.class, sendFilesFuture::actionGet);
-        final IOException unwrappedCorruption = ExceptionsHelper.unwrapCorruption(ex);
-        if (throwCorruptedIndexException) {
-            assertNotNull(unwrappedCorruption);
-            assertEquals(ex.getMessage(), "[File corruption occurred on recovery but checksums are ok]");
         } else {
-            assertNull(unwrappedCorruption);
-            assertEquals(ex.getMessage(), "boom");
-        }
-        assertFalse(failedEngine.get());
-        IOUtils.close(store);
-    }
-
-    public void testThrowExceptionOnPrimaryRelocatedBeforePhase1Started() throws IOException {
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
-        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
-        when(shard.isRelocatedPrimary()).thenReturn(true);
-        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
-        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
-        doAnswer(invocation -> {
-            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
-            return null;
-        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
-
-        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
-                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
-            );
-        if (randomBoolean()) {
-            indexMetadata.state(IndexMetadata.State.CLOSE);
-        }
-        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
-
-        final AtomicBoolean phase1Called = new AtomicBoolean();
-        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
-        final AtomicBoolean phase2Called = new AtomicBoolean();
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            mock(RecoveryTargetHandler.class),
-            threadPool,
             request,
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 8),
-            between(1, 8)
-        ) {
-
-            @Override
-            void phase1(
-                CatalogSnapshot snapshot,
-                long startingSeqNo,
-                IntSupplier translogOps,
-                ActionListener<SendFileResult> listener,
-                boolean skipCreateRetentionLeaseStep
-            ) {
-                phase1Called.set(true);
-                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
-            }
-
-            @Override
-            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
-                prepareTargetForTranslogCalled.set(true);
-                super.prepareTargetForTranslog(totalTranslogOps, listener);
-            }
-
-            @Override
-            void phase2(
-                long startingSeqNo,
-                long endingSeqNo,
-                Translog.Snapshot snapshot,
-                long maxSeenAutoIdTimestamp,
-                long maxSeqNoOfUpdatesOrDeletes,
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<SendSnapshotResult> listener
-            ) throws IOException {
-                phase2Called.set(true);
-                super.phase2(
-                    startingSeqNo,
-                    endingSeqNo,
-                    snapshot,
-                    maxSeenAutoIdTimestamp,
-                    maxSeqNoOfUpdatesOrDeletes,
-                    retentionLeases,
-                    mappingVersion,
-                    listener
-                );
-            }
-
-        };
-        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
-        expectThrows(IndexShardRelocatedException.class, () -> {
-            handler.recoverToTarget(future);
-            future.actionGet();
-        });
-        assertFalse(phase1Called.get());
-        assertFalse(prepareTargetForTranslogCalled.get());
-        assertFalse(phase2Called.get());
-    }
-
-    /*
-    If the replica allocation id is not reflected in source nodes routing table even after retries,
-    recoveries should fail
-     */
-    public void testThrowExceptionOnNoTargetInRouting() throws IOException {
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
-        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
-        when(shard.isRelocatedPrimary()).thenReturn(false);
-        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
-        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
-        when(routingTable.getByAllocationId(anyString())).thenReturn(null);
-        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
-        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
-        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
-        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
-        doAnswer(invocation -> {
-            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
-            return null;
-        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
-
-        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
-                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
-            );
-        if (randomBoolean()) {
-            indexMetadata.state(IndexMetadata.State.CLOSE);
-        }
-        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
-
-        final AtomicBoolean phase1Called = new AtomicBoolean();
-        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
-        final AtomicBoolean phase2Called = new AtomicBoolean();
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            mock(RecoveryTargetHandler.class),
-            threadPool,
-            request,
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 8),
-            between(1, 8)
-        ) {
-
-            @Override
-            void phase1(
-                CatalogSnapshot snapshot,
-                long startingSeqNo,
-                IntSupplier translogOps,
-                ActionListener<SendFileResult> listener,
-                boolean skipCreateRetentionLeaseStep
-            ) {
-                phase1Called.set(true);
-                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
-            }
-
-            @Override
-            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
-                prepareTargetForTranslogCalled.set(true);
-                super.prepareTargetForTranslog(totalTranslogOps, listener);
-            }
-
-            @Override
-            void phase2(
-                long startingSeqNo,
-                long endingSeqNo,
-                Translog.Snapshot snapshot,
-                long maxSeenAutoIdTimestamp,
-                long maxSeqNoOfUpdatesOrDeletes,
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<SendSnapshotResult> listener
-            ) throws IOException {
-                phase2Called.set(true);
-                super.phase2(
-                    startingSeqNo,
-                    endingSeqNo,
-                    snapshot,
-                    maxSeenAutoIdTimestamp,
-                    maxSeqNoOfUpdatesOrDeletes,
-                    retentionLeases,
-                    mappingVersion,
-                    listener
-                );
-            }
-
-        };
-        PlainActionFuture<RecoveryResponse> future = new PlainActionFuture<>();
-        expectThrows(DelayRecoveryException.class, () -> {
-            handler.recoverToTarget(future);
-            future.actionGet();
-        });
-        verify(routingTable, times(5)).getByAllocationId(null);
-        assertFalse(phase1Called.get());
-        assertFalse(prepareTargetForTranslogCalled.get());
-        assertFalse(phase2Called.get());
-    }
-
-    /*
-    Tests when the replica allocation id is  reflected in source nodes routing table even after 1 retry
-    */
-    public void testTargetInRoutingInSecondAttempt() throws IOException {
-        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
-        final StartRecoveryRequest request = getStartRecoveryRequest();
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
-        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
-        when(shard.isRelocatedPrimary()).thenReturn(false);
-        when(shard.getRetentionLeases()).thenReturn(mock(RetentionLeases.class));
-        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
-        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
-        final ShardRouting shardRouting = mock(ShardRouting.class);
-        when(shardRouting.initializing()).thenReturn(true);
-        when(shardRouting.currentNodeId()).thenReturn("node");
-        when(routingTable.getByAllocationId(any())).thenReturn(null, shardRouting);
-        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
-        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
-        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
-        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
-        doAnswer(invocation -> {
-            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
-            return null;
-        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
-
-        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
-            .settings(
-                Settings.builder()
-                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
-                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
-                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
-                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
-            );
-        if (randomBoolean()) {
-            indexMetadata.state(IndexMetadata.State.CLOSE);
-        }
-        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
-
-        final AtomicBoolean phase1Called = new AtomicBoolean();
-        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
-        final AtomicBoolean phase2Called = new AtomicBoolean();
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            mock(RecoveryTargetHandler.class),
-            threadPool,
-            request,
-            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
-            between(1, 8),
-            between(1, 8)
-        ) {
-
-            @Override
-            void phase1(
-                CatalogSnapshot snapshot,
-                long startingSeqNo,
-                IntSupplier translogOps,
-                ActionListener<SendFileResult> listener,
-                boolean skipCreateRetentionLeaseStep
-            ) {
-                phase1Called.set(true);
-                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
-            }
-
-            @Override
-            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
-                prepareTargetForTranslogCalled.set(true);
-                super.prepareTargetForTranslog(totalTranslogOps, listener);
-            }
-
-            @Override
-            void phase2(
-                long startingSeqNo,
-                long endingSeqNo,
-                Translog.Snapshot snapshot,
-                long maxSeenAutoIdTimestamp,
-                long maxSeqNoOfUpdatesOrDeletes,
-                RetentionLeases retentionLeases,
-                long mappingVersion,
-                ActionListener<SendSnapshotResult> listener
-            ) throws IOException {
-                phase2Called.set(true);
-                super.phase2(
-                    startingSeqNo,
-                    endingSeqNo,
-                    snapshot,
-                    maxSeenAutoIdTimestamp,
-                    maxSeqNoOfUpdatesOrDeletes,
-                    retentionLeases,
-                    mappingVersion,
-                    listener
-                );
-            }
-
-        };
-        handler.waitForAssignmentPropagate(new SetOnce<>());
-        verify(routingTable, times(2)).getByAllocationId(null);
-    }
-
-    public void testCancellationsDoesNotLeakPrimaryPermits() throws Exception {
-        final CancellableThreads cancellableThreads = new CancellableThreads();
-        final IndexShard shard = mock(IndexShard.class);
-        final AtomicBoolean freed = new AtomicBoolean(true);
-        when(shard.isRelocatedPrimary()).thenReturn(false);
-        doAnswer(invocation -> {
-            freed.set(false);
-            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> freed.set(true));
-            return null;
-        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
-
-        Thread cancelingThread = new Thread(() -> cancellableThreads.cancel("test"));
-        cancelingThread.start();
-        try {
-            RunUnderPrimaryPermit.run(() -> {}, "test", shard, cancellableThreads, logger);
-        } catch (CancellableThreads.ExecutionCancelledException e) {
-            // expected.
-        }
-        cancelingThread.join();
-        // we have to use assert busy as we may be interrupted while acquiring the permit, if so we want to check
-        // that the permit is released.
-        assertBusy(() -> assertTrue(freed.get()));
-    }
-
-    public void testSendFileChunksConcurrently() throws Exception {
-        final IndexShard shard = mock(IndexShard.class);
-        when(shard.state()).thenReturn(IndexShardState.STARTED);
-        final List<FileChunkResponse> unrepliedChunks = new CopyOnWriteArrayList<>();
-        final AtomicInteger sentChunks = new AtomicInteger();
-        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
-            final AtomicLong chunkNumberGenerator = new AtomicLong();
-
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
+            ? Store.MetadataSnapshot.EMPTY
                 BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                final long chunkNumber = chunkNumberGenerator.getAndIncrement();
-                logger.info("--> write chunk name={} seq={}, position={}", md.name(), chunkNumber, position);
-                unrepliedChunks.add(new FileChunkResponse(chunkNumber, listener));
-                sentChunks.incrementAndGet();
-            }
-        };
-        final int maxConcurrentChunks = between(1, 8);
-        final int chunkSize = between(1, 32);
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            recoveryTarget,
-            threadPool,
-            getStartRecoveryRequest(),
-            chunkSize,
-            maxConcurrentChunks,
-            between(1, 10)
-        );
-        Store store = newStore(createTempDir(), false);
-        List<StoreFileMetadata> files = generateFiles(store, between(1, 10), () -> between(1, chunkSize * 20));
-        int totalChunks = files.stream().mapToInt(md -> ((int) md.length() + chunkSize - 1) / chunkSize).sum();
-        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
-        handler.sendFiles(store, files.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
-        assertBusy(() -> {
-            assertThat(sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks)));
-            assertThat(unrepliedChunks, hasSize(sentChunks.get()));
-        });
-
-        List<FileChunkResponse> ackedChunks = new ArrayList<>();
         while (sentChunks.get() < totalChunks || unrepliedChunks.isEmpty() == false) {
-            List<FileChunkResponse> chunksToAck = randomSubsetOf(between(1, unrepliedChunks.size()), unrepliedChunks);
-            unrepliedChunks.removeAll(chunksToAck);
-            ackedChunks.addAll(chunksToAck);
-            ackedChunks.sort(Comparator.comparing(c -> c.chunkNumber));
-            int checkpoint = -1;
-            for (int i = 0; i < ackedChunks.size(); i++) {
-                if (i != ackedChunks.get(i).chunkNumber) {
-                    break;
-                } else {
-                    checkpoint = i;
-                }
-            }
-            int chunksToSend = Math.min(
-                totalChunks - sentChunks.get(),                             // limited by the remaining chunks
-                maxConcurrentChunks - (sentChunks.get() - 1 - checkpoint)
-            ); // limited by the buffering chunks
-
-            int expectedSentChunks = sentChunks.get() + chunksToSend;
-            int expectedUnrepliedChunks = unrepliedChunks.size() + chunksToSend;
-            chunksToAck.forEach(c -> c.listener.onResponse(null));
-            assertBusy(() -> {
-                assertThat(sentChunks.get(), equalTo(expectedSentChunks));
-                assertThat(unrepliedChunks, hasSize(expectedUnrepliedChunks));
-            });
-        }
-        sendFilesFuture.actionGet();
-        store.close();
-    }
-
-    public void testSendFileChunksStopOnError() throws Exception {
+ * ownership. Elasticsearch licenses this file to you under
+        document.add(seqID.seqNo);
+import org.opensearch.test.IndexSettingsModule;
         final List<FileChunkResponse> unrepliedChunks = new CopyOnWriteArrayList<>();
-        final AtomicInteger sentChunks = new AtomicInteger();
-        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
-            final AtomicLong chunkNumberGenerator = new AtomicLong();
-
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
-                BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                final long chunkNumber = chunkNumberGenerator.getAndIncrement();
-                logger.info("--> write chunk name={} seq={}, position={}", md.name(), chunkNumber, position);
-                unrepliedChunks.add(new FileChunkResponse(chunkNumber, listener));
-                sentChunks.incrementAndGet();
-            }
-        };
-        final int maxConcurrentChunks = between(1, 4);
-        final int chunkSize = between(1, 16);
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            null,
-            new AsyncRecoveryTarget(recoveryTarget, recoveryExecutor),
-            threadPool,
-            getStartRecoveryRequest(),
-            chunkSize,
-            maxConcurrentChunks,
-            between(1, 5)
-        );
-        Store store = newStore(createTempDir(), false);
-        List<StoreFileMetadata> files = generateFiles(store, between(1, 10), () -> between(1, chunkSize * 20));
-        int totalChunks = files.stream().mapToInt(md -> ((int) md.length() + chunkSize - 1) / chunkSize).sum();
-        SetOnce<Exception> sendFilesError = new SetOnce<>();
-        CountDownLatch sendFilesLatch = new CountDownLatch(1);
-        handler.sendFiles(
-            store,
-            files.toArray(new StoreFileMetadata[0]),
-            () -> 0,
-            new LatchedActionListener<>(ActionListener.wrap(r -> sendFilesError.set(null), e -> sendFilesError.set(e)), sendFilesLatch)
-        );
-        assertBusy(() -> assertThat(sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks))));
-        List<FileChunkResponse> failedChunks = randomSubsetOf(between(1, unrepliedChunks.size()), unrepliedChunks);
-        CountDownLatch replyLatch = new CountDownLatch(failedChunks.size());
-        failedChunks.forEach(c -> {
-            c.listener.onFailure(new IllegalStateException("test chunk exception"));
-            replyLatch.countDown();
-        });
-        replyLatch.await();
-        unrepliedChunks.removeAll(failedChunks);
-        unrepliedChunks.forEach(c -> {
-            if (randomBoolean()) {
-                c.listener.onFailure(new RuntimeException("test"));
-            } else {
-                c.listener.onResponse(null);
-            }
-        });
-        sendFilesLatch.await();
-        assertThat(sendFilesError.get(), instanceOf(IllegalStateException.class));
-        assertThat(sendFilesError.get().getMessage(), containsString("test chunk exception"));
-        assertThat("no more chunks should be sent", sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks)));
-        store.close();
+import org.opensearch.index.seqno.RetentionLeases;
+            operations.add(new Translog.Index(index, new Engine.IndexResult(1, 1, i - initialNumberOfDocs, true)));
+                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
+        return operations;
+            random(),
+        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
+    public void testSendFileChunksConcurrently() throws Exception {
+        ReplicationLuceneIndex luceneIndex = new ReplicationLuceneIndex();
+            metadataSnapshot,
+                long startingSeqNo,
+import org.junit.Before;
+            mock(RecoveryTargetHandler.class),
     }
-
-    public void testCancelRecoveryDuringPhase1() throws Exception {
-        Store store = newStore(createTempDir("source"), false);
-        IndexShard shard = mock(IndexShard.class);
-        when(shard.store()).thenReturn(store);
-        Directory dir = store.directory();
-        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
-        int numDocs = randomIntBetween(10, 100);
-        for (int i = 0; i < numDocs; i++) {
-            Document document = new Document();
-            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
-            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
-            writer.addDocument(document);
-        }
-        writer.commit();
-        writer.close();
-        AtomicBoolean wasCancelled = new AtomicBoolean();
-        SetOnce<Runnable> cancelRecovery = new SetOnce<>();
-        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
-            @Override
-            public void receiveFileInfo(
-                List<String> phase1FileNames,
-                List<Long> phase1FileSizes,
-                List<String> phase1ExistingFileNames,
-                List<Long> phase1ExistingFileSizes,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                recoveryExecutor.execute(() -> listener.onResponse(null));
-                if (randomBoolean()) {
-                    wasCancelled.set(true);
-                    cancelRecovery.get().run();
-                }
-            }
-
-            @Override
-            public void writeFileChunk(
-                StoreFileMetadata md,
-                long position,
-                BytesReference content,
-                boolean lastChunk,
-                int totalTranslogOps,
-                ActionListener<Void> listener
-            ) {
-                recoveryExecutor.execute(() -> listener.onResponse(null));
-                if (rarely()) {
-                    wasCancelled.set(true);
-                    cancelRecovery.get().run();
-                }
-            }
-
-            @Override
-            public void cleanFiles(
-                int totalTranslogOps,
-                long globalCheckpoint,
-                Store.MetadataSnapshot sourceMetadata,
-                ActionListener<Void> listener
-            ) {
-                recoveryExecutor.execute(() -> listener.onResponse(null));
-                if (randomBoolean()) {
-                    wasCancelled.set(true);
-                    cancelRecovery.get().run();
-                }
-            }
-        };
-        final StartRecoveryRequest startRecoveryRequest = getStartRecoveryRequest();
-        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            recoveryTarget,
-            threadPool,
-            startRecoveryRequest,
-            between(1, 16),
-            between(1, 4),
-            between(1, 4)
-        ) {
-            @Override
-            void createRetentionLease(long startingSeqNo, ActionListener<RetentionLease> listener) {
-                final String leaseId = ReplicationTracker.getPeerRecoveryRetentionLeaseId(startRecoveryRequest.targetNode().getId());
-                listener.onResponse(
-                    new RetentionLease(
-                        leaseId,
-                        startingSeqNo,
-                        threadPool.absoluteTimeInMillis(),
-                        ReplicationTracker.PEER_RECOVERY_RETENTION_LEASE_SOURCE
-                    )
-                );
-            }
-        };
-        cancelRecovery.set(() -> handler.cancel("test"));
-        final StepListener<RecoverySourceHandler.SendFileResult> phase1Listener = new StepListener<>();
-        try {
-            final CountDownLatch latch = new CountDownLatch(1);
-            handler.phase1(
-                new SegmentInfosCatalogSnapshot(Lucene.readSegmentInfos(DirectoryReader.listCommits(dir).get(0))),
-                0,
-                () -> 0,
-                new LatchedActionListener<>(phase1Listener, latch),
-                false
-            );
-            latch.await();
-            phase1Listener.result();
-        } catch (Exception e) {
-            assertTrue(wasCancelled.get());
-            assertNotNull(ExceptionsHelper.unwrap(e, CancellableThreads.ExecutionCancelledException.class));
-        }
-        store.close();
-    }
-
-    public void testVerifySeqNoStatsWhenRecoverWithSyncId() throws Exception {
-        IndexShard shard = mock(IndexShard.class);
         when(shard.state()).thenReturn(IndexShardState.STARTED);
-        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
-            shard,
-            new TestRecoveryTargetHandler(),
-            threadPool,
-            getStartRecoveryRequest(),
-            between(1, 16),
-            between(1, 4),
-            between(1, 4)
-        );
-
-        String syncId = UUIDs.randomBase64UUID();
-        int numDocs = between(0, 1000);
-        long localCheckpoint = randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE);
-        long maxSeqNo = randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE);
-        assertTrue(
-            handler.canSkipPhase1(
-                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs),
-                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs)
-            )
-        );
-
-        AssertionError error = expectThrows(AssertionError.class, () -> {
-            long localCheckpointOnTarget = randomValueOtherThan(
-                localCheckpoint,
-                () -> randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE)
-            );
-            long maxSeqNoOnTarget = randomValueOtherThan(
-                maxSeqNo,
-                () -> randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE)
-            );
-            handler.canSkipPhase1(
-                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs),
-                newMetadataSnapshot(syncId, Long.toString(localCheckpointOnTarget), Long.toString(maxSeqNoOnTarget), numDocs)
-            );
-        });
-        assertThat(error.getMessage(), containsString("try to recover [index][1] with sync id but seq_no stats are mismatched:"));
-    }
-
-    private Store.MetadataSnapshot newMetadataSnapshot(String syncId, String localCheckpoint, String maxSeqNo, int numDocs) {
-        Map<String, String> userData = new HashMap<>();
-        userData.put(Engine.SYNC_COMMIT_ID, syncId);
-        if (localCheckpoint != null) {
-            userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, localCheckpoint);
-        }
-        if (maxSeqNo != null) {
-            userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, maxSeqNo);
-        }
-        return new Store.MetadataSnapshot(Collections.emptyMap(), userData, numDocs);
-    }
-
-    private Store newStore(Path path) throws IOException {
-        return newStore(path, true);
-    }
-
-    private Store newStore(Path path, boolean checkIndex) throws IOException {
-        BaseDirectoryWrapper baseDirectoryWrapper = LocalStorePeerRecoverySourceHandlerTests.newFSDirectory(path);
-        if (checkIndex == false) {
-            baseDirectoryWrapper.setCheckIndexOnClose(false); // don't run checkindex we might corrupt the index in these tests
-        }
-        return new Store(shardId, INDEX_SETTINGS, baseDirectoryWrapper, new DummyShardLock(shardId));
-    }
-
-    static final class FileChunkResponse {
-        final long chunkNumber;
-        final ActionListener<Void> listener;
-
-        FileChunkResponse(long chunkNumber, ActionListener<Void> listener) {
-            this.chunkNumber = chunkNumber;
-            this.listener = listener;
-        }
-    }
-
-    private List<StoreFileMetadata> generateFiles(Store store, int numFiles, IntSupplier fileSizeSupplier) throws IOException {
-        List<StoreFileMetadata> files = new ArrayList<>();
-        for (int i = 0; i < numFiles; i++) {
-            byte[] buffer = randomByteArrayOfLength(fileSizeSupplier.getAsInt());
-            CRC32 digest = new CRC32();
-            digest.update(buffer, 0, buffer.length);
-            StoreFileMetadata md = new StoreFileMetadata(
-                "test-" + i,
-                buffer.length + 8,
-                Store.digestToString(digest.getValue()),
-                org.apache.lucene.util.Version.LATEST
-            );
-            try (OutputStream out = new IndexOutputOutputStream(store.createVerifyingOutput(md.name(), md, IOContext.DEFAULT))) {
-                out.write(buffer);
-                out.write(Numbers.longToBytes(digest.getValue()));
+                int totalTranslogOps,
+import org.opensearch.index.engine.SegmentsStats;
+                long receivedMaxSeqNoOfUpdatesOrDeletes,
+        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
+        int numDocs = randomIntBetween(10, 100);
+ *
+        Directory dir = store.directory();
             }
-            store.directory().sync(Collections.singleton(md.name()));
-            files.add(md);
-        }
-        return files;
-    }
-
-    class TestRecoveryTargetHandler implements RecoveryTargetHandler {
-        @Override
-        public void prepareForTranslogOperations(int totalTranslogOps, ActionListener<Void> listener) {}
-
-        @Override
-        public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {}
-
-        @Override
-        public void forceSegmentFileSync() {}
-
-        @Override
+        // we have to use assert busy as we may be interrupted while acquiring the permit, if so we want to check
+        };
+        doAnswer(invocation -> {
+        Store store = newStore(createTempDir(), false);
+import org.opensearch.common.concurrent.GatedCloseable;
+            between(1, 8),
+        List<StoreFileMetadata> files = generateFiles(store, between(1, 10), () -> between(1, chunkSize * 20));
+                    endingSeqNo,
+import org.opensearch.common.settings.ClusterSettings;
+                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
+        document.add(idField);
+        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
+                ActionListener<Void> listener
         public void handoffPrimaryContext(ReplicationTracker.PrimaryContext primaryContext) {}
-
+                );
+        when(shard.isRelocatedPrimary()).thenReturn(false);
+    static final class FileChunkResponse {
+            final long mappingVersion,
+            failedEngine.set(true);
+                long msu,
+            final CountDownLatch latch = new CountDownLatch(1);
+import static org.hamcrest.Matchers.hasSize;
+        Set<Long> sentSeqNos = new HashSet<>();
+            Arrays.asList(document),
+            randomNonNegativeLong(),
+        when(routingTable.getByAllocationId(any())).thenReturn(null, shardRouting);
+            new AsyncRecoveryTarget(target, recoveryExecutor),
+        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
+            indexMetadata.state(IndexMetadata.State.CLOSE);
+                RetentionLeases receivedRetentionLease,
+    public StartRecoveryRequest getStartRecoveryRequest() throws IOException {
+            null
+                for (Translog.Operation operation : operations) {
+        }
+        );
+        final IndexShard shard = mock(IndexShard.class);
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
+            between(1, 10),
+                out.write(Numbers.longToBytes(digest.getValue()));
+        // that the permit is released.
+        handler.sendFiles(
+            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+            between(1, 8)
+        }
+        assertFalse(phase2Called.get());
+import org.apache.lucene.document.NumericDocValuesField;
+            unrepliedChunks.removeAll(chunksToAck);
+        final AtomicBoolean phase1Called = new AtomicBoolean();
+        assertFalse(failedEngine.get());
+            @Override
+            List<FileChunkResponse> chunksToAck = randomSubsetOf(between(1, unrepliedChunks.size()), unrepliedChunks);
+import static org.mockito.Mockito.any;
+        );
+import org.apache.lucene.document.Document;
+                List<Translog.Operation> operations,
+import org.opensearch.core.action.ActionListener;
+        public void forceSegmentFileSync() {}
+        final long endingSeqNo = randomLongBetween(startingSeqNo, numberOfDocsWithValidSequenceNumbers - 1);
+        long localCheckpoint = randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE);
+                Settings.builder()
+            writer.addDocument(document);
+        );
+        assertBusy(() -> {
+        assertEquals(0, recoveryDiff.missing.size());
+        failedChunks.forEach(c -> {
+        final AtomicBoolean freed = new AtomicBoolean(true);
+        assertEquals(numDocs, reader.maxDoc());
+import org.opensearch.common.util.io.IOUtils;
+    }
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+import org.opensearch.index.seqno.SequenceNumbers;
+        Directory dir = store.directory();
+        });
+            }
+            files.add(md);
+        Store targetStore = newStore(createTempDir());
+        final int chunkSize = between(1, 16);
+                while (iterator.hasNext()) {
+            shard,
+                maxConcurrentChunks - (sentChunks.get() - 1 - checkpoint)
+        handler.sendFiles(
+import java.util.concurrent.Executor;
+            @Override
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
+                    listener.onFailure(new RuntimeException("test - failed to index"));
+                StoreFileMetadata md,
+import org.opensearch.index.IndexSettings;
+            assertEquals(ex.getMessage(), "boom");
+        assertFalse(prepareTargetForTranslogCalled.get());
+        int numOps = randomIntBetween(0, 1000);
+            ) {
+            return null;
+    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(
+                assertThat(receivedTotalOps, equalTo(numOps));
+        final IndexShardRoutingTable routingTable = mock(IndexShardRoutingTable.class);
+        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
+        for (int i = 0; i < numFiles; i++) {
+        };
+            public void receiveFileInfo(
+                }
+            }
+                    cancelRecovery.get().run();
+        verify(routingTable, times(5)).getByAllocationId(null);
+import java.nio.charset.StandardCharsets;
+        if (throwCorruptedIndexException) {
+                RetentionLeases retentionLeases,
+            final Engine.Index index = getIndex(Integer.toString(i));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+            newTranslogSnapshot(ops, Collections.emptyList()),
+    private Store newStore(Path path) throws IOException {
+import org.opensearch.common.SetOnce;
+            baseDirectoryWrapper.setCheckIndexOnClose(false); // don't run checkindex we might corrupt the index in these tests
+            long localCheckpointOnTarget = randomValueOtherThan(
+            final Engine.Index index = getIndex(Integer.toString(i));
+        when(shard.acquireSafeIndexCommit()).thenReturn(mock(GatedCloseable.class));
+            new LatchedActionListener<>(ActionListener.wrap(r -> sendFilesError.set(null), e -> sendFilesError.set(e)), latch)
+            threadPool,
+    private List<StoreFileMetadata> generateFiles(Store store, int numFiles, IntSupplier fileSizeSupplier) throws IOException {
+    private Store newStore(Path path, boolean checkIndex) throws IOException {
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+import java.util.ArrayList;
+            );
+            ActionListener<Void> listener
+            void createRetentionLease(long startingSeqNo, ActionListener<RetentionLease> listener) {
+                    maxSeqNoOfUpdatesOrDeletes,
+        final Field idField = new Field("_id", Uid.encodeId(id), IdFieldMapper.Defaults.FIELD_TYPE);
+                buffer.length + 8,
+            final RetentionLeases retentionLeases,
+    Tests when the replica allocation id is  reflected in source nodes routing table even after 1 retry
+        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
+            List<Long> phase1ExistingFileSizes,
+            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
+                IntSupplier translogOps,
+            ) throws IOException {
+            public void writeFileChunk(
+            randomNonNegativeLong(),
+    private final ClusterSettings service = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        }
+        assertTrue(
+        when(shard.isRelocatedPrimary()).thenReturn(true);
+            between(1, 5)
+                    maxSeqNoOfUpdatesOrDeletes,
+                ActionListener<Void> listener
+        final BytesReference source = new BytesArray(new byte[] { 1 });
+            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
+package org.opensearch.indices.recovery;
+        RecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+        });
+                long position,
+        final List<Translog.Operation> operations = new ArrayList<>();
+        store.close();
+        long startingSeqNo = randomIntBetween(0, 1000);
+                super.phase2(
+        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
+        };
+    public void testSendSnapshotStopOnError() throws Exception {
+                sentChunks.incrementAndGet();
+            mock(RecoveryTargetHandler.class),
+        Store.MetadataSnapshot metadata = store.getMetadata();
+    public void setUpThreadPool() {
+            }
+        }
+            }
+            for (int i = 0; i < ackedChunks.size(); i++) {
+        final ShardRouting shardRouting = mock(ShardRouting.class);
+            .sorted(Comparator.comparing(Translog.Operation::seqNo))
+            int totalTranslogOps,
+                int totalTranslogOps,
+import org.apache.lucene.index.DirectoryReader;
+        doAnswer(invocation -> {
+                maxSeqNo,
+        assertThat(sendFilesError.get(), instanceOf(IOException.class));
+        writer.close();
+            return null;
+        terminate(threadPool);
+            shard,
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.action.StepListener;
+        });
+import org.opensearch.index.shard.IndexShardState;
+                long endingSeqNo,
+        );
+import java.util.HashMap;
+        final int fileChunkSizeInBytes = between(1, 4096);
+            List<String> phase1ExistingFileNames,
+        final long startingSeqNo = randomIntBetween(0, numberOfDocsWithValidSequenceNumbers - 1);
+        return files;
+            List<Long> phase1FileSizes,
+        when(shard.state()).thenReturn(IndexShardState.STARTED);
+        Directory dir = store.directory();
+                    localCheckpoint.addAndGet(randomIntBetween(1, 100));
+                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
+        }
+    }
+            mock(RecoveryTargetHandler.class),
+        if (randomBoolean()) {
+        }
+        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
+                totalChunks - sentChunks.get(),                             // limited by the remaining chunks
+                boolean skipCreateRetentionLeaseStep
+    public void testSendSnapshotSendsOps() throws IOException {
+            ops.add(new Translog.Index(index, new Engine.IndexResult(1, 1, i, true)));
+                    maxSeenAutoIdTimestamp,
+            @Override
+                int totalTranslogOps,
+                long startingSeqNo,
+        final long endingSeqNo = randomLongBetween(startingSeqNo, ops.size() - 1L);
+            randomBoolean(),
+        assertThat(sendSnapshotResult.targetLocalCheckpoint, equalTo(localCheckpoint.get()));
+        return new Store.MetadataSnapshot(Collections.emptyMap(), userData, numDocs);
+            final Translog.Operation op;
+                if (randomBoolean()) {
+            writer.addDocument(document);
+            int totalTranslogOps,
+            getStartRecoveryRequest(),
+    }
+            userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, localCheckpoint);
+            future.actionGet();
+                ActionListener<Long> listener
+            new LatchedActionListener<>(ActionListener.wrap(r -> sendFilesError.set(null), e -> sendFilesError.set(e)), sendFilesLatch)
+            request,
+                return skippedCount;
+        Set<Long> receivedSeqNos = ConcurrentCollections.newConcurrentSet();
+                    startingSeqNo,
+                ActionListener<Void> listener
+        );
+                    listener.onFailure(new RuntimeException(new CorruptIndexException("foo", "bar")));
+                        skippedCount++;
+     */
+            sendFuture
+                super.phase2(
+    }
+    public void testTargetInRoutingInSecondAttempt() throws IOException {
+            c.listener.onFailure(new IllegalStateException("test chunk exception"));
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        final ParseContext.Document document = new ParseContext.Document();
+import org.opensearch.common.settings.Settings;
+        final SeqNoFieldMapper.SequenceIDFields seqID = SeqNoFieldMapper.SequenceIDFields.emptySeqID();
+import org.opensearch.test.CorruptionUtils;
+            assertThat(error.getMessage(), equalTo("Phase[2] failed to send/replay operations"));
+        final StepListener<RecoverySourceHandler.SendFileResult> phase1Listener = new StepListener<>();
+        }
+    private Executor recoveryExecutor;
+        SetOnce<Exception> sendFilesError = new SetOnce<>();
+import org.apache.lucene.index.CorruptIndexException;
+                long mappingVersion,
+    }
+        );
+            @Override
+                CatalogSnapshot snapshot,
+            }
+ */
+                ActionListener<SendFileResult> listener,
+    public void testHandleExceptionOnSendFiles() throws Throwable {
+            }
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+            int totalTranslogOps,
+            public void cleanFiles(
+        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
+ * specific language governing permissions and limitations
+                    mappingVersion,
+            public Translog.Operation next() {
+                }
+            between(1, 10)
+        when(mockShard.shardId()).thenReturn(new ShardId("testIndex", "testUUID", 0));
+                long maxSeenAutoIdTimestamp,
+            } else {
+                ActionListener.completeWith(listener, () -> {
+            @Override
+        }
+            });
+        assertThat("no more chunks should be sent", sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks)));
+            @Override
+                StoreFileMetadata md,
+        doAnswer(invocation -> {
+            public void writeFileChunk(
+            void prepareTargetForTranslog(int totalTranslogOps, ActionListener<TimeValue> listener) {
+import org.opensearch.threadpool.TestThreadPool;
+            between(1, 4),
+            source,
+                long timestamp,
+                int totalTranslogOps,
+        unrepliedChunks.forEach(c -> {
+                    listener.onResponse(SequenceNumbers.NO_OPS_PERFORMED);
+                Collections.singletonMap(Engine.HISTORY_UUID_KEY, UUIDs.randomBase64UUID()),
+        final CancellableThreads cancellableThreads = new CancellableThreads();
+            .put("indices.recovery.concurrent_streams", 1)
+            request,
+        final AtomicBoolean phase1Called = new AtomicBoolean();
+        IndexReader reader = DirectoryReader.open(targetStore.directory());
+        Path tempDir = createTempDir();
+        Map<String, String> userData = new HashMap<>();
+    }
+                int totalTranslogOps,
+            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+            threadPool,
+            between(1, 4)
+            @Override
+        assertFalse(prepareTargetForTranslogCalled.get());
+public class LocalStorePeerRecoverySourceHandlerTests extends OpenSearchTestCase {
+        final List<FileChunkResponse> unrepliedChunks = new CopyOnWriteArrayList<>();
+            }
+                false
+                }
+        Directory dir = store.directory();
+                assertThat(receivedMappingVersion, equalTo(mappingVersion));
+            between(1, 8)
+                Translog.Snapshot snapshot,
+            if (startingSeqNo <= op.seqNo() && op.seqNo() <= endingSeqNo && skipOperations.contains(op) == false) {
+                logger.info("--> write chunk name={} seq={}, position={}", md.name(), chunkNumber, position);
+import org.apache.lucene.index.IndexReader;
+        );
+                BytesReference content,
+        assertThat(result.targetLocalCheckpoint, equalTo(checkpointOnTarget.get()));
+        store.close();
+        }
+        verify(routingTable, times(2)).getByAllocationId(null);
+                ActionListener<Long> listener
+            digest.update(buffer, 0, buffer.length);
+                final long chunkNumber = chunkNumberGenerator.getAndIncrement();
+        ) {}
+        final int initialNumberOfDocs = randomIntBetween(10, 1000);
+                long position,
+                long mappingVersion,
+        final IndexShard shard = mock(IndexShard.class);
+            public void writeFileChunk(
+            }
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        handler.sendFiles(store, metas.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        };
+            assertThat(sortedShippedOps.get(i), equalTo(operations.get(i + (int) startingSeqNo + initialNumberOfDocs)));
+    private final ShardId shardId = new ShardId(INDEX_SETTINGS.getIndex(), 1);
+            ); // limited by the buffering chunks
+            fileChunkSizeInBytes,
+                boolean lastChunk,
+                boolean lastChunk,
+import org.opensearch.common.Randomness;
+        when(shard.getRetentionLeases()).thenReturn(mock(RetentionLeases.class));
+                int totalTranslogOps,
+        final AtomicBoolean prepareTargetForTranslogCalled = new AtomicBoolean();
+            shard,
+        assertTrue(received.get());
+            } else if (randomBoolean()) {
+            }
+            endingSeqNo,
+ * The OpenSearch Contributors require contributions made to
+                long mappingVersion,
+        final AtomicBoolean phase2Called = new AtomicBoolean();
+/*
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+        writer.commit();
+                    .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID(random()))
+import static org.mockito.Mockito.times;
+import java.util.Comparator;
+        );
+        expectThrows(DelayRecoveryException.class, () -> {
+        final AtomicBoolean phase2Called = new AtomicBoolean();
+            seqID,
+import static org.hamcrest.Matchers.equalTo;
+            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
+            between(1, 8)
+import org.opensearch.core.index.shard.ShardId;
+                long startingSeqNo,
+        IndexShard shard = mock(IndexShard.class);
+import static org.mockito.Mockito.verify;
+                boolean skipCreateRetentionLeaseStep
+                ActionListener<SendFileResult> listener,
+            randomNonNegativeLong(),
+        when(shard.state()).thenReturn(IndexShardState.STARTED);
+                boolean skipCreateRetentionLeaseStep
+ * this file be licensed under the Apache-2.0 license or a
+ * Unless required by applicable law or agreed to in writing,
+        for (int i = 0; i < numOps; i++) {
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+        userData.put(Engine.SYNC_COMMIT_ID, syncId);
+/*
+        assertThat(shippedOps.size(), equalTo(expectedOps));
+        }
+ * This covers test cases for {@link RecoverySourceHandler} and {@link LocalStorePeerRecoverySourceHandler}.
+        public void prepareForTranslogOperations(int totalTranslogOps, ActionListener<Void> listener) {}
+                if (randomBoolean()) {
+            new AsyncRecoveryTarget(target, recoveryExecutor),
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        handler.phase2(
+            shard,
+                return operations.size();
+import org.apache.lucene.store.IOContext;
+                    listener
+ * Licensed to Elasticsearch under one or more contributor
+                List<Long> phase1FileSizes,
+            public void writeFileChunk(
+                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs),
+        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
+                ActionListener<SendSnapshotResult> listener
+            handler.recoverToTarget(future);
+        final ActionListener<Void> listener;
+        final long startingSeqNo = randomLongBetween(0, ops.size() - 1L);
+        Store store = newStore(createTempDir("source"), false);
+import java.util.concurrent.CopyOnWriteArrayList;
+            between(1, 16),
+            @Override
+import org.apache.lucene.store.Directory;
+            return null;
+                phase1Called.set(true);
+import org.apache.lucene.index.Term;
+            List<String> phase1FileNames,
+        }
+            assertNotNull(unwrappedCorruption);
+                newMetadataSnapshot(syncId, Long.toString(localCheckpointOnTarget), Long.toString(maxSeqNoOnTarget), numDocs)
+    }
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
+            between(1, 4),
+        }
+            final Engine.Index index = getIndex(Integer.toString(i));
+import java.util.concurrent.atomic.AtomicInteger;
+            assertThat(error.getCause().getMessage(), equalTo("test - failed to index"));
+            Document document = new Document();
+                int totalTranslogOps,
+    private static List<Translog.Operation> generateOperations(int numOps) {
+                BytesReference content,
+            threadPool,
+                long startingSeqNo,
+                    wasCancelled.set(true);
+            luceneIndex.addFileDetail(md.name(), md.length(), false);
+            ) throws IOException {
+import org.opensearch.common.unit.TimeValue;
+            return null;
+        try {
+                IntSupplier translogOps,
+import org.opensearch.test.DummyShardLock;
+        assertThat(sendFilesError.get(), instanceOf(IllegalStateException.class));
+ *
+    }
+                RetentionLeases retentionLeases,
+            try (OutputStream out = new IndexOutputOutputStream(store.createVerifyingOutput(md.name(), md, IOContext.DEFAULT))) {
+                op = new Translog.NoOp(seqNo, randomNonNegativeLong(), "test");
+        for (Translog.Operation op : operations) {
+        }
+        assertThat(error.getMessage(), containsString("try to recover [index][1] with sync id but seq_no stats are mismatched:"));
+            failedEngine.set(true);
+import org.opensearch.common.lucene.store.IndexOutputOutputStream;
+        AtomicLong localCheckpoint = new AtomicLong(SequenceNumbers.NO_OPS_PERFORMED);
+                op = new Translog.Index("id", seqNo, randomNonNegativeLong(), randomNonNegativeLong(), source, null, -1);
+                prepareTargetForTranslogCalled.set(true);
+            }
+import org.opensearch.index.engine.exec.coord.SegmentInfosCatalogSnapshot;
+                List<Translog.Operation> operations,
+            mockShard,
+            between(1, 4)
+        final IndexShard shard = mock(IndexShard.class);
+            request,
+        writer.commit();
+                phase1Called.set(true);
+                    checkpoint = i;
+            ) {
+        final int fileChunkSizeInBytes = between(1, 10 * 1024);
+            store.directory().sync(Collections.singleton(md.name()));
+                sentChunks.incrementAndGet();
+            // verify that both sending and receiving files can be completed with a single thread
+                int totalTranslogOps,
+            threadPool,
         @Override
-        public void indexTranslogOperations(
-            final List<Translog.Operation> operations,
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        cancelRecovery.set(() -> handler.cancel("test"));
+        for (int i = 0; i < initialNumberOfDocs; i++) {
+            public void indexTranslogOperations(
+            MediaTypeRegistry.JSON,
+import org.opensearch.Version;
+        };
+            RunUnderPrimaryPermit.run(() -> {}, "test", shard, cancellableThreads, logger);
+        int numDocs = randomIntBetween(10, 100);
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
+        final Queue<Translog.Operation> shippedOps = ConcurrentCollections.newQueue();
+            public void writeFileChunk(
+            assertFalse(failedEngine.get());
+        Iterator<Translog.Operation> iterator = operations.iterator();
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+                    Translog.Operation op = iterator.next();
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+                );
+                    wasCancelled.set(true);
+            threadPool,
+            final long seqNo = randomValueOtherThanMany(n -> seqNos.add(n) == false, OpenSearchTestCase::randomNonNegativeLong);
+        failedEngine.get();
+        when(shardRouting.initializing()).thenReturn(true);
+        handler.phase2(
+            startingSeqNo,
+import org.opensearch.index.seqno.RetentionLease;
+            public void writeFileChunk(
+        Randomness.shuffle(operations);
+                Collections.emptyMap(),
+            final RecoveryEngineException error = expectThrows(RecoveryEngineException.class, future::actionGet);
+            }
+import java.util.concurrent.CountDownLatch;
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+        document.add(new TextField("test", "test", Field.Store.YES));
+            snapshot,
+        document.add(seqID.primaryTerm);
+            final ActionListener<Long> listener
+            luceneIndex.addFileDetail(md.name(), md.length(), false);
+                List<String> phase1FileNames,
+                boolean lastChunk,
+        assertEquals(metas.size(), recoveryDiff.identical.size());
+        SetOnce<Exception> sendFilesError = new SetOnce<>();
+import org.opensearch.cluster.node.DiscoveryNode;
+        final ParsedDocument doc = new ParsedDocument(
+            }
+        return new Engine.Index(new Term("_id", Uid.encodeId(doc.id())), randomNonNegativeLong(), doc);
+        };
+                List<Translog.Operation> operations,
+                    listener
+    }
+            public void indexTranslogOperations(
+import java.util.zip.CRC32;
+import java.util.Map;
+import org.opensearch.indices.RunUnderPrimaryPermit;
+                }
+            files.toArray(new StoreFileMetadata[0]),
+import org.opensearch.action.support.PlainActionFuture;
+import static org.hamcrest.Matchers.containsString;
+        } catch (CancellableThreads.ExecutionCancelledException e) {
+import org.opensearch.index.shard.IndexShard;
+            }
+ *
+                BytesReference content,
+                long startingSeqNo,
+            @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                long maxSeenAutoIdTimestamp,
+    }
+            writer.addDocument(document);
+        BaseDirectoryWrapper baseDirectoryWrapper = LocalStorePeerRecoverySourceHandlerTests.newFSDirectory(path);
+            // expected.
+            between(1, 5)
+            }
+}
+            store,
+import org.opensearch.threadpool.FixedExecutorBuilder;
+                () -> randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE)
+            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+                long position,
+        return newStore(path, true);
+        RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        final TestRecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+                assertThat(unrepliedChunks, hasSize(expectedUnrepliedChunks));
+            phase1Listener.result();
+                    multiFileWriter.writeFileChunk(md, position, content, lastChunk);
+        RecoverySourceHandler.SendSnapshotResult sendSnapshotResult = sendFuture.actionGet();
+    public void testCancelRecoveryDuringPhase1() throws Exception {
+        final List<Translog.Operation> ops = new ArrayList<>();
+ * not use this file except in compliance with the License.
+            return null;
+                ActionListener<Void> listener
+import java.util.List;
+        Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, org.opensearch.Version.CURRENT).build()
+                phase2Called.set(true);
+                long msu,
+                    maxSeenAutoIdTimestamp,
+import static org.mockito.Mockito.when;
+        });
+        }).when(shard).acquirePrimaryOperationPermit(any(), anyString(), any());
+        final org.opensearch.index.shard.ReplicationGroup replicationGroup = mock(org.opensearch.index.shard.ReplicationGroup.class);
+        IOUtils.close(store, multiFileWriter, targetStore);
+                    wasFailed.set(true);
+            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
+        IndexShard shard = mock(IndexShard.class);
+            threadPool,
+                        leaseId,
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+                long endingSeqNo,
+                long position,
+        assertNotNull(ExceptionsHelper.unwrapCorruption(sendFilesError.get()));
+            randomNonNegativeLong(),
+        IOUtils.close(reader, store, multiFileWriter, targetStore);
+                RetentionLeases retentionLeases,
+            () -> 0,
+                long maxSeqNoOfUpdatesOrDeletes,
+        unrepliedChunks.removeAll(failedChunks);
+            future
+                } else {
+            shard,
+            mockShard,
+                CatalogSnapshot snapshot,
+        ) {
+            }
+                    endingSeqNo,
+                tempDir,
+            new AsyncRecoveryTarget(target, recoveryExecutor),
+            FileSystemUtils.files(
+                long receivedMaxSeenAutoIdTimestamp,
+        handler.sendFiles(store, metas.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
+import org.opensearch.index.engine.Engine;
+                int totalTranslogOps,
+        if (randomBoolean()) {
+                    maxSeqNoOfUpdatesOrDeletes,
+        );
+        @Override
+        final long chunkNumber;
+                Store.MetadataSnapshot sourceMetadata,
+            );
+                listener.onResponse(checkpointOnTarget.get());
+        List<Translog.Operation> skipOperations = randomSubsetOf(operations);
+        );
+            maxConcurrentChunks,
+        int numDocs = randomIntBetween(10, 100);
+            recoveryExecutor = threadPool.generic();
+            );
+        latch.await();
+        Store.MetadataSnapshot metadata = store.getMetadata();
+            @Override
+        for (int i = 0; i < shippedOps.size(); i++) {
+            ) {
+    }
+                ActionListener<SendSnapshotResult> listener
+                RetentionLeases retentionLeases,
+ * under the License.
+        List<StoreFileMetadata> files = generateFiles(store, between(1, 10), () -> between(1, chunkSize * 20));
+                    snapshot,
+                CatalogSnapshot snapshot,
+            @Override
+            between(1, 4)
+                        ReplicationTracker.PEER_RECOVERY_RETENTION_LEASE_SOURCE
+import org.apache.lucene.document.TextField;
+    public void testCancellationsDoesNotLeakPrimaryPermits() throws Exception {
+import org.opensearch.core.util.FileSystemUtils;
+                        startingSeqNo,
+                assertThat(receivedRetentionLease, equalTo(retentionLeases));
+                        return op;
+                List<String> phase1ExistingFileNames,
+import org.opensearch.index.store.Store;
+                BytesReference content,
+        when(shard.segmentStats(anyBoolean(), anyBoolean())).thenReturn(mock(SegmentsStats.class));
+                boolean lastChunk,
+        List<StoreFileMetadata> metas = new ArrayList<>();
+        document.add(seqID.seqNoDocValue);
+                Translog.Snapshot snapshot,
+        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
+        when(shard.indexSettings()).thenReturn(new IndexSettings(indexMetadata.build(), Settings.EMPTY));
+            recoveryTarget,
+        long endingSeqNo = startingSeqNo + randomIntBetween(0, 10000);
+        RecoveryTargetHandler recoveryTarget = new TestRecoveryTargetHandler() {
+        cancelingThread.start();
+            .put("indices.recovery.concurrent_small_file_streams", 1)
+            startingSeqNo,
+                }
+            shardId,
+    public void testHandleCorruptedIndexOnSendSendFiles() throws Throwable {
+            handler.recoverToTarget(future);
+            randomNonNegativeLong(),
+            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
+        when(shard.state()).thenReturn(IndexShardState.STARTED);
+                    mappingVersion,
+                long mappingVersion,
+                () -> 0,
+            latch.await();
+                    new RetentionLease(
+            freed.set(false);
+    @After
+        writer.commit();
+import static java.util.Collections.emptyMap;
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+                logger.info("--> write chunk name={} seq={}, position={}", md.name(), chunkNumber, position);
+            store,
+            request,
+            @Override
+            recoveryExecutor = threadPool.executor("recovery_executor");
+            threadPool,
+            new AsyncRecoveryTarget(target, recoveryExecutor),
+                if (randomBoolean()) {
+import static org.mockito.Mockito.anyBoolean;
+import org.apache.lucene.tests.store.BaseDirectoryWrapper;
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
+import java.util.HashSet;
+        }
+        public void writeFileChunk(
+            final long msu,
+import org.opensearch.test.OpenSearchTestCase;
+        public void finalizeRecovery(long globalCheckpoint, long trimAboveSeqNo, ActionListener<Void> listener) {}
+            long globalCheckpoint,
+            between(1, 10 * 1024),
+            StoreFileMetadata md = new StoreFileMetadata(
+            );
+                if (rarely()) {
+                super.prepareTargetForTranslog(totalTranslogOps, listener);
+            document.add(newField("field", randomUnicodeOfCodepointLengthBetween(1, 10), TextField.TYPE_STORED));
+        final IndexShard shard = mock(IndexShard.class);
+        // ensure all chunk requests have been completed; otherwise some files on the target are left open.
+            indexMetadata.state(IndexMetadata.State.CLOSE);
+                    snapshot,
+                localCheckpoint,
+            future
+            metas.add(md);
+            StoreFileMetadata fileMetadata,
+        when(shard.isRelocatedPrimary()).thenReturn(false);
+        handler.waitForAssignmentPropagate(new SetOnce<>());
+                });
+            final AtomicLong chunkNumberGenerator = new AtomicLong();
+        for (int i = 0; i < numDocs; i++) {
+            assertFalse(failedEngine.get());
+            metas.add(md);
+                super.phase1(snapshot, startingSeqNo, translogOps, listener, skipCreateRetentionLeaseStep);
+        handler.sendFiles(store, files.toArray(new StoreFileMetadata[0]), () -> 0, sendFilesFuture);
+            ActionListener<Void> listener
+                listener.onResponse(localCheckpoint.get());
+            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> {});
+            );
+        assertThat(sendSnapshotResult.sentOperations, equalTo(receivedSeqNos.size()));
+                StoreFileMetadata md,
+        @Override
+            request,
+                ActionListener<SendFileResult> listener,
+import static org.hamcrest.Matchers.instanceOf;
+        when(shard.isRelocatedPrimary()).thenReturn(false);
+        List<StoreFileMetadata> files = new ArrayList<>();
+import java.util.stream.Collectors;
+            byte[] buffer = randomByteArrayOfLength(fileSizeSupplier.getAsInt());
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+            chunksToAck.forEach(c -> c.listener.onResponse(null));
+                final String leaseId = ReplicationTracker.getPeerRecoveryRetentionLeaseId(startRecoveryRequest.targetNode().getId());
+        final int chunkSize = between(1, 32);
+        writer.close();
+                    retentionLeases,
+        Store store = newStore(tempDir, false);
+            }
+    }
+            chunkSize,
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
+            between(1, 10),
+                IntSupplier translogOps,
+        when(shardRouting.currentNodeId()).thenReturn("node");
+    }
+            threadPool,
+                Settings.builder()
+        document.add(versionField);
+            threadPool = new TestThreadPool(getTestName());
+            id,
+            getStartRecoveryRequest(),
+            }
+        when(shard.seqNoStats()).thenReturn(mock(SeqNoStats.class));
+                    } else {
+            userData.put(SequenceNumbers.LOCAL_CHECKPOINT_KEY, maxSeqNo);
+            }
+                    wasCancelled.set(true);
+        );
+                assertThat(receivedMaxSeqNoOfUpdatesOrDeletes, equalTo(maxSeqNoOfUpdatesOrDeletes));
+            .settings(
+                assertThat(receivedMaxSeenAutoIdTimestamp, equalTo(maxSeenAutoIdTimestamp));
+                if (throwCorruptedIndexException) {
+            int expectedUnrepliedChunks = unrepliedChunks.size() + chunksToSend;
+            Store.MetadataSnapshot sourceMetadata,
+import org.opensearch.core.common.bytes.BytesReference;
+        ) {}
+                    retentionLeases,
+                ActionListener<Void> listener
+                new LatchedActionListener<>(phase1Listener, latch),
+        int totalChunks = files.stream().mapToInt(md -> ((int) md.length() + chunkSize - 1) / chunkSize).sum();
+            operations.add(new Translog.Index(index, new Engine.IndexResult(1, 1, SequenceNumbers.UNASSIGNED_SEQ_NO, true)));
+            public void indexTranslogOperations(
+            shard,
+import static org.mockito.Mockito.anyString;
+        final RecoverySettings recoverySettings = new RecoverySettings(settings, service);
+            public void close() {
+        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
+            @Override
+                    maxSeenAutoIdTimestamp,
+    public void testSendFiles() throws Throwable {
+            indexMetadata.state(IndexMetadata.State.CLOSE);
+            @Override
+        final int maxConcurrentChunks = between(1, 4);
+            );
+import org.opensearch.index.engine.RecoveryEngineException;
+        Store targetStore = newStore(createTempDir(), false);
+    }
+        List<Translog.Operation> sortedShippedOps = shippedOps.stream()
+                RetentionLeases retentionLeases,
+        } catch (Exception e) {
+        }
+    }
+                recoveryExecutor.execute(() -> listener.onResponse(null));
+                unrepliedChunks.add(new FileChunkResponse(chunkNumber, listener));
+        final IndexShard shard = mock(IndexShard.class);
+        }
+        final int maxConcurrentChunks = between(1, 8);
+        }
+            );
+        when(routingTable.getByAllocationId(anyString())).thenReturn(null);
+        ) {
+import java.util.Set;
+            recoveryTarget,
+        CountDownLatch replyLatch = new CountDownLatch(failedChunks.size());
+            Document document = new Document();
+        Thread cancelingThread = new Thread(() -> cancellableThreads.cancel("test"));
+                    snapshot,
+import static java.util.Collections.emptySet;
+            () -> 0,
+            ((ActionListener<Releasable>) invocation.getArguments()[0]).onResponse(() -> freed.set(true));
+import org.opensearch.index.seqno.SeqNoStats;
+                "test-" + i,
+    }
+            versionField,
+                Translog.Snapshot snapshot,
+                } else {
+        when(shard.getReplicationGroup()).thenReturn(replicationGroup);
+        return new Translog.Snapshot() {
+            : new Store.MetadataSnapshot(
+            fileChunkSizeInBytes,
+        return new StartRecoveryRequest(
+    */
+import org.opensearch.index.mapper.ParseContext;
+        final List<Translog.Operation> operations = new ArrayList<>(numOps);
+        @Override
+import org.opensearch.index.shard.IndexShardRelocatedException;
+        ReplicationLuceneIndex luceneIndex = new ReplicationLuceneIndex();
+        ) {
+                ActionListener<Void> listener
+            ) {
+        when(replicationGroup.getRoutingTable()).thenReturn(routingTable);
+            .collect(Collectors.toList());
+        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
+        final AtomicBoolean phase1Called = new AtomicBoolean();
+                StoreFileMetadata md,
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, between(0, 5))
+            RetentionLeases.EMPTY,
+            int skippedCount = 0;
+        @Override
+import static org.mockito.Mockito.mock;
+            ) {
+        } else {
+            threadPool,
+            ) {
+        long maxSeqNo = randomLongBetween(SequenceNumbers.NO_OPS_PERFORMED, Long.MAX_VALUE);
+        }
+        assertFalse(phase1Called.get());
+        final IndexShard shard = mock(IndexShard.class);
+ */
+import java.util.Queue;
+            replyLatch.countDown();
+            Document document = new Document();
+        Store store = newStore(createTempDir());
+        List<FileChunkResponse> ackedChunks = new ArrayList<>();
+        CountDownLatch sendFilesLatch = new CountDownLatch(1);
+    public void testSendFileChunksStopOnError() throws Exception {
+            assertThat(sentChunks.get(), equalTo(Math.min(totalChunks, maxConcurrentChunks)));
+                );
+                recoveryExecutor.execute(() -> listener.onResponse(null));
+                }
+        final RecoverySourceHandler handler = new LocalStorePeerRecoverySourceHandler(
+        RecoveryTargetHandler target = new TestRecoveryTargetHandler() {
+            ) {
+/*
+        List<FileChunkResponse> failedChunks = randomSubsetOf(between(1, unrepliedChunks.size()), unrepliedChunks);
+                List<Long> phase1ExistingFileSizes,
+        try {
+                    .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, between(1, 5))
+            request,
+            public int skippedOperations() {
+ * software distributed under the License is distributed on an
+            }
+import org.opensearch.common.lucene.Lucene;
+        store.close();
+        List<Translog.Operation> operations = generateOperations(numOps);
+        };
+ * You may obtain a copy of the License at
+    public void testThrowExceptionOnPrimaryRelocatedBeforePhase1Started() throws IOException {
+    }
+import java.util.Iterator;
             final int totalTranslogOps,
             final long timestamp,
-            final long msu,
-            final RetentionLeases retentionLeases,
-            final long mappingVersion,
-            final ActionListener<Long> listener
-        ) {}
-
-        @Override
-        public void receiveFileInfo(
-            List<String> phase1FileNames,
-            List<Long> phase1FileSizes,
-            List<String> phase1ExistingFileNames,
-            List<Long> phase1ExistingFileSizes,
-            int totalTranslogOps,
-            ActionListener<Void> listener
-        ) {
-
+            threadPool,
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+                Settings.builder()
+        final StartRecoveryRequest request = getStartRecoveryRequest();
+                } else {
+            handler.canSkipPhase1(
+        doAnswer(invocation -> {
+                newMetadataSnapshot(syncId, Long.toString(localCheckpoint), Long.toString(maxSeqNo), numDocs)
+        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> future = new PlainActionFuture<>();
+            )
+                long position,
+            null,
         }
-
-        @Override
-        public void cleanFiles(
-            int totalTranslogOps,
-            long globalCheckpoint,
-            Store.MetadataSnapshot sourceMetadata,
-            ActionListener<Void> listener
-        ) {}
-
-        @Override
-        public void writeFileChunk(
-            StoreFileMetadata fileMetadata,
-            long position,
-            BytesReference content,
-            boolean lastChunk,
-            int totalTranslogOps,
-            ActionListener<Void> listener
-        ) {}
-    }
-
-    private Translog.Snapshot newTranslogSnapshot(List<Translog.Operation> operations, List<Translog.Operation> operationsToSkip) {
-        Iterator<Translog.Operation> iterator = operations.iterator();
-        return new Translog.Snapshot() {
-            int skippedCount = 0;
-
-            @Override
-            public int totalOperations() {
-                return operations.size();
+                super.prepareTargetForTranslog(totalTranslogOps, listener);
+        final IndexMetadata.Builder indexMetadata = IndexMetadata.builder("test")
+            metas.toArray(new StoreFileMetadata[0]),
+            final AtomicLong chunkNumberGenerator = new AtomicLong();
+            Document document = new Document();
+            between(1, 10),
+            chunkSize,
+                    break;
+        }
+                        threadPool.absoluteTimeInMillis(),
+                final long chunkNumber = chunkNumberGenerator.getAndIncrement();
+    public void tearDownThreadPool() {
+            assertNotNull(ExceptionsHelper.unwrap(e, CancellableThreads.ExecutionCancelledException.class));
+        Settings settings = Settings.builder()
+            assertNull(unwrappedCorruption);
+        for (int i = 0; i < numDocs; i++) {
+                    listener.onFailure(new RuntimeException("boom"));
+                    mappingVersion,
+import org.opensearch.indices.replication.common.ReplicationLuceneIndex;
+        CorruptionUtils.corruptFile(
+import org.opensearch.ExceptionsHelper;
+                long globalCheckpoint,
+        Exception ex = expectThrows(Exception.class, sendFilesFuture::actionGet);
+        expectThrows(IndexShardRelocatedException.class, () -> {
+        }
+                int totalTranslogOps,
+        AssertionError error = expectThrows(AssertionError.class, () -> {
+        handler.phase2(
+            new DiscoveryNode("b", buildNewFakeTransportAddress(), emptyMap(), emptySet(), Version.CURRENT),
+            between(1, 8)
+                StoreFileMetadata md,
+            endingSeqNo,
+        PlainActionFuture<Void> sendFilesFuture = new PlainActionFuture<>();
+        assertThat(sendFilesError.get().getMessage(), containsString("test chunk exception"));
             }
-
-            @Override
-            public int skippedOperations() {
-                return skippedCount;
-            }
-
-            @Override
-            public Translog.Operation next() {
-                while (iterator.hasNext()) {
-                    Translog.Operation op = iterator.next();
-                    if (operationsToSkip.contains(op)) {
-                        skippedCount++;
-                    } else {
-                        return op;
-                    }
-                }
-                return null;
-            }
-
-            @Override
-            public void close() {
-
-            }
+            int checkpoint = -1;
         };
-    }
-
-    private static List<Translog.Operation> generateOperations(int numOps) {
-        final List<Translog.Operation> operations = new ArrayList<>(numOps);
-        final byte[] source = "{}".getBytes(StandardCharsets.UTF_8);
-        final Set<Long> seqNos = new HashSet<>();
-        for (int i = 0; i < numOps; i++) {
-            final long seqNo = randomValueOtherThanMany(n -> seqNos.add(n) == false, OpenSearchTestCase::randomNonNegativeLong);
-            final Translog.Operation op;
-            if (randomBoolean()) {
-                op = new Translog.Index("id", seqNo, randomNonNegativeLong(), randomNonNegativeLong(), source, null, -1);
-            } else if (randomBoolean()) {
-                op = new Translog.Delete("id", seqNo, randomNonNegativeLong(), randomNonNegativeLong());
-            } else {
-                op = new Translog.NoOp(seqNo, randomNonNegativeLong(), "test");
-            }
-            operations.add(op);
+            new AsyncRecoveryTarget(recoveryTarget, threadPool.generic()),
+        ) {
+                return null;
+import org.opensearch.index.engine.exec.coord.CatalogSnapshot;
+                if (i != ackedChunks.get(i).chunkNumber) {
         }
-        return operations;
+            Math.toIntExact(recoverySettings.getChunkSize().getBytes()),
+        writer.commit();
+import org.opensearch.cluster.routing.ShardRouting;
+            }
+    private ThreadPool threadPool;
+import org.opensearch.core.common.bytes.BytesArray;
+            getStartRecoveryRequest(),
+        IOUtils.close(() -> terminate(threadPool), () -> threadPool = null);
     }
-}
+import org.apache.lucene.document.Field;
+    private Store.MetadataSnapshot newMetadataSnapshot(String syncId, String localCheckpoint, String maxSeqNo, int numDocs) {
+        sendFilesFuture.actionGet();
+                super.prepareTargetForTranslog(totalTranslogOps, listener);
+                long position,
+ */
+            shard,
+            shard,
+            @Override
+                long maxSeqNoOfUpdatesOrDeletes,
+        when(mockShard.shardId()).thenReturn(new ShardId("testIndex", "testUUID", 0));
+                prepareTargetForTranslogCalled.set(true);
+                randomIntBetween(0, 100)
+            writer.addDocument(document);
+        final RecoverySettings recoverySettings = new RecoverySettings(Settings.EMPTY, service);
+        @Override
+            between(1, 16),
+import java.util.concurrent.atomic.AtomicBoolean;
+        writer.close();
+            startRecoveryRequest,
+                op = new Translog.Delete("id", seqNo, randomNonNegativeLong(), randomNonNegativeLong());
+            between(1, 10)
+            .settings(
+        RecoverySourceHandler.SendSnapshotResult result = future.actionGet();
+        if (checkIndex == false) {
+        if (maxSeqNo != null) {
+            assertEquals(ex.getMessage(), "[File corruption occurred on recovery but checksums are ok]");
+        when(shard.acquireSafeCatalogSnapshot()).thenReturn(mock(GatedCloseable.class));
+            @Override
+        int totalChunks = files.stream().mapToInt(md -> ((int) md.length() + chunkSize - 1) / chunkSize).sum();
+            .build();
+        for (StoreFileMetadata md : metadata) {
+            request,
+                listener.onResponse(
+                long timestamp,
+            document.add(new StringField("id", Integer.toString(i), Field.Store.YES));
+        long maxSeenAutoIdTimestamp = randomBoolean() ? -1 : randomNonNegativeLong();
+                Store.digestToString(digest.getValue()),
+            mappingVersion,
+            threadPool = new TestThreadPool(
+        assertFalse(phase2Called.get());
+    If the replica allocation id is not reflected in source nodes routing table even after retries,
+            this.listener = listener;
+                long mappingVersion,
+            handler.canSkipPhase1(
+        IOUtils.close(store);
+            retentionLeases,
+        for (int i = 0; i < numDocs; i++) {
+            future.actionGet();
+        );
+        );
+        Store.MetadataSnapshot metadataSnapshot = randomBoolean()
+                c.listener.onFailure(new RuntimeException("test"));
+        };
+                new FixedExecutorBuilder(Settings.EMPTY, "recovery_executor", between(1, 16), between(16, 128), "recovery_executor")
+            }
+            long maxSeqNoOnTarget = randomValueOtherThan(
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
+            new TestRecoveryTargetHandler(),
+            @Override
+        if (randomBoolean()) {
+        Path tempDir = createTempDir();
+            ) {
+            between(1, 5),
+    }
+        public void cleanFiles(
+    private Translog.Snapshot newTranslogSnapshot(List<Translog.Operation> operations, List<Translog.Operation> operationsToSkip) {
+            void phase2(
+            return null;
+import java.io.IOException;
+            }
+import org.opensearch.index.mapper.ParsedDocument;
+        for (int numOps = between(1, 256), i = 0; i < numOps; i++) {
+            maxSeenAutoIdTimestamp,
+import org.opensearch.index.mapper.IdFieldMapper;
+            .settings(
+        if (randomBoolean()) {
+ * compatible open source license.
+        final int numberOfDocsWithValidSequenceNumbers = randomIntBetween(10, 1000);
+        PlainActionFuture<RecoverySourceHandler.SendSnapshotResult> sendFuture = new PlainActionFuture<>();
+import java.nio.file.Path;
+        @Override
+        final IndexShard shard = mock(IndexShard.class);
+        }).when(mockShard).failShard(any(), any());
+                prepareTargetForTranslogCalled.set(true);
+import org.opensearch.test.VersionUtils;
+        final AtomicInteger sentChunks = new AtomicInteger();
+            void phase2(
+            new AsyncRecoveryTarget(recoveryTarget, recoveryExecutor),
+import org.opensearch.index.store.StoreFileMetadata;
+                    .put(IndexMetadata.SETTING_VERSION_CREATED, VersionUtils.randomVersion(random()))
+        RandomIndexWriter writer = new RandomIndexWriter(random(), dir, newIndexWriterConfig());
+            @Override
+    }
+            );

@@ -1,409 +1,379 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.indices.replication;
-
-import org.apache.lucene.store.FilterDirectory;
-import org.apache.lucene.util.Version;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.common.concurrent.GatedCloseable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.engine.InternalEngineFactory;
-import org.opensearch.index.engine.NRTReplicationEngineFactory;
-import org.opensearch.index.engine.dataformat.stub.MockCatalogSnapshot;
-import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
-import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
-import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexShardState;
-import org.opensearch.index.shard.RemoteStoreRefreshListenerTests.TestFilterDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory;
-import org.opensearch.index.store.RemoteSegmentStoreDirectory.UploadedSegmentMetadata;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.store.StoreFileMetadata;
-import org.opensearch.indices.recovery.RecoverySettings;
-import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.RemoteStoreMergedSegmentCheckpoint;
-import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
-import org.opensearch.indices.replication.common.ReplicationType;
-
-import java.io.IOException;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-
+                checkpoint.getCodec(),
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
-
-public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelReplicationTestCase {
-    private static final long REPLICATION_ID = 123L;
-    private RemoteStoreReplicationSource replicationSource;
-    private IndexShard primaryShard;
-
-    private IndexShard replicaShard;
-    private final Settings settings = Settings.builder()
-        .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
-        .put(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY, "my-repo")
-        .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "my-repo")
-        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
-        .build();
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        primaryShard = newStartedShard(true, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
-        indexDoc(primaryShard, "_doc", "1");
-        indexDoc(primaryShard, "_doc", "2");
-        primaryShard.refresh("test");
-        replicaShard = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        closeShardsWithRetry(primaryShard, replicaShard);
-        super.tearDown();
-    }
-
-    public void testGetCheckpointMetadata() throws ExecutionException, InterruptedException {
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
-        CheckpointInfoResponse response = res.get();
-        assert (response.getCheckpoint().equals(checkpoint));
-        assert (response.getMetadataMap().isEmpty() == false);
-    }
-
-    public void testGetCheckpointMetadataFailure() {
-        IndexShard mockShard = mock(IndexShard.class);
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        when(mockShard.getCatalogSnapshot()).thenThrow(new RuntimeException("test"));
-        assertThrows(RuntimeException.class, () -> {
-            replicationSource = new RemoteStoreReplicationSource(mockShard);
-            final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
-            replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
-            res.get();
-        });
-    }
-
-    /**
-     * Covers the DFA branch in {@link RemoteStoreReplicationSource#getCheckpointMetadata}:
-     * when the shard returns a non-{@code SegmentInfosCatalogSnapshot}, the source must
-     * resolve {@code Version.LATEST} and continue without throwing {@code ClassCastException}.
-     */
-    public void testGetCheckpointMetadataWithNonSegmentInfosCatalogSnapshot() throws Exception {
-        IndexShard mockShard = mock(IndexShard.class);
-        // Reuse real shard's remote store wiring so the ReplicationSource ctor succeeds.
-        buildIndexShardBehavior(mockShard, replicaShard);
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-
-        // Override the catalog snapshot with a non-SegmentInfos (DFA-style) stub.
-        MockCatalogSnapshot dfa = new MockCatalogSnapshot(1L, List.of(), new MockDataFormat("parquet", 0L, Set.of()));
-        when(mockShard.getCatalogSnapshot()).thenReturn(new GatedCloseable<>(dfa, () -> {}));
-        when(mockShard.state()).thenReturn(IndexShardState.RECOVERING);
-
-        replicationSource = new RemoteStoreReplicationSource(mockShard);
-        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
-        CheckpointInfoResponse response = res.get();
-        // Not-started + null metadata path returns empty response. The key is that this path
-        // is reached without the DFA-snapshot branch throwing ClassCastException.
-        assertNotNull(response);
-        assertTrue(response.getMetadataMap().isEmpty());
-    }
-
-    public void testGetSegmentFiles() throws ExecutionException, InterruptedException, IOException {
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        List<StoreFileMetadata> filesToFetch = primaryShard.getSegmentMetadataMap().values().stream().collect(Collectors.toList());
-        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getSegmentFiles(REPLICATION_ID, checkpoint, filesToFetch, replicaShard, (fileName, bytesRecovered) -> {}, res);
-        GetSegmentFilesResponse response = res.get();
-        assertEquals(response.files.size(), filesToFetch.size());
-        assertTrue(response.files.containsAll(filesToFetch));
-        closeShards(replicaShard);
-    }
-
-    public void testGetSegmentFilesAlreadyExists() throws IOException, InterruptedException {
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        List<StoreFileMetadata> filesToFetch = primaryShard.getSegmentMetadataMap().values().stream().collect(Collectors.toList());
-        CountDownLatch latch = new CountDownLatch(1);
-        try {
-            final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
-            replicationSource = new RemoteStoreReplicationSource(primaryShard);
-            replicationSource.getSegmentFiles(
-                REPLICATION_ID,
-                checkpoint,
-                filesToFetch,
-                primaryShard,
-                (fileName, bytesRecovered) -> {},
-                res
-            );
-            res.get();
-        } catch (AssertionError | ExecutionException ex) {
-            latch.countDown();
-            assertTrue(ex instanceof AssertionError);
-            assertTrue(ex.getMessage().startsWith("Local store already contains the file"));
-        }
-        latch.await();
-    }
-
-    public void testGetSegmentFilesReturnEmptyResponse() throws ExecutionException, InterruptedException {
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getSegmentFiles(
-            REPLICATION_ID,
-            checkpoint,
-            Collections.emptyList(),
-            primaryShard,
-            (fileName, bytesRecovered) -> {},
-            res
-        );
-        GetSegmentFilesResponse response = res.get();
-        assert (response.files.isEmpty());
-    }
-
-    public void testGetCheckpointMetadataEmpty() throws ExecutionException, InterruptedException {
-        IndexShard mockShard = mock(IndexShard.class);
-        // Build mockShard to return replicaShard directory so that an empty metadata file is returned.
-        buildIndexShardBehavior(mockShard, replicaShard);
-        replicationSource = new RemoteStoreReplicationSource(mockShard);
-
-        // For a RECOVERING shard, the response should have an empty metadata map.
-        final ReplicationCheckpoint checkpoint = replicaShard.getLatestReplicationCheckpoint();
-        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
-        when(mockShard.state()).thenReturn(IndexShardState.RECOVERING);
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
-        CheckpointInfoResponse response = res.get();
-        assertTrue(response.getCheckpoint().equals(checkpoint));
-        assertTrue(response.getMetadataMap().isEmpty());
-
-        // For a STARTED shard, the new behavior needs mock routing entry
-        when(mockShard.state()).thenReturn(IndexShardState.STARTED);
-        // Mock a routing entry for the search-only condition
-        ShardRouting mockRouting = mock(ShardRouting.class);
-        when(mockRouting.isSearchOnly()).thenReturn(true); // Make it a search-only replica
-        when(mockShard.routingEntry()).thenReturn(mockRouting);
-
-        // Ensure the mock returns the expected checkpoint when getLatestReplicationCheckpoint is called.
-        when(mockShard.getLatestReplicationCheckpoint()).thenReturn(replicaShard.getLatestReplicationCheckpoint());
-        final PlainActionFuture<CheckpointInfoResponse> res2 = PlainActionFuture.newFuture();
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res2);
-        CheckpointInfoResponse response2 = res2.get();
-        assertTrue(response2.getCheckpoint().equals(replicaShard.getLatestReplicationCheckpoint()));
-        assertTrue(response2.getMetadataMap().isEmpty());
-
-        // Additional test for non-search-only replica (should fail with exception)
-        when(mockRouting.isSearchOnly()).thenReturn(false);
-        final PlainActionFuture<CheckpointInfoResponse> res3 = PlainActionFuture.newFuture();
-        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res3);
-        ExecutionException exception = assertThrows(ExecutionException.class, () -> res3.get());
-        assertTrue(exception.getCause() instanceof IllegalStateException);
-        assertTrue(exception.getCause().getMessage().contains("Remote metadata file can't be null if shard is active"));
-    }
-
+import org.opensearch.indices.replication.checkpoint.MergedSegmentCheckpoint;
     public void testGetMergedSegmentFiles() throws IOException, ExecutionException, InterruptedException {
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        Map<String, String> localToRemoteFilenameMap = new HashMap<>() {
-            {
-                Map<String, UploadedSegmentMetadata> segmentsUploadedToRemoteStore = primaryShard.getRemoteDirectory()
-                    .getSegmentsUploadedToRemoteStore();
-                segmentsUploadedToRemoteStore.forEach((segment, metadata) -> {
-                    if (segment.startsWith("segments_") == false) put(segment, metadata.getUploadedFilename());
-                });
-            }
-        };
-        replicaShard.getRemoteDirectory().markMergedSegmentsPendingDownload(localToRemoteFilenameMap);
-        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
-            new MergedSegmentCheckpoint(
-                replicaShard.shardId(),
-                primaryTerm,
-                checkpoint.getSegmentInfosVersion(),
-                checkpoint.getLength(),
-                checkpoint.getCodec(),
-                checkpoint.getMetadataMap(),
-                "_0"
-            ),
-            localToRemoteFilenameMap
-        );
-        List<StoreFileMetadata> filesToFetch = new ArrayList<>(primaryShard.getSegmentMetadataMap().values());
-        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getMergedSegmentFiles(
-            REPLICATION_ID,
-            mergedSegmentCheckpoint,
-            filesToFetch,
-            replicaShard,
-            (fileName, bytesRecovered) -> {},
-            res
-        );
-        GetSegmentFilesResponse response = res.get();
-        assertEquals(response.files.size(), filesToFetch.size());
-        assertTrue(response.files.containsAll(filesToFetch));
     }
-
+        };
+import java.util.Collections;
+                    .getSegmentsUploadedToRemoteStore();
+    public void testGetSegmentFilesAlreadyExists() throws IOException, InterruptedException {
+                checkpoint.getMetadataMap(),
+        when(mockShard.getLatestReplicationCheckpoint()).thenReturn(replicaShard.getLatestReplicationCheckpoint());
+        final PlainActionFuture<CheckpointInfoResponse> res3 = PlainActionFuture.newFuture();
     public void testGetMergedSegmentFilesDownloadTimeout() throws IOException, ExecutionException, InterruptedException {
+        // Ensure the mock returns the expected checkpoint when getLatestReplicationCheckpoint is called.
+            } catch (Exception e) {
+                assertBusy(() -> {
+import org.apache.lucene.store.FilterDirectory;
+        latch.await();
+        Store remoteStore = mock(Store.class);
+                    if (segment.startsWith("segments_") == false) put(segment, metadata.getUploadedFilename());
+        assertNotNull("onFailure should have been called", failureRef.get());
+        assertTrue(observedException.getMessage() != null && observedException.getMessage().startsWith("invalid."));
+import static org.mockito.Mockito.spy;
+        // Additional test for non-search-only replica (should fail with exception)
+        replicaShard = newStartedShard(false, settings, new EngineBackedIndexerFactory(new NRTReplicationEngineFactory()));
+        replicationSource = new RemoteStoreReplicationSource(mockShard);
+            REPLICATION_ID,
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+                checkpoint.getCodec(),
+                checkpoint.getSegmentInfosVersion(),
+                checkpoint.getMetadataMap(),
+            res
+        // Reuse real shard's remote store wiring so the ReplicationSource ctor succeeds.
+                replicaShard.shardId(),
+import org.opensearch.index.replication.OpenSearchIndexLevelReplicationTestCase;
+        assertTrue(response.files.containsAll(filesToFetch));
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+            new StoreFileMetadata("invalid.si", 1, "1", Version.LATEST),
         final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+                primaryShard,
+            new StoreFileMetadata("invalid.cfs", 1, "1", Version.LATEST)
+        List<StoreFileMetadata> filesToFetch = primaryShard.getSegmentMetadataMap().values().stream().collect(Collectors.toList());
+        primaryShard.refresh("test");
+        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
+        });
+    public void testGetSegmentFilesReturnEmptyResponse() throws ExecutionException, InterruptedException {
+                latch.countDown();
+     * when the shard returns a non-{@code SegmentInfosCatalogSnapshot}, the source must
+                checkpoint.getSegmentInfosVersion(),
+        assertEquals(response.files.size(), filesToFetch.size());
+                fail("Expected onFailure to be called");
+        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
+        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
+    @Override
+        }
+    private final Settings settings = Settings.builder()
+        );
+import org.opensearch.indices.replication.common.ReplicationType;
+    public void testGetCheckpointMetadataFailure() {
+            (RemoteSegmentStoreDirectory) ((FilterDirectory) ((FilterDirectory) indexShard.remoteStore().directory()).getDelegate())
+        replicationSource.getSegmentFiles(
+                checkpoint.getMetadataMap(),
+        assert (response.files.isEmpty());
+            public void onFailure(Exception e) {
+                latch.countDown();
+    public void testGetCheckpointMetadataEmpty() throws ExecutionException, InterruptedException {
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+            res.get();
+ * SPDX-License-Identifier: Apache-2.0
+        Map<String, String> localToRemoteFilenameMap = Map.of("invalid.si", "invalid.si__uuid", "invalid.cfs", "invalid.cfs__uuid");
+        };
+            }
+            localToRemoteFilenameMap
+        List<StoreFileMetadata> filesToFetch = List.of(
+            listener
+        assertTrue(response.getCheckpoint().equals(checkpoint));
+        final ReplicationCheckpoint checkpoint = replicaShard.getLatestReplicationCheckpoint();
+            @Override
+        .put(IndexMetadata.SETTING_REMOTE_STORE_ENABLED, true)
+            mergedSegmentCheckpoint,
+                        closeShard(shard, true);
+                REPLICATION_ID,
+                });
+        when(mockShard.getCatalogSnapshot()).thenThrow(new RuntimeException("test"));
+import org.opensearch.index.engine.NRTReplicationEngineFactory;
+import org.opensearch.cluster.routing.ShardRouting;
+        replicaShard.getRemoteDirectory().markMergedSegmentsPendingDownload(localToRemoteFilenameMap);
+                    }
+                "_0"
+            );
+    public void testGetMergedSegmentFilesFailure() throws IOException, ExecutionException, InterruptedException {
+    private void closeShardsWithRetry(IndexShard... shards) {
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+            AtomicInteger retry = new AtomicInteger(1);
+        CheckpointInfoResponse response = res.get();
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+            new MergedSegmentCheckpoint(
+        ExecutionException exception = assertThrows(ExecutionException.class, () -> res3.get());
+                replicaShard.shardId(),
+import org.opensearch.index.store.RemoteSegmentStoreDirectory;
+            primaryShard,
+        // Not-started + null metadata path returns empty response. The key is that this path
         Map<String, String> localToRemoteFilenameMap = new HashMap<>() {
+    }
+import static org.mockito.Mockito.when;
+import org.opensearch.indices.replication.checkpoint.ReplicationCheckpoint;
+                Map<String, UploadedSegmentMetadata> segmentsUploadedToRemoteStore = primaryShard.getRemoteDirectory()
+        buildIndexShardBehavior(mockShard, replicaShard);
+ *
+import org.opensearch.core.action.ActionListener;
+            filesToFetch,
+        // Override the catalog snapshot with a non-SegmentInfos (DFA-style) stub.
+        assertThrows(RuntimeException.class, () -> {
+    private static final long REPLICATION_ID = 123L;
+import org.opensearch.index.engine.exec.EngineBackedIndexerFactory;
+            @Override
+                "_0"
+        when(mockShard.getCatalogSnapshot()).thenReturn(indexShard.getCatalogSnapshot());
+            (fileName, bytesRecovered) -> {},
+        MockCatalogSnapshot dfa = new MockCatalogSnapshot(1L, List.of(), new MockDataFormat("parquet", 0L, Set.of()));
+        IndexShard mockShard = mock(IndexShard.class);
+            replicaShard,
+                .getDelegate();
+        when(mockRecoverySettings.getMergedSegmentReplicationTimeout()).thenReturn(TimeValue.ZERO);
+            public void onResponse(GetSegmentFilesResponse response) {
+                res
+import org.opensearch.action.support.PlainActionFuture;
+        super.setUp();
+        .put(IndexMetadata.SETTING_REMOTE_SEGMENT_STORE_REPOSITORY, "my-repo")
+        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
+                "_0"
+                (fileName, bytesRecovered) -> {},
+            REPLICATION_ID,
+                    } catch (RuntimeException e) {
+import java.util.Set;
+            public void onFailure(Exception e) {
+        when(remoteStore.directory()).thenReturn(remoteStoreFilterDirectory);
+        );
+            checkpoint,
+                        throw new AssertionError("Failed to close shard", e);
+        // For a RECOVERING shard, the response should have an empty metadata map.
+            {
+            observedException.getMessage() != null
+    }
+    }
+            ),
+        .put(IndexMetadata.SETTING_REPLICATION_TYPE, ReplicationType.SEGMENT)
+    public void tearDown() throws Exception {
+                    .getSegmentsUploadedToRemoteStore();
+import java.util.stream.Collectors;
+            mergedSegmentCheckpoint,
+        closeShardsWithRetry(primaryShard, replicaShard);
+    }
             {
                 Map<String, UploadedSegmentMetadata> segmentsUploadedToRemoteStore = primaryShard.getRemoteDirectory()
-                    .getSegmentsUploadedToRemoteStore();
-                segmentsUploadedToRemoteStore.forEach((segment, metadata) -> {
-                    if (segment.startsWith("segments_") == false) put(segment, metadata.getUploadedFilename());
-                });
-            }
-        };
-        replicaShard.getRemoteDirectory().markMergedSegmentsPendingDownload(localToRemoteFilenameMap);
-        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
+    private RemoteStoreReplicationSource replicationSource;
+        IndexShard mockShard = mock(IndexShard.class);
+        assertTrue(response.getMetadataMap().isEmpty());
             new MergedSegmentCheckpoint(
-                replicaShard.shardId(),
-                primaryTerm,
-                checkpoint.getSegmentInfosVersion(),
-                checkpoint.getLength(),
-                checkpoint.getCodec(),
-                checkpoint.getMetadataMap(),
-                "_0"
+            assertTrue(ex instanceof AssertionError);
+import org.opensearch.indices.recovery.RecoverySettings;
+        Map<String, String> localToRemoteFilenameMap = new HashMap<>() {
             ),
-            localToRemoteFilenameMap
+ */
+    }
+        );
+            }
+            final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
+        replicationSource.getMergedSegmentFiles(
+     * Covers the DFA branch in {@link RemoteStoreReplicationSource#getCheckpointMetadata}:
+        .build();
+        );
+/*
+            new MergedSegmentCheckpoint(
+        Exception observedException = failureRef.get();
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+                failureRef.set(e);
+import java.util.concurrent.TimeoutException;
+        indexDoc(primaryShard, "_doc", "2");
+                checkpoint.getLength(),
+        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory =
         );
         List<StoreFileMetadata> filesToFetch = new ArrayList<>(primaryShard.getSegmentMetadataMap().values());
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
         IndexShard replica = spy(replicaShard);
-        RecoverySettings mockRecoverySettings = mock(RecoverySettings.class);
-        when(mockRecoverySettings.getMergedSegmentReplicationTimeout()).thenReturn(TimeValue.ZERO);
-        when(replica.getRecoverySettings()).thenReturn(mockRecoverySettings);
-        AtomicReference<Exception> failureRef = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
-
-        ActionListener<GetSegmentFilesResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse response) {
-                fail("Expected onFailure to be called");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                failureRef.set(e);
-                latch.countDown();
-            }
-        };
-        replicationSource.getMergedSegmentFiles(
-            REPLICATION_ID,
             mergedSegmentCheckpoint,
-            filesToFetch,
-            replica,
-            (fileName, bytesRecovered) -> {},
-            listener
-        );
-        latch.await();
-        assertNotNull("onFailure should have been called", failureRef.get());
-        Exception observedException = failureRef.get();
-        assertTrue(observedException instanceof TimeoutException);
-        assertTrue(
-            observedException.getMessage() != null
-                && observedException.getMessage().equals("Timed out waiting for merged segments download from remote store")
-        );
-    }
-
-    public void testGetMergedSegmentFilesFailure() throws IOException, ExecutionException, InterruptedException {
-        // Testing failure scenario where segments are not a part of RemoteSegmentStoreDirectory.pendingMergedSegmentsDownloads
-        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
-        Map<String, String> localToRemoteFilenameMap = Map.of("invalid.si", "invalid.si__uuid", "invalid.cfs", "invalid.cfs__uuid");
-        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
-            new MergedSegmentCheckpoint(
-                replicaShard.shardId(),
-                primaryTerm,
-                checkpoint.getSegmentInfosVersion(),
-                checkpoint.getLength(),
-                checkpoint.getCodec(),
-                checkpoint.getMetadataMap(),
-                "_0"
-            ),
-            localToRemoteFilenameMap
-        );
-        List<StoreFileMetadata> filesToFetch = List.of(
-            new StoreFileMetadata("invalid.si", 1, "1", Version.LATEST),
-            new StoreFileMetadata("invalid.cfs", 1, "1", Version.LATEST)
-        );
+import org.opensearch.index.engine.InternalEngineFactory;
+                filesToFetch,
+                checkpoint,
+            }
+            }
         AtomicReference<Exception> failureRef = new AtomicReference<>();
-        CountDownLatch latch = new CountDownLatch(1);
-
-        ActionListener<GetSegmentFilesResponse> listener = new ActionListener<>() {
-            @Override
-            public void onResponse(GetSegmentFilesResponse response) {
-                fail("Expected onFailure to be called");
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                failureRef.set(e);
-                latch.countDown();
-            }
-        };
-        replicationSource = new RemoteStoreReplicationSource(primaryShard);
-        replicationSource.getMergedSegmentFiles(
-            REPLICATION_ID,
-            mergedSegmentCheckpoint,
-            filesToFetch,
-            replicaShard,
-            (fileName, bytesRecovered) -> {},
-            listener
-        );
-        latch.await();
-        assertNotNull("onFailure should have been called", failureRef.get());
-        Exception observedException = failureRef.get();
-        assertTrue(observedException instanceof NoSuchFileException);
-        assertTrue(observedException.getMessage() != null && observedException.getMessage().startsWith("invalid."));
-    }
-
-    private void buildIndexShardBehavior(IndexShard mockShard, IndexShard indexShard) {
-        when(mockShard.getCatalogSnapshot()).thenReturn(indexShard.getCatalogSnapshot());
-        Store remoteStore = mock(Store.class);
-        when(mockShard.remoteStore()).thenReturn(remoteStore);
-        RemoteSegmentStoreDirectory remoteSegmentStoreDirectory =
-            (RemoteSegmentStoreDirectory) ((FilterDirectory) ((FilterDirectory) indexShard.remoteStore().directory()).getDelegate())
-                .getDelegate();
-        FilterDirectory remoteStoreFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(remoteSegmentStoreDirectory));
-        when(remoteStore.directory()).thenReturn(remoteStoreFilterDirectory);
-    }
-
-    private void closeShardsWithRetry(IndexShard... shards) {
-        for (IndexShard shard : shards) {
-            AtomicInteger retry = new AtomicInteger(1);
-            String shardId = shard.shardId().toString() + (shard.isPrimaryMode() ? "[p]" : "[r]");
-            try {
-                assertBusy(() -> {
-                    try {
-                        logger.info("Trying to close " + shardId + " try: " + retry.getAndIncrement());
-                        closeShard(shard, true);
-                    } catch (RuntimeException e) {
-                        throw new AssertionError("Failed to close shard", e);
-                    }
-                });
-            } catch (Exception e) {
                 logger.warn("Unable to close shard " + shardId + ". Exception: " + e);
-            }
-        }
+import java.util.HashMap;
     }
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res2);
+        assertTrue(response.files.containsAll(filesToFetch));
+        buildIndexShardBehavior(mockShard, replicaShard);
+            filesToFetch,
+import org.opensearch.common.concurrent.GatedCloseable;
+        when(mockShard.remoteStore()).thenReturn(remoteStore);
+            assertTrue(ex.getMessage().startsWith("Local store already contains the file"));
+import java.util.concurrent.atomic.AtomicInteger;
+        replicationSource.getSegmentFiles(REPLICATION_ID, checkpoint, filesToFetch, replicaShard, (fileName, bytesRecovered) -> {}, res);
+                primaryTerm,
+    /**
+        latch.await();
+                });
+        GetSegmentFilesResponse response = res.get();
+        when(replica.getRecoverySettings()).thenReturn(mockRecoverySettings);
+        assertTrue(response.getMetadataMap().isEmpty());
+        AtomicReference<Exception> failureRef = new AtomicReference<>();
+    public void testGetSegmentFiles() throws ExecutionException, InterruptedException, IOException {
+import org.opensearch.index.store.StoreFileMetadata;
+            replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
+        assert (response.getMetadataMap().isEmpty() == false);
+        // Testing failure scenario where segments are not a part of RemoteSegmentStoreDirectory.pendingMergedSegmentsDownloads
+     */
+        replicationSource.getMergedSegmentFiles(
+                    try {
+        GetSegmentFilesResponse response = res.get();
+            }
+        // is reached without the DFA-snapshot branch throwing ClassCastException.
+                && observedException.getMessage().equals("Timed out waiting for merged segments download from remote store")
+        when(mockShard.routingEntry()).thenReturn(mockRouting);
+import java.util.concurrent.atomic.AtomicReference;
+        assertEquals(response.files.size(), filesToFetch.size());
+        latch.await();
+     * resolve {@code Version.LATEST} and continue without throwing {@code ClassCastException}.
+            (fileName, bytesRecovered) -> {},
+        );
+    public void testGetCheckpointMetadataWithNonSegmentInfosCatalogSnapshot() throws Exception {
+        // For a STARTED shard, the new behavior needs mock routing entry
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+        FilterDirectory remoteStoreFilterDirectory = new TestFilterDirectory(new TestFilterDirectory(remoteSegmentStoreDirectory));
+        for (IndexShard shard : shards) {
+        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
+import org.opensearch.index.shard.IndexShardState;
+                fail("Expected onFailure to be called");
+import org.opensearch.common.unit.TimeValue;
+                failureRef.set(e);
+                checkpoint.getCodec(),
+import java.util.concurrent.CountDownLatch;
+    }
+        assertNotNull("onFailure should have been called", failureRef.get());
+                });
+            filesToFetch,
+        indexDoc(primaryShard, "_doc", "1");
+    }
+        super.tearDown();
+    private IndexShard replicaShard;
+            res
+        List<StoreFileMetadata> filesToFetch = primaryShard.getSegmentMetadataMap().values().stream().collect(Collectors.toList());
+            }
+import java.util.concurrent.ExecutionException;
+        RecoverySettings mockRecoverySettings = mock(RecoverySettings.class);
+        try {
+        replicationSource = new RemoteStoreReplicationSource(mockShard);
+        assertNotNull(response);
+        replicationSource.getMergedSegmentFiles(
+        ActionListener<GetSegmentFilesResponse> listener = new ActionListener<>() {
+                segmentsUploadedToRemoteStore.forEach((segment, metadata) -> {
+        CountDownLatch latch = new CountDownLatch(1);
+        // Build mockShard to return replicaShard directory so that an empty metadata file is returned.
+                checkpoint.getLength(),
+        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
+    }
+        when(mockShard.getCatalogSnapshot()).thenReturn(new GatedCloseable<>(dfa, () -> {}));
+import java.nio.file.NoSuchFileException;
+        when(mockRouting.isSearchOnly()).thenReturn(false);
+        CheckpointInfoResponse response = res.get();
+import org.opensearch.index.engine.dataformat.stub.MockCatalogSnapshot;
+            public void onResponse(GetSegmentFilesResponse response) {
+                segmentsUploadedToRemoteStore.forEach((segment, metadata) -> {
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
+        assertTrue(response2.getCheckpoint().equals(replicaShard.getLatestReplicationCheckpoint()));
+import java.util.Map;
+        primaryShard = newStartedShard(true, settings, new EngineBackedIndexerFactory(new InternalEngineFactory()));
+            res.get();
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+        assertTrue(exception.getCause().getMessage().contains("Remote metadata file can't be null if shard is active"));
+            REPLICATION_ID,
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+        assertTrue(observedException instanceof TimeoutException);
+            Collections.emptyList(),
+            replicaShard,
+            localToRemoteFilenameMap
+import org.opensearch.indices.replication.checkpoint.RemoteStoreMergedSegmentCheckpoint;
+        assertTrue(exception.getCause() instanceof IllegalStateException);
+        CountDownLatch latch = new CountDownLatch(1);
+        when(mockRouting.isSearchOnly()).thenReturn(true); // Make it a search-only replica
+            latch.countDown();
+        replicaShard.getRemoteDirectory().markMergedSegmentsPendingDownload(localToRemoteFilenameMap);
+                checkpoint.getSegmentInfosVersion(),
+        GetSegmentFilesResponse response = res.get();
+ * this file be licensed under the Apache-2.0 license or a
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
+            final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
+        CountDownLatch latch = new CountDownLatch(1);
+            localToRemoteFilenameMap
+        when(mockShard.state()).thenReturn(IndexShardState.RECOVERING);
+        RemoteStoreMergedSegmentCheckpoint mergedSegmentCheckpoint = new RemoteStoreMergedSegmentCheckpoint(
+                        logger.info("Trying to close " + shardId + " try: " + retry.getAndIncrement());
+            replicationSource = new RemoteStoreReplicationSource(primaryShard);
+        };
+        assertTrue(observedException instanceof NoSuchFileException);
+            listener
+            (fileName, bytesRecovered) -> {},
+        final PlainActionFuture<GetSegmentFilesResponse> res = PlainActionFuture.newFuture();
+                checkpoint.getLength(),
+            ),
+package org.opensearch.indices.replication;
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res);
 }
+        replicationSource.getCheckpointMetadata(REPLICATION_ID, checkpoint, res3);
+        };
+                replicaShard.shardId(),
+import java.util.List;
+    }
+        );
+    }
+            String shardId = shard.shardId().toString() + (shard.isPrimaryMode() ? "[p]" : "[r]");
+            replicationSource.getSegmentFiles(
+            try {
+        final PlainActionFuture<CheckpointInfoResponse> res2 = PlainActionFuture.newFuture();
+            @Override
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+        CheckpointInfoResponse response = res.get();
+        assertTrue(response2.getMetadataMap().isEmpty());
+import org.opensearch.cluster.metadata.IndexMetadata;
+import java.util.ArrayList;
+    }
+        ShardRouting mockRouting = mock(ShardRouting.class);
+        assert (response.getCheckpoint().equals(checkpoint));
+        final ReplicationCheckpoint checkpoint = primaryShard.getLatestReplicationCheckpoint();
+        IndexShard mockShard = mock(IndexShard.class);
+        Exception observedException = failureRef.get();
+            replica,
+        } catch (AssertionError | ExecutionException ex) {
+        when(mockShard.state()).thenReturn(IndexShardState.STARTED);
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.shard.IndexShard;
+        List<StoreFileMetadata> filesToFetch = new ArrayList<>(primaryShard.getSegmentMetadataMap().values());
+    private void buildIndexShardBehavior(IndexShard mockShard, IndexShard indexShard) {
+    @Override
+            @Override
+    }
+import org.opensearch.index.store.Store;
+        final PlainActionFuture<CheckpointInfoResponse> res = PlainActionFuture.newFuture();
+        assertTrue(
+        ActionListener<GetSegmentFilesResponse> listener = new ActionListener<>() {
+import org.apache.lucene.util.Version;
+        .put(IndexMetadata.SETTING_REMOTE_TRANSLOG_STORE_REPOSITORY, "my-repo")
+        );
+        replicationSource = new RemoteStoreReplicationSource(primaryShard);
+import org.opensearch.index.engine.dataformat.stub.MockDataFormat;
+            }
+            (fileName, bytesRecovered) -> {},
+import org.opensearch.index.shard.RemoteStoreRefreshListenerTests.TestFilterDirectory;
+                primaryTerm,
+        CheckpointInfoResponse response2 = res2.get();
+            replicationSource = new RemoteStoreReplicationSource(mockShard);
+        when(mockShard.state()).thenReturn(IndexShardState.RECOVERING);
+        closeShards(replicaShard);
+import java.io.IOException;
+public class RemoteStoreReplicationSourceTests extends OpenSearchIndexLevelReplicationTestCase {
+            REPLICATION_ID,
+ * compatible open source license.
+import org.opensearch.index.store.RemoteSegmentStoreDirectory.UploadedSegmentMetadata;
+    public void testGetCheckpointMetadata() throws ExecutionException, InterruptedException {
+import org.opensearch.common.settings.Settings;
+        // Mock a routing entry for the search-only condition
+                    if (segment.startsWith("segments_") == false) put(segment, metadata.getUploadedFilename());
+    private IndexShard primaryShard;
+        }
+        );
+    public void setUp() throws Exception {
+                primaryTerm,

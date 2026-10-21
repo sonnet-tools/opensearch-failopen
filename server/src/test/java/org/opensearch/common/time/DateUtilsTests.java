@@ -1,282 +1,236 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.time;
-
-import org.opensearch.test.OpenSearchTestCase;
-import org.joda.time.DateTimeZone;
-
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.Month;
-import java.time.Year;
-import java.time.YearMonth;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.temporal.ChronoField;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
-import static org.opensearch.common.time.DateUtils.clampToNanosRange;
-import static org.opensearch.common.time.DateUtils.toInstant;
-import static org.opensearch.common.time.DateUtils.toLong;
-import static org.opensearch.common.time.DateUtils.toMilliSeconds;
-import static org.opensearch.common.time.DateUtils.toNanoSeconds;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-
-public class DateUtilsTests extends OpenSearchTestCase {
-    private static final Set<String> IGNORE = new HashSet<>(
-        Arrays.asList("America/Bahia_Banderas", "America/Hermosillo", "America/Mazatlan", "Mexico/BajaSur", "WET")
-    );
-
-    public void testTimezoneIds() {
-        assertNull(DateUtils.dateTimeZoneToZoneId(null));
-        assertNull(DateUtils.zoneIdToDateTimeZone(null));
-        for (String jodaId : DateTimeZone.getAvailableIDs()) {
-            if (IGNORE.contains(jodaId)) continue;
-            DateTimeZone jodaTz = DateTimeZone.forID(jodaId);
-            ZoneId zoneId = DateUtils.dateTimeZoneToZoneId(jodaTz); // does not throw
-            long now = 0;
-            assertThat(
-                jodaId,
-                zoneId.getRules().getOffset(Instant.ofEpochMilli(now)).getTotalSeconds() * 1000,
-                equalTo(jodaTz.getOffset(now))
-            );
-            if (DateUtils.DEPRECATED_SHORT_TIMEZONES.containsKey(jodaTz.getID())) {
-                assertWarnings("Use of short timezone id " + jodaId + " is deprecated. Use " + zoneId.getId() + " instead");
-            }
-            // roundtrip does not throw either
-            assertNotNull(DateUtils.zoneIdToDateTimeZone(zoneId));
-        }
-    }
-
-    public void testInstantToLong() {
-        assertThat(toLong(Instant.EPOCH), is(0L));
-
-        Instant instant = createRandomInstant();
-        long timeSinceEpochInNanos = instant.getEpochSecond() * 1_000_000_000 + instant.getNano();
-        assertThat(toLong(instant), is(timeSinceEpochInNanos));
-    }
-
-    public void testInstantToLongMin() {
-        Instant tooEarlyInstant = ZonedDateTime.parse("1677-09-21T00:12:43.145224191Z").toInstant();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toLong(tooEarlyInstant));
-        assertThat(e.getMessage(), containsString("is before"));
-        e = expectThrows(IllegalArgumentException.class, () -> toLong(Instant.EPOCH.minusMillis(1)));
-        assertThat(e.getMessage(), containsString("is before"));
-    }
-
-    public void testInstantToLongMax() {
-        Instant tooLateInstant = ZonedDateTime.parse("2262-04-11T23:47:16.854775808Z").toInstant();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toLong(tooLateInstant));
-        assertThat(e.getMessage(), containsString("is after"));
-    }
-
-    public void testLongToInstant() {
-        assertThat(toInstant(0), is(Instant.EPOCH));
-        assertThat(toInstant(1), is(Instant.EPOCH.plusNanos(1)));
-
-        Instant instant = createRandomInstant();
-        long nowInNs = toLong(instant);
-        assertThat(toInstant(nowInNs), is(instant));
-
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toInstant(-1));
-        assertThat(e.getMessage(), is("nanoseconds [-1] are before the epoch in 1970 and cannot be processed in nanosecond resolution"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> toInstant(Long.MIN_VALUE));
-        assertThat(
-            e.getMessage(),
-            is("nanoseconds [" + Long.MIN_VALUE + "] are before the epoch in 1970 and cannot be processed in nanosecond resolution")
-        );
-
-        assertThat(toInstant(Long.MAX_VALUE), is(ZonedDateTime.parse("2262-04-11T23:47:16.854775807Z").toInstant()));
-    }
-
-    public void testClampToNanosRange() {
-        assertThat(clampToNanosRange(Instant.EPOCH), equalTo(Instant.EPOCH));
-
-        Instant instant = createRandomInstant();
-        assertThat(clampToNanosRange(instant), equalTo(instant));
-    }
-
     public void testClampToNanosRangeMin() {
-        assertThat(clampToNanosRange(Instant.EPOCH.minusMillis(1)), equalTo(Instant.EPOCH));
-
-        Instant tooEarlyInstant = ZonedDateTime.parse("1677-09-21T00:12:43.145224191Z").toInstant();
-        assertThat(clampToNanosRange(tooEarlyInstant), equalTo(Instant.EPOCH));
-    }
-
-    public void testClampToNanosRangeMax() {
-        Instant tooLateInstant = ZonedDateTime.parse("2262-04-11T23:47:16.854775808Z").toInstant();
-        assertThat(clampToNanosRange(tooLateInstant), equalTo(DateUtils.MAX_NANOSECOND_INSTANT));
-    }
-
-    public void testNanosToMillis() {
-        assertThat(toMilliSeconds(0), is(Instant.EPOCH.toEpochMilli()));
-
-        Instant instant = createRandomInstant();
-        long nowInNs = toLong(instant);
-        assertThat(toMilliSeconds(nowInNs), is(instant.toEpochMilli()));
-    }
-
-    public void testMillisToNanos() {
-        assertThat(toNanoSeconds(0), equalTo(0L));
-
-        Instant instant = Instant.ofEpochSecond(randomLongBetween(0, Long.MAX_VALUE) / 1_000_000_000L);
-        long nowInMs = instant.toEpochMilli();
-        assertThat(toNanoSeconds(nowInMs), equalTo(toLong(instant)));
-
-        IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> toNanoSeconds(-1));
-        assertThat(exc.getMessage(), containsString("before the epoch"));
-
-        long millis = DateUtils.MAX_NANOSECOND_IN_MILLIS + randomLongBetween(0, 1000000);
-        exc = expectThrows(IllegalArgumentException.class, () -> toNanoSeconds(millis));
-        assertThat(exc.getMessage(), containsString("after 2262"));
-    }
-
-    private Instant createRandomInstant() {
-        long seconds = randomLongBetween(0, Long.MAX_VALUE) / 1_000_000_000L;
-        long nanos = randomLongBetween(0, 999_999_999L);
-        return Instant.ofEpochSecond(seconds, nanos);
-    }
-
-    public void testRoundFloor() {
-        assertThat(DateUtils.roundFloor(0, randomLongBetween(0, Long.MAX_VALUE)), is(0L));
-
-        ChronoField randomChronoField = randomFrom(
-            ChronoField.DAY_OF_MONTH,
-            ChronoField.HOUR_OF_DAY,
-            ChronoField.MINUTE_OF_HOUR,
-            ChronoField.SECOND_OF_MINUTE
-        );
-        long unitMillis = randomChronoField.getBaseUnit().getDuration().toMillis();
-
-        int year = randomIntBetween(-3000, 3000);
-        int month = randomIntBetween(1, 12);
-        int day = randomIntBetween(1, YearMonth.of(year, month).lengthOfMonth());
-        int hour = randomIntBetween(1, 23);
-        int minute = randomIntBetween(1, 59);
-        int second = randomIntBetween(1, 59);
-        int nanos = randomIntBetween(1, 999_999_999);
-
-        ZonedDateTime randomDate = ZonedDateTime.of(year, month, day, hour, minute, second, nanos, ZoneOffset.UTC);
-
-        ZonedDateTime result = randomDate;
-        switch (randomChronoField) {
-            case SECOND_OF_MINUTE:
-                result = result.withNano(0);
-                break;
-            case MINUTE_OF_HOUR:
-                result = result.withNano(0).withSecond(0);
-                break;
-            case HOUR_OF_DAY:
-                result = result.withNano(0).withSecond(0).withMinute(0);
-                break;
-            case DAY_OF_MONTH:
-                result = result.withNano(0).withSecond(0).withMinute(0).withHour(0);
-                break;
         }
-
-        long rounded = DateUtils.roundFloor(randomDate.toInstant().toEpochMilli(), unitMillis);
-        assertThat(rounded, is(result.toInstant().toEpochMilli()));
-    }
-
-    public void testRoundQuarterOfYear() {
-        assertThat(DateUtils.roundQuarterOfYear(0), is(0L));
-        long lastQuarter1969 = ZonedDateTime.of(1969, 10, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
-        assertThat(DateUtils.roundQuarterOfYear(-1), is(lastQuarter1969));
-
-        int year = randomIntBetween(1970, 2040);
-        int month = randomIntBetween(1, 12);
-        int day = randomIntBetween(1, YearMonth.of(year, month).lengthOfMonth());
-
-        ZonedDateTime randomZonedDateTime = ZonedDateTime.of(
-            year,
-            month,
-            day,
-            randomIntBetween(0, 23),
-            randomIntBetween(0, 59),
-            randomIntBetween(0, 59),
-            999_999_999,
-            ZoneOffset.UTC
-        );
+            assertNotNull(DateUtils.zoneIdToDateTimeZone(zoneId));
+        assertThat(toNanoSeconds(0), equalTo(0L));
         long quarterInMillis = Year.of(randomZonedDateTime.getYear())
-            .atMonth(Month.of(month).firstMonthOfQuarter())
-            .atDay(1)
-            .atStartOfDay(ZoneOffset.UTC)
-            .toInstant()
-            .toEpochMilli();
-        long result = DateUtils.roundQuarterOfYear(randomZonedDateTime.toInstant().toEpochMilli());
-        assertThat(result, is(quarterInMillis));
-    }
-
-    public void testRoundMonthOfYear() {
-        assertThat(DateUtils.roundMonthOfYear(0), is(0L));
-        assertThat(DateUtils.roundMonthOfYear(1), is(0L));
-        long dec1969 = LocalDate.of(1969, 12, 1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-        assertThat(DateUtils.roundMonthOfYear(-1), is(dec1969));
-    }
-
-    public void testRoundYear() {
-        assertThat(DateUtils.roundYear(0), is(0L));
-        assertThat(DateUtils.roundYear(1), is(0L));
-        long startOf1969 = ZonedDateTime.of(1969, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
-        assertThat(DateUtils.roundYear(-1), is(startOf1969));
-        long endOf1970 = ZonedDateTime.of(1970, 12, 31, 23, 59, 59, 999_999_999, ZoneOffset.UTC).toInstant().toEpochMilli();
+        long unitMillis = randomChronoField.getBaseUnit().getDuration().toMillis();
+import java.time.ZoneId;
         assertThat(DateUtils.roundYear(endOf1970), is(0L));
-        // test with some leapyear
+        );
+            }
+        Instant instant = createRandomInstant();
+    }
+            if (IGNORE.contains(jodaId)) continue;
+        assertThat(clampToNanosRange(instant), equalTo(instant));
+        assertThat(clampToNanosRange(Instant.EPOCH), equalTo(Instant.EPOCH));
+            DateTimeZone jodaTz = DateTimeZone.forID(jodaId);
+    }
+ * You may obtain a copy of the License at
+        assertThat(DateUtils.roundQuarterOfYear(-1), is(lastQuarter1969));
+ *
+        assertNull(DateUtils.zoneIdToDateTimeZone(null));
+import java.time.ZonedDateTime;
+    }
+            assertThat(
+    }
+        assertThat(DateUtils.roundFloor(0, randomLongBetween(0, Long.MAX_VALUE)), is(0L));
+            .atStartOfDay(ZoneOffset.UTC)
+        long nowInMs = instant.toEpochMilli();
+        Instant tooLateInstant = ZonedDateTime.parse("2262-04-11T23:47:16.854775808Z").toInstant();
+ *
+ */
         long endOf1996 = ZonedDateTime.of(1996, 12, 31, 23, 59, 59, 999_999_999, ZoneOffset.UTC).toInstant().toEpochMilli();
-        long startOf1996 = Year.of(1996).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-        assertThat(DateUtils.roundYear(endOf1996), is(startOf1996));
-    }
-
+            999_999_999,
+ * under the License.
+        int second = randomIntBetween(1, 59);
+        assertThat(exc.getMessage(), containsString("after 2262"));
     public void testClampToMillisRange() {
-        Instant normalInstant = Instant.now();
-        assertEquals(normalInstant, DateUtils.clampToMillisRange(normalInstant));
-
-        Instant beforeMinInstant = DateUtils.INSTANT_LONG_MIN_VALUE.minusMillis(1);
-        assertEquals(DateUtils.INSTANT_LONG_MIN_VALUE, DateUtils.clampToMillisRange(beforeMinInstant));
-
-        Instant afterMaxInstant = DateUtils.INSTANT_LONG_MAX_VALUE.plusMillis(1);
-        assertEquals(DateUtils.INSTANT_LONG_MAX_VALUE, DateUtils.clampToMillisRange(afterMaxInstant));
-
-        assertEquals(DateUtils.INSTANT_LONG_MIN_VALUE, DateUtils.clampToMillisRange(DateUtils.INSTANT_LONG_MIN_VALUE));
-
-        assertEquals(DateUtils.INSTANT_LONG_MAX_VALUE, DateUtils.clampToMillisRange(DateUtils.INSTANT_LONG_MAX_VALUE));
-
-        assertThrows(NullPointerException.class, () -> DateUtils.clampToMillisRange(null));
     }
+import org.joda.time.DateTimeZone;
+/*
+    }
+ * this file be licensed under the Apache-2.0 license or a
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertThat(DateUtils.roundMonthOfYear(0), is(0L));
+        assertEquals(normalInstant, DateUtils.clampToMillisRange(normalInstant));
+import static org.opensearch.common.time.DateUtils.toMilliSeconds;
+        assertThrows(NullPointerException.class, () -> DateUtils.clampToMillisRange(null));
+    public void testRoundFloor() {
+        assertThat(result, is(quarterInMillis));
+        assertThat(toLong(Instant.EPOCH), is(0L));
+        long lastQuarter1969 = ZonedDateTime.of(1969, 10, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
+            ZoneId zoneId = DateUtils.dateTimeZoneToZoneId(jodaTz); // does not throw
+        Instant instant = Instant.ofEpochSecond(randomLongBetween(0, Long.MAX_VALUE) / 1_000_000_000L);
+        return Instant.ofEpochSecond(seconds, nanos);
+        assertThat(
+        assertThat(DateUtils.roundQuarterOfYear(0), is(0L));
+        Instant tooLateInstant = ZonedDateTime.parse("2262-04-11T23:47:16.854775808Z").toInstant();
+        int day = randomIntBetween(1, YearMonth.of(year, month).lengthOfMonth());
+import java.time.Month;
+        e = expectThrows(IllegalArgumentException.class, () -> toInstant(Long.MIN_VALUE));
+        Arrays.asList("America/Bahia_Banderas", "America/Hermosillo", "America/Mazatlan", "Mexico/BajaSur", "WET")
+    public void testClampToNanosRangeMax() {
+ * Modifications Copyright OpenSearch Contributors. See
+        int year = randomIntBetween(1970, 2040);
+        assertThat(e.getMessage(), containsString("is before"));
+            e.getMessage(),
+        assertThat(toInstant(1), is(Instant.EPOCH.plusNanos(1)));
+    public void testRoundMonthOfYear() {
+    public void testMillisToNanos() {
+        long nowInNs = toLong(instant);
+                jodaId,
+ * license agreements. See the NOTICE file distributed with
+        assertThat(e.getMessage(), containsString("is before"));
+                zoneId.getRules().getOffset(Instant.ofEpochMilli(now)).getTotalSeconds() * 1000,
+        assertThat(clampToNanosRange(tooEarlyInstant), equalTo(Instant.EPOCH));
+        Instant afterMaxInstant = DateUtils.INSTANT_LONG_MAX_VALUE.plusMillis(1);
+    }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toLong(tooLateInstant));
+ * this work for additional information regarding copyright
+            case SECOND_OF_MINUTE:
+                break;
+import java.time.LocalDate;
+            randomIntBetween(0, 59),
+        long nanos = randomLongBetween(0, 999_999_999L);
+            is("nanoseconds [" + Long.MIN_VALUE + "] are before the epoch in 1970 and cannot be processed in nanosecond resolution")
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toLong(tooEarlyInstant));
+    public void testLongToInstant() {
+        switch (randomChronoField) {
+ * software distributed under the License is distributed on an
+    private Instant createRandomInstant() {
+        );
+            ChronoField.MINUTE_OF_HOUR,
+        assertThat(DateUtils.roundMonthOfYear(1), is(0L));
+        Instant tooEarlyInstant = ZonedDateTime.parse("1677-09-21T00:12:43.145224191Z").toInstant();
+        long timeSinceEpochInNanos = instant.getEpochSecond() * 1_000_000_000 + instant.getNano();
+import static org.hamcrest.Matchers.equalTo;
+ * The OpenSearch Contributors require contributions made to
+public class DateUtilsTests extends OpenSearchTestCase {
+        long millis = DateUtils.MAX_NANOSECOND_IN_MILLIS + randomLongBetween(0, 1000000);
+                break;
+ * not use this file except in compliance with the License.
+        assertThat(clampToNanosRange(tooLateInstant), equalTo(DateUtils.MAX_NANOSECOND_INSTANT));
+            month,
+        long startOf1996 = Year.of(1996).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+            .atDay(1)
+        assertEquals(DateUtils.INSTANT_LONG_MIN_VALUE, DateUtils.clampToMillisRange(beforeMinInstant));
+            randomIntBetween(0, 23),
+    public void testInstantToLongMin() {
+import java.util.Arrays;
+            .atMonth(Month.of(month).firstMonthOfQuarter())
+package org.opensearch.common.time;
+        assertThat(DateUtils.roundYear(1), is(0L));
+        Instant instant = createRandomInstant();
+            .toInstant()
+        assertThat(DateUtils.roundMonthOfYear(-1), is(dec1969));
+        long dec1969 = LocalDate.of(1969, 12, 1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
 }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            case MINUTE_OF_HOUR:
+    public void testRoundQuarterOfYear() {
+import java.time.YearMonth;
+        for (String jodaId : DateTimeZone.getAvailableIDs()) {
+        assertThat(clampToNanosRange(Instant.EPOCH.minusMillis(1)), equalTo(Instant.EPOCH));
+        assertThat(toInstant(nowInNs), is(instant));
+    public void testClampToNanosRange() {
+import static org.hamcrest.Matchers.is;
+        assertThat(toInstant(0), is(Instant.EPOCH));
+        assertThat(DateUtils.roundYear(endOf1996), is(startOf1996));
+                break;
+        Instant instant = createRandomInstant();
+            case HOUR_OF_DAY:
+    }
+import java.time.ZoneOffset;
+        int hour = randomIntBetween(1, 23);
+    public void testInstantToLong() {
+ * SPDX-License-Identifier: Apache-2.0
+        e = expectThrows(IllegalArgumentException.class, () -> toLong(Instant.EPOCH.minusMillis(1)));
+        ZonedDateTime randomZonedDateTime = ZonedDateTime.of(
+        long result = DateUtils.roundQuarterOfYear(randomZonedDateTime.toInstant().toEpochMilli());
+        assertThat(toMilliSeconds(nowInNs), is(instant.toEpochMilli()));
+        assertThat(rounded, is(result.toInstant().toEpochMilli()));
+                result = result.withNano(0).withSecond(0);
+/*
+        assertThat(toLong(instant), is(timeSinceEpochInNanos));
+        );
+        assertEquals(DateUtils.INSTANT_LONG_MIN_VALUE, DateUtils.clampToMillisRange(DateUtils.INSTANT_LONG_MIN_VALUE));
+    }
+    public void testTimezoneIds() {
+ */
+    }
+import java.util.Set;
+    }
+        assertThat(e.getMessage(), containsString("is after"));
+        long rounded = DateUtils.roundFloor(randomDate.toInstant().toEpochMilli(), unitMillis);
+ * KIND, either express or implied.  See the License for the
+ * compatible open source license.
+        long endOf1970 = ZonedDateTime.of(1970, 12, 31, 23, 59, 59, 999_999_999, ZoneOffset.UTC).toInstant().toEpochMilli();
+            day,
+    }
+        int minute = randomIntBetween(1, 59);
+import java.time.Year;
+        int nanos = randomIntBetween(1, 999_999_999);
+import org.opensearch.test.OpenSearchTestCase;
+                result = result.withNano(0).withSecond(0).withMinute(0).withHour(0);
+    );
+            case DAY_OF_MONTH:
+            ZoneOffset.UTC
+ * specific language governing permissions and limitations
+        long startOf1969 = ZonedDateTime.of(1969, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
+        IllegalArgumentException exc = expectThrows(IllegalArgumentException.class, () -> toNanoSeconds(-1));
+        long nowInNs = toLong(instant);
+import java.util.HashSet;
+    public void testNanosToMillis() {
+        int month = randomIntBetween(1, 12);
+        Instant normalInstant = Instant.now();
+            .toEpochMilli();
+                equalTo(jodaTz.getOffset(now))
+        assertThat(toNanoSeconds(nowInMs), equalTo(toLong(instant)));
+import static org.opensearch.common.time.DateUtils.toNanoSeconds;
+    public void testInstantToLongMax() {
+        exc = expectThrows(IllegalArgumentException.class, () -> toNanoSeconds(millis));
+        assertEquals(DateUtils.INSTANT_LONG_MAX_VALUE, DateUtils.clampToMillisRange(DateUtils.INSTANT_LONG_MAX_VALUE));
+            ChronoField.HOUR_OF_DAY,
+            ChronoField.DAY_OF_MONTH,
+        int year = randomIntBetween(-3000, 3000);
+ */
+            ChronoField.SECOND_OF_MINUTE
+        Instant instant = createRandomInstant();
+/*
+            if (DateUtils.DEPRECATED_SHORT_TIMEZONES.containsKey(jodaTz.getID())) {
+    }
+        assertThat(toMilliSeconds(0), is(Instant.EPOCH.toEpochMilli()));
+        }
+import static org.opensearch.common.time.DateUtils.toLong;
+        ZonedDateTime randomDate = ZonedDateTime.of(year, month, day, hour, minute, second, nanos, ZoneOffset.UTC);
+    }
+import static org.opensearch.common.time.DateUtils.clampToNanosRange;
+import java.time.Instant;
+        assertThat(exc.getMessage(), containsString("before the epoch"));
+import static org.opensearch.common.time.DateUtils.toInstant;
+        Instant tooEarlyInstant = ZonedDateTime.parse("1677-09-21T00:12:43.145224191Z").toInstant();
+ *
+        // test with some leapyear
+                result = result.withNano(0).withSecond(0).withMinute(0);
+        assertThat(toInstant(Long.MAX_VALUE), is(ZonedDateTime.parse("2262-04-11T23:47:16.854775807Z").toInstant()));
+        assertNull(DateUtils.dateTimeZoneToZoneId(null));
+            year,
+        assertThat(e.getMessage(), is("nanoseconds [-1] are before the epoch in 1970 and cannot be processed in nanosecond resolution"));
+    private static final Set<String> IGNORE = new HashSet<>(
+        assertEquals(DateUtils.INSTANT_LONG_MAX_VALUE, DateUtils.clampToMillisRange(afterMaxInstant));
+        ChronoField randomChronoField = randomFrom(
+            randomIntBetween(0, 59),
+        ZonedDateTime result = randomDate;
+ * Licensed to Elasticsearch under one or more contributor
+            );
+ * ownership. Elasticsearch licenses this file to you under
+        Instant beforeMinInstant = DateUtils.INSTANT_LONG_MIN_VALUE.minusMillis(1);
+        long seconds = randomLongBetween(0, Long.MAX_VALUE) / 1_000_000_000L;
+ * the Apache License, Version 2.0 (the "License"); you may
+        assertThat(DateUtils.roundYear(-1), is(startOf1969));
+                assertWarnings("Use of short timezone id " + jodaId + " is deprecated. Use " + zoneId.getId() + " instead");
+        int month = randomIntBetween(1, 12);
+ * Unless required by applicable law or agreed to in writing,
+    }
+            long now = 0;
+    public void testRoundYear() {
+import java.time.temporal.ChronoField;
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> toInstant(-1));
+        int day = randomIntBetween(1, YearMonth.of(year, month).lengthOfMonth());
+                break;
+            // roundtrip does not throw either
+                result = result.withNano(0);
+        assertThat(DateUtils.roundYear(0), is(0L));
+ * GitHub history for details.
+    }

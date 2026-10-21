@@ -1,227 +1,208 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.analytics.exec;
-
-import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.analytics.backend.AnalyticsOperationListener;
-import org.opensearch.analytics.exec.stage.StageExecution;
-import org.opensearch.analytics.exec.stage.StageExecutionBuilder;
-import org.opensearch.analytics.exec.stage.StageTask;
-import org.opensearch.analytics.exec.stage.StageTaskState;
-import org.opensearch.analytics.exec.task.AnalyticsQueryTask;
-import org.opensearch.analytics.exec.task.TaskRunner;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.tasks.TaskManager;
-import org.opensearch.transport.TransportService;
-
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * Default {@link Scheduler} implementation. Builds a {@link QueryExecution} per
- * query, starts it, and tracks it in a pool for observability and cancellation.
- *
- * @opensearch.internal
- */
-public class QueryScheduler implements Scheduler {
-
-    private static final Logger logger = LogManager.getLogger(QueryScheduler.class);
-
-    private final StageExecutionBuilder stageExecutionBuilder;
-    private final TaskManager taskManager;
-    private final Map<String, QueryExecution> executions = new ConcurrentHashMap<>();
-
-    @Inject
-    public QueryScheduler(StageExecutionBuilder stageExecutionBuilder, TransportService transportService) {
-        this.stageExecutionBuilder = stageExecutionBuilder;
-        this.taskManager = transportService.getTaskManager();
-    }
-
-    @Override
-    public QueryExecution execute(QueryContext context, ActionListener<Iterable<VectorSchemaRoot>> listener) {
-        final String queryId = context.queryId();
-        final AnalyticsOperationListener.CompositeListener opListener = new AnalyticsOperationListener.CompositeListener(
-            context.operationListeners()
-        );
-        final long queryStartNanos = System.nanoTime();
-        final AnalyticsQueryTask queryTask = context.parentTask();
-
-        ExecutionGraph graph = ExecutionGraph.build(context, stageExecutionBuilder, this::scheduleStage);
-
-        ActionListener<Iterable<VectorSchemaRoot>> wrapped = ActionListener.runBefore(ActionListener.wrap(result -> {
-            opListener.onQuerySuccess(queryId, System.nanoTime() - queryStartNanos, 0);
-            listener.onResponse(result);
-        }, e -> {
-            opListener.onQueryFailure(queryId, e);
-            listener.onFailure(e);
-        }), () -> {
-            executions.remove(queryId);
-            // Cascade a cancel to dispatched data-node fragments before the framework unregisters
-            // the parent task. Otherwise TaskManager.setBan, which matches children by parent
-            // TaskId in the cancellable-tasks registry, cannot reach fragments after the parent
-            // has been unregistered — they survive into orphan state and run to natural
-            // completion. Idempotent against the already-cancelled path.
-            try {
-                taskManager.cancelTaskAndDescendants(
-                    queryTask,
-                    "analytics query terminal — cleaning up dispatched fragments",
-                    false,
-                    ActionListener.wrap(
-                        v -> {},
-                        ex -> logger.debug(
-                            new ParameterizedMessage("[QueryScheduler] orphan-cleanup cancel failed for queryId={}", queryId),
-                            ex
                         )
+import org.opensearch.analytics.exec.stage.StageTaskState;
+                    false,
+     * <p>Public for the MPP dispatcher ({@code UnifiedDispatch}) which needs to run
+                currentAttempt.transitionTo(StageTaskState.FINISHED);
+                        stage.getStageId(),
+/*
+        opListener.onQueryStart(queryId, graph.stageCount());
+                }
+     *
+public class QueryScheduler implements Scheduler {
+     * SUCCEEDED; concurrent cancel → CANCELLED).
+     *       {@link org.opensearch.analytics.exec.stage.StageExecutionFactory} for a stage type
+                logger.debug("[QueryScheduler] dispatching stage {} ({} tasks)", stage.getStageId(), stage.tasks().size());
+            }
+        }, e -> {
+     * task pacing) automatically apply to phased dispatch as well.
+                );
+            opListener.onQueryFailure(queryId, e);
+ *
+        final long queryStartNanos = System.nanoTime();
+        // behind a can-match round-trip, so the stage can still be CREATED when start() returns
+     * scheduler-owned per-task listener factory to {@link StageExecution#dispatchTasks} —
+                    TaskRunner<StageTask> runner = (TaskRunner<StageTask>) stage.taskRunner();
+        }, e -> {}));
+        return stageExecutionBuilder;
+        logger.debug("[QueryScheduler] ExecutionGraph built:\n{}", graph.explain());
+import org.opensearch.common.inject.Inject;
+import org.opensearch.transport.TransportService;
+     * {@link QueryExecution} graph traversal. Those callers reuse this method rather than
+                    queryTask,
+                logger.debug(
+    @Inject
+import org.opensearch.analytics.exec.stage.StageExecutionBuilder;
+                stage.onTaskTerminal(task, null);
+     *   <li>resilience integration tests that register a custom
+        // transitioned: dispatch only if it landed in RUNNING (empty-target stages go straight to
+                if (retry.isPresent()) {
+                    StageTask r = retry.get();
+     * On failure, retries via {@link StageExecution#retargetForRetry} if the stage hands
                     )
+     * (shard fan-outs that want to bound the outbound-throttle queue depth). Skips dispatch
+import org.opensearch.analytics.exec.stage.StageTask;
+import org.apache.arrow.vector.VectorSchemaRoot;
+ * The OpenSearch Contributors require contributions made to
+            }
+     */
+            // has been unregistered — they survive into orphan state and run to natural
+ * query, starts it, and tracks it in a pool for observability and cancellation.
+                            stage.getStageId(),
+     *
+     *       chain;</li>
+     * re-instantiate {@link AnalyticsSearchTransportService} (whose ctor registers transport
+            String reason = "task cancelled: " + (queryTask.getReasonCancelled() != null ? queryTask.getReasonCancelled() : "unknown");
+        QueryExecution execution = new QueryExecution(context, graph, this::scheduleStage, wrapped);
+     * {@link StageExecution.State#FAILED FAILED}, or {@link StageExecution.State#CANCELLED CANCELLED}),
+    public StageExecutionBuilder getStageExecutionBuilder() {
+        // start(onStarted) may be asynchronous — ShardFragmentStageExecution defers publication
+ * SPDX-License-Identifier: Apache-2.0
+    private final StageExecutionBuilder stageExecutionBuilder;
+        stage.start(ActionListener.wrap(v -> {
+     *
+     * the stage decides whether to dispatch eagerly (default for-loop) or incrementally
+     * cancelled — is always wrong. Catches the race where an in-flight task's onFailure
+     * stays the original — that's the slot identifier the stage's bookkeeping uses.
+ * @opensearch.internal
+    /**
+                            retry.get()
+package org.opensearch.analytics.exec;
+     * superseded attempts get FAILED, the final (succeeding or last-failed) attempt gets the
+    public QueryExecution execute(QueryContext context, ActionListener<Iterable<VectorSchemaRoot>> listener) {
+        ExecutionGraph graph = ExecutionGraph.build(context, stageExecutionBuilder, this::scheduleStage);
+    }
+     * if the stage has already entered any terminal state ({@link StageExecution.State#SUCCEEDED SUCCEEDED},
+            }
+import org.opensearch.analytics.exec.stage.StageExecution;
+     *   <li>join-strategy dispatchers (e.g. M1 broadcast) that need to run a single stage in
+import java.util.Optional;
+                    )
+import org.opensearch.analytics.exec.task.AnalyticsQueryTask;
+        // start(); deferred stages run it on the async completion. onFailure needs no handling —
+ */
+        this.taskManager = transportService.getTaskManager();
+import org.apache.logging.log4j.message.ParameterizedMessage;
+            // Cascade a cancel to dispatched data-node fragments before the framework unregisters
+    private static final Logger logger = LogManager.getLogger(QueryScheduler.class);
+            public void onFailure(Exception cause) {
+     * </ul>
+    public QueryScheduler(StageExecutionBuilder stageExecutionBuilder, TransportService transportService) {
+     * <p>Resolving via the singleton scheduler avoids a Guice JIT lookup that would
+            if (stage.getState() == StageExecution.State.RUNNING) {
+     * back an alternate; otherwise propagates via {@code onTaskTerminal} (fast-fails the stage).
+     * matching terminal. The {@code task} reference passed to {@code stage.onTaskTerminal}
+import org.opensearch.core.action.ActionListener;
+                Optional<StageTask> retry = stage.getState().isTerminal() ? Optional.empty() : stage.retargetForRetry(task, cause);
+     * <p>Used by:
+                currentAttempt.transitionTo(StageTaskState.FAILED);
+        queryTask.setOnCancelCallback(() -> {
+            listener.onResponse(result);
+        ActionListener<Iterable<VectorSchemaRoot>> wrapped = ActionListener.runBefore(ActionListener.wrap(result -> {
+    /**
+}
+                        )
+                            "[QueryScheduler] task {} on stage {} failed, retrying on {}",
+     * retry is skipped uniformly across stage types. Spawning new dispatch work for a stage
+                        task,
+                logger.debug(new ParameterizedMessage("[QueryScheduler] orphan-cleanup invocation failed for queryId={}", queryId), ex);
+import org.opensearch.analytics.backend.AnalyticsOperationListener;
+            @Override
+        execution.start();
+ * Default {@link Scheduler} implementation. Builds a {@link QueryExecution} per
+     */
+import java.util.concurrent.ConcurrentHashMap;
+        return execution;
+/**
+        final AnalyticsQueryTask queryTask = context.parentTask();
+import org.opensearch.analytics.exec.task.TaskRunner;
+    @Override
+     *       isolation with a caller-supplied output sink, bypassing the parent-sink resolution
+            execution.cancelAll(reason);
+            // completion. Idempotent against the already-cancelled path.
+    }
+        final AnalyticsOperationListener.CompositeListener opListener = new AnalyticsOperationListener.CompositeListener(
+     * when {@code start()} transitions straight to a terminal (empty target resolution →
+    }
+        );
+                        stage.getState().isTerminal(),
+            StageTask currentAttempt = task;
+     * handlers, only legal once per node).
+                    "analytics query terminal — cleaning up dispatched fragments",
+     */
+import java.util.Map;
+        setCancellationCallback(context, execution);
+            context.operationListeners()
+                        v -> {},
+                            ex
+     *
+            }
+        final String queryId = context.queryId();
+                    return;
+import org.apache.logging.log4j.Logger;
+    public void scheduleStage(StageExecution stage) {
+ * compatible open source license.
+     * Protected for retry/admission-aware subclasses.
+        });
+                            new ParameterizedMessage("[QueryScheduler] orphan-cleanup cancel failed for queryId={}", queryId),
+                    runner.run(r, this);  // reuse this listener — retry loop until stage gives up
+            public void onResponse(Void unused) {
+        // and only transitions later, on the response thread. onStarted fires once the stage has
+        }), () -> {
+ * this file be licensed under the Apache-2.0 license or a
+                    logger.debug(
+     * <p>Terminal-stage short-circuit lives here, not in each stage's {@code retargetForRetry}:
+                taskManager.cancelTaskAndDescendants(
+    }
+    private final Map<String, QueryExecution> executions = new ConcurrentHashMap<>();
+            opListener.onQuerySuccess(queryId, System.nanoTime() - queryStartNanos, 0);
+        this.stageExecutionBuilder = stageExecutionBuilder;
+import org.opensearch.tasks.TaskManager;
+     * <ul>
+                    () -> new ParameterizedMessage(
+        };
                 );
             } catch (Exception ex) {
-                logger.debug(new ParameterizedMessage("[QueryScheduler] orphan-cleanup invocation failed for queryId={}", queryId), ex);
-            }
-        });
-
-        QueryExecution execution = new QueryExecution(context, graph, this::scheduleStage, wrapped);
-        executions.put(queryId, execution);
-
-        setCancellationCallback(context, execution);
-
-        opListener.onQueryStart(queryId, graph.stageCount());
-        logger.debug("[QueryScheduler] ExecutionGraph built:\n{}", graph.explain());
-        execution.start();
-        return execution;
-    }
-
-    /**
-     * Materialises {@code stage}'s tasks via {@link StageExecution#start}, then hands the
-     * scheduler-owned per-task listener factory to {@link StageExecution#dispatchTasks} —
-     * the stage decides whether to dispatch eagerly (default for-loop) or incrementally
-     * (shard fan-outs that want to bound the outbound-throttle queue depth). Skips dispatch
-     * when {@code start()} transitions straight to a terminal (empty target resolution →
-     * SUCCEEDED; concurrent cancel → CANCELLED).
-     *
-     * <p>Public for the MPP dispatcher ({@code UnifiedDispatch}) which needs to run
-     * a single stage in isolation with a caller-supplied output sink, outside the normal
-     * {@link QueryExecution} graph traversal. Those callers reuse this method rather than
-     * inlining the dispatch loop so future scheduler enhancements (in-flight caps, retry-aware
-     * task pacing) automatically apply to phased dispatch as well.
-     */
-    public void scheduleStage(StageExecution stage) {
-        // Dispatch after materialisation completes, not by polling state right after start().
-        // start(onStarted) may be asynchronous — ShardFragmentStageExecution defers publication
-        // behind a can-match round-trip, so the stage can still be CREATED when start() returns
-        // and only transitions later, on the response thread. onStarted fires once the stage has
-        // transitioned: dispatch only if it landed in RUNNING (empty-target stages go straight to
-        // SUCCEEDED and have nothing to dispatch). Synchronous stages run this inline inside
-        // start(); deferred stages run it on the async completion. onFailure needs no handling —
-        // the stage is already FAILED and propagates through the normal terminal path.
-        stage.start(ActionListener.wrap(v -> {
-            if (stage.getState() == StageExecution.State.RUNNING) {
-                logger.debug("[QueryScheduler] dispatching stage {} ({} tasks)", stage.getStageId(), stage.tasks().size());
-                stage.dispatchTasks(this::handleFor);
-            }
-        }, e -> {}));
-    }
-
-    /**
-     * On failure, retries via {@link StageExecution#retargetForRetry} if the stage hands
-     * back an alternate; otherwise propagates via {@code onTaskTerminal} (fast-fails the stage).
-     * Protected for retry/admission-aware subclasses.
-     *
-     * <p>Terminal-stage short-circuit lives here, not in each stage's {@code retargetForRetry}:
-     * if the stage has already entered any terminal state ({@link StageExecution.State#SUCCEEDED SUCCEEDED},
-     * {@link StageExecution.State#FAILED FAILED}, or {@link StageExecution.State#CANCELLED CANCELLED}),
-     * retry is skipped uniformly across stage types. Spawning new dispatch work for a stage
-     * that's done — whether it succeeded, already gave up on a different task, or was
-     * cancelled — is always wrong. Catches the race where an in-flight task's onFailure
-     * fires after the stage has transitioned terminally for some other reason.
-     *
-     * <p>Tracks the current attempt so each attempt's terminal state is recorded truthfully:
-     * superseded attempts get FAILED, the final (succeeding or last-failed) attempt gets the
-     * matching terminal. The {@code task} reference passed to {@code stage.onTaskTerminal}
-     * stays the original — that's the slot identifier the stage's bookkeeping uses.
-     */
-    protected ActionListener<Void> handleFor(StageExecution stage, StageTask task) {
-        return new ActionListener<>() {
-            StageTask currentAttempt = task;
-
-            @Override
-            public void onResponse(Void unused) {
-                currentAttempt.transitionTo(StageTaskState.FINISHED);
-                stage.onTaskTerminal(task, null);
-            }
-
-            @Override
-            public void onFailure(Exception cause) {
-                Optional<StageTask> retry = stage.getState().isTerminal() ? Optional.empty() : stage.retargetForRetry(task, cause);
-                if (retry.isPresent()) {
-                    logger.debug(
-                        () -> new ParameterizedMessage(
-                            "[QueryScheduler] task {} on stage {} failed, retrying on {}",
-                            task,
-                            stage.getStageId(),
-                            retry.get()
-                        )
-                    );
-                    currentAttempt.transitionTo(StageTaskState.FAILED);  // previous attempt is now superseded
-                    StageTask r = retry.get();
-                    currentAttempt = r;
-                    r.transitionTo(StageTaskState.RUNNING);
-                    @SuppressWarnings("unchecked")
-                    TaskRunner<StageTask> runner = (TaskRunner<StageTask>) stage.taskRunner();
-                    runner.run(r, this);  // reuse this listener — retry loop until stage gives up
-                    return;
-                }
-                logger.debug(
-                    () -> new ParameterizedMessage(
-                        "[QueryScheduler] task {} on stage {} failed, no retry available (stageTerminal={}, cause={})",
-                        task,
-                        stage.getStageId(),
-                        stage.getState().isTerminal(),
-                        cause.getMessage()
-                    )
-                );
-                currentAttempt.transitionTo(StageTaskState.FAILED);
-                stage.onTaskTerminal(task, cause);
-            }
-        };
-    }
-
-    private static void setCancellationCallback(QueryContext config, QueryExecution execution) {
         final AnalyticsQueryTask queryTask = config.parentTask();
-        queryTask.setOnCancelCallback(() -> {
-            String reason = "task cancelled: " + (queryTask.getReasonCancelled() != null ? queryTask.getReasonCancelled() : "unknown");
-            execution.cancelAll(reason);
+                        "[QueryScheduler] task {} on stage {} failed, no retry available (stageTerminal={}, cause={})",
+        return new ActionListener<>() {
+        // the stage is already FAILED and propagates through the normal terminal path.
+                stage.dispatchTasks(this::handleFor);
+            try {
+            listener.onFailure(e);
+     * a single stage in isolation with a caller-supplied output sink, outside the normal
+                    currentAttempt.transitionTo(StageTaskState.FAILED);  // previous attempt is now superseded
         });
-    }
-
+            executions.remove(queryId);
+        // Dispatch after materialisation completes, not by polling state right after start().
+                    );
+                        cause.getMessage()
+            // the parent task. Otherwise TaskManager.setBan, which matches children by parent
+    protected ActionListener<Void> handleFor(StageExecution stage, StageTask task) {
+ */
     /**
-     * Returns the underlying {@link StageExecutionBuilder}.
      *
-     * <p>Used by:
-     * <ul>
-     *   <li>join-strategy dispatchers (e.g. M1 broadcast) that need to run a single stage in
-     *       isolation with a caller-supplied output sink, bypassing the parent-sink resolution
-     *       chain;</li>
-     *   <li>resilience integration tests that register a custom
-     *       {@link org.opensearch.analytics.exec.stage.StageExecutionFactory} for a stage type
+     * fires after the stage has transitioned terminally for some other reason.
+                            task,
+                    @SuppressWarnings("unchecked")
+                    r.transitionTo(StageTaskState.RUNNING);
      *       (e.g. fault-injecting scheduler).</li>
-     * </ul>
-     *
-     * <p>Resolving via the singleton scheduler avoids a Guice JIT lookup that would
-     * re-instantiate {@link AnalyticsSearchTransportService} (whose ctor registers transport
-     * handlers, only legal once per node).
-     */
-    public StageExecutionBuilder getStageExecutionBuilder() {
-        return stageExecutionBuilder;
+                        () -> new ParameterizedMessage(
+    private static void setCancellationCallback(QueryContext config, QueryExecution execution) {
+     * Returns the underlying {@link StageExecutionBuilder}.
+                stage.onTaskTerminal(task, cause);
+            // TaskId in the cancellable-tasks registry, cannot reach fragments after the parent
+import org.apache.logging.log4j.LogManager;
+     * inlining the dispatch loop so future scheduler enhancements (in-flight caps, retry-aware
     }
-}
+                    currentAttempt = r;
+     * that's done — whether it succeeded, already gave up on a different task, or was
+        executions.put(queryId, execution);
+ *
+     * <p>Tracks the current attempt so each attempt's terminal state is recorded truthfully:
+    private final TaskManager taskManager;
+     * Materialises {@code stage}'s tasks via {@link StageExecution#start}, then hands the
+    }
+        // SUCCEEDED and have nothing to dispatch). Synchronous stages run this inline inside
+            @Override
+                    ActionListener.wrap(
+                        ex -> logger.debug(

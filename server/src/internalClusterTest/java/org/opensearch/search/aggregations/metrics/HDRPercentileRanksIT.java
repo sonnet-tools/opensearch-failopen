@@ -1,726 +1,639 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.metrics;
-
-import org.apache.logging.log4j.LogManager;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptType;
-import org.opensearch.search.aggregations.AggregationTestScriptsPlugin;
-import org.opensearch.search.aggregations.BucketOrder;
-import org.opensearch.search.aggregations.InternalAggregation;
-import org.opensearch.search.aggregations.bucket.filter.Filter;
-import org.opensearch.search.aggregations.bucket.global.Global;
-import org.opensearch.search.aggregations.bucket.histogram.Histogram;
-import org.opensearch.search.aggregations.bucket.terms.Terms;
-
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.core.common.util.CollectionUtils.iterableAsArrayList;
-import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
-import static org.opensearch.index.query.QueryBuilders.termQuery;
-import static org.opensearch.search.aggregations.AggregationBuilders.filter;
-import static org.opensearch.search.aggregations.AggregationBuilders.global;
-import static org.opensearch.search.aggregations.AggregationBuilders.histogram;
-import static org.opensearch.search.aggregations.AggregationBuilders.percentileRanks;
-import static org.opensearch.search.aggregations.AggregationBuilders.terms;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.sameInstance;
-
-public class HDRPercentileRanksIT extends AbstractNumericTestCase {
-
-    public HDRPercentileRanksIT(Settings staticSettings) {
-        super(staticSettings);
-    }
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Collections.singleton(AggregationTestScriptsPlugin.class);
-    }
-
-    private static double[] randomPercents(long minValue, long maxValue) {
-        final int length = randomIntBetween(1, 20);
-        final double[] percents = new double[length];
-        for (int i = 0; i < percents.length; ++i) {
-            switch (randomInt(20)) {
-                case 0:
-                    percents[i] = minValue;
-                    break;
-                case 1:
-                    percents[i] = maxValue;
-                    break;
-                default:
-                    percents[i] = (randomDouble() * (maxValue - minValue)) + minValue;
-                    break;
-            }
-        }
-        Arrays.sort(percents);
-        LogManager.getLogger(HDRPercentileRanksIT.class).info("Using values={}", Arrays.toString(percents));
-        return percents;
-    }
-
-    private static int randomSignificantDigits() {
-        return randomIntBetween(0, 5);
-    }
-
-    private void assertConsistent(double[] pcts, PercentileRanks values, long minValue, long maxValue, int numberSigDigits) {
-        final List<Percentile> percentileList = iterableAsArrayList(values);
-        assertEquals(pcts.length, percentileList.size());
+            .get();
+        IllegalArgumentException e = expectThrows(
         for (int i = 0; i < pcts.length; ++i) {
-            final Percentile percentile = percentileList.get(i);
-            assertThat(percentile.getValue(), equalTo(pcts[i]));
-            assertThat(percentile.getPercent(), greaterThanOrEqualTo(0.0));
-            assertThat(percentile.getPercent(), lessThanOrEqualTo(100.0));
-
-            if (percentile.getPercent() == 0) {
-                double allowedError = minValue / Math.pow(10, numberSigDigits);
-                assertThat(percentile.getValue(), lessThanOrEqualTo(minValue + allowedError));
-            }
-            if (percentile.getPercent() == 100) {
-                double allowedError = maxValue / Math.pow(10, numberSigDigits);
-                assertThat(percentile.getValue(), greaterThanOrEqualTo(maxValue - allowedError));
-            }
-        }
-
-        for (int i = 1; i < percentileList.size(); ++i) {
-            assertThat(percentileList.get(i).getValue(), greaterThanOrEqualTo(percentileList.get(i - 1).getValue()));
-        }
-    }
-
-    @Override
-    public void testEmptyAggregation() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        SearchResponse searchResponse = client().prepareSearch("empty_bucket_idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                histogram("histo").field("value")
-                    .interval(1L)
-                    .minDocCount(0)
-                    .subAggregation(
-                        percentileRanks("percentile_ranks", new double[] { 10, 15 }).field("value")
-                            .method(PercentilesMethod.HDR)
-                            .numberOfSignificantValueDigits(sigDigits)
-                    )
-            )
-            .get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(2L));
         Histogram histo = searchResponse.getAggregations().get("histo");
+                .getMissCount(),
+                .getRequestCache()
+                    .numberOfSignificantValueDigits(sigDigits)
+        assertThat(buckets.size(), equalTo(10));
+                .addAggregation(
+                        percentileRanks("percentile_ranks", new double[] { 10, 15 }).field("value")
+            .setQuery(matchAllQuery())
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+                        percentileRanks("percentile_ranks", new double[] { 99 }).field("value")
+        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
+        }
+    }
+        SearchResponse searchResponse = client().prepareSearch("idx")
+                    break;
+        assertThat(
+import org.opensearch.search.aggregations.AggregationTestScriptsPlugin;
+        int sigDigits = randomSignificantDigits();
+            assertThat(filter.getDocCount(), equalTo(0L));
+            client().admin()
+                    .numberOfSignificantValueDigits(sigDigits)
         assertThat(histo, notNullValue());
-        Histogram.Bucket bucket = histo.getBuckets().get(1);
-        assertThat(bucket, notNullValue());
-
-        PercentileRanks reversePercentiles = bucket.getAggregations().get("percentile_ranks");
-        assertThat(reversePercentiles, notNullValue());
-        assertThat(reversePercentiles.getName(), equalTo("percentile_ranks"));
-        assertThat(reversePercentiles.percent(10), equalTo(Double.NaN));
-        assertThat(reversePercentiles.percent(15), equalTo(Double.NaN));
-    }
-
-    @Override
-    public void testUnmapped() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        SearchResponse searchResponse = client().prepareSearch("idx_unmapped")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", new double[] { 0, 10, 15, 100 }).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("value")
-            )
-            .get();
-
-        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
-
-        PercentileRanks reversePercentiles = searchResponse.getAggregations().get("percentile_ranks");
-        assertThat(reversePercentiles, notNullValue());
-        assertThat(reversePercentiles.getName(), equalTo("percentile_ranks"));
-        assertThat(reversePercentiles.percent(0), equalTo(Double.NaN));
-        assertThat(reversePercentiles.percent(10), equalTo(Double.NaN));
-        assertThat(reversePercentiles.percent(15), equalTo(Double.NaN));
-        assertThat(reversePercentiles.percent(100), equalTo(Double.NaN));
-    }
-
-    @Override
-    public void testSingleValuedField() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValue, maxValue);
         SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("value")
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
-    }
-
-    public void testNullValuesField() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = null;
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> client().prepareSearch("idx")
-                .setQuery(matchAllQuery())
-                .addAggregation(
-                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                        .numberOfSignificantValueDigits(sigDigits)
-                        .field("value")
-                )
-                .get()
-        );
-        assertThat(e.getMessage(), equalTo("[values] must not be null: [percentile_ranks]"));
-    }
-
-    public void testEmptyValuesField() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = new double[0];
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> client().prepareSearch("idx")
-                .setQuery(matchAllQuery())
-                .addAggregation(
-                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                        .numberOfSignificantValueDigits(sigDigits)
-                        .field("value")
-                )
-                .get()
-        );
-        assertThat(e.getMessage(), equalTo("[values] must not be an empty array: [percentile_ranks]"));
-    }
-
-    @Override
-    public void testSingleValuedFieldGetProperty() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValue, maxValue);
         SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                global("global").subAggregation(
-                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                        .numberOfSignificantValueDigits(sigDigits)
-                        .field("value")
-                )
-            )
-            .get();
-
+        r = client().prepareSearch("cache_test_idx")
         assertHitCount(searchResponse, 10);
-
-        Global global = searchResponse.getAggregations().get("global");
-        assertThat(global, notNullValue());
-        assertThat(global.getName(), equalTo("global"));
-        assertThat(global.getDocCount(), equalTo(10L));
-        assertThat(global.getAggregations(), notNullValue());
+                    .field("value")
         assertThat(global.getAggregations().asMap().size(), equalTo(1));
-
-        PercentileRanks values = global.getAggregations().get("percentile_ranks");
-        assertThat(values, notNullValue());
-        assertThat(values.getName(), equalTo("percentile_ranks"));
-        assertThat(((InternalAggregation) global).getProperty("percentile_ranks"), sameInstance(values));
-
-    }
-
-    public void testSingleValuedFieldOutsideRange() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = new double[] { minValue - 1, maxValue + 1 };
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
+            () -> client().prepareSearch("idx")
                 percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("value")
-            )
+                double allowedError = minValue / Math.pow(10, numberSigDigits);
+                .getRequestCache()
+            equalTo(0L)
             .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
-    }
-
-    @Override
-    public void testSingleValuedFieldPartiallyUnmapped() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValue, maxValue);
+import org.opensearch.search.aggregations.bucket.global.Global;
+                    )
+        assertThat(bucket, notNullValue());
+                percentileRanks("percentile_ranks", new double[] { 0, 10, 15, 100 }).method(PercentilesMethod.HDR)
+            if (percentile.getPercent() == 0) {
         SearchResponse searchResponse = client().prepareSearch("idx", "idx_unmapped")
-            .setQuery(matchAllQuery())
-            .addAggregation(
+                .setRequestCache(true)
                 percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+                    .subAggregation(
+        final double[] pcts = randomPercents(minValues, maxValues);
+                .get()
+        SearchResponse searchResponse = client().prepareSearch("idx")
+            .addAggregation(
+ */
+                .prepareStats("cache_test_idx")
+            .setQuery(matchAllQuery())
+                .getTotal()
+ *
+        Global global = searchResponse.getAggregations().get("global");
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['value'].value", emptyMap()))
+                        .field("value")
+ * The OpenSearch Contributors require contributions made to
+            .get();
+        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
+import java.util.Arrays;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+ * compatible open source license.
+    }
+            client().admin()
+        Script script = new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['values']", emptyMap());
+                .getRequestCache()
+                    .field("value")
+import static org.opensearch.search.aggregations.AggregationBuilders.histogram;
+                .prepareStats("cache_test_idx")
+            )
+                .prepareStats("cache_test_idx")
+                .getRequestCache()
+            .setQuery(matchAllQuery())
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
+                percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR)
+    public void testEmptyValuesField() throws Exception {
+        assertConsistent(pcts, values, 20 - maxValues, 20 - minValues, sigDigits);
+import java.util.Collections;
+            .addAggregation(
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+                .get()
+                assertThat(p99, lessThanOrEqualTo(previous));
+            .setSize(0)
+    public void testMultiValuedFieldWithValueScriptReverse() throws Exception {
+                .indices()
+                .setRequestCache(true)
+        // Ensure that non-scripted requests are cached as normal
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+            .addAggregation(
+        );
+        );
+    }
+        LogManager.getLogger(HDRPercentileRanksIT.class).info("Using values={}", Arrays.toString(percents));
+        int sigDigits = randomSignificantDigits();
+import static org.hamcrest.Matchers.sameInstance;
+            .addAggregation(
+        assertEquals(pcts.length, percentileList.size());
+                .get()
+            final Percentile percentile = percentileList.get(i);
+        int sigDigits = randomSignificantDigits();
+    public void testScriptMultiValuedWithParams() throws Exception {
                     .numberOfSignificantValueDigits(sigDigits)
+        assertHitCount(searchResponse, 10);
+                    .script(script)
+import org.opensearch.script.ScriptType;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+            .addAggregation(
+        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
+    @Override
+                    .field("value")
+    @Override
+                .prepareStats("cache_test_idx")
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
+        Terms terms = searchResponse.getAggregations().get("terms");
+            assertThat(filter, notNullValue());
+            )
+        final List<Percentile> percentileList = iterableAsArrayList(values);
+        SearchResponse searchResponse = client().prepareSearch("idx_unmapped")
+    public void testOrderByEmptyAggregation() throws Exception {
+                .getHitCount(),
+    }
+ * software distributed under the License is distributed on an
+        PercentileRanks reversePercentiles = bucket.getAggregations().get("percentile_ranks");
+        int sigDigits = randomSignificantDigits();
+/*
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+            equalTo(0L)
+ * Unless required by applicable law or agreed to in writing,
+ * You may obtain a copy of the License at
+        Arrays.sort(percents);
+    }
+            .setQuery(matchAllQuery())
+        return randomIntBetween(0, 5);
+            assertThat(percentileList.get(i).getValue(), greaterThanOrEqualTo(percentileList.get(i - 1).getValue()));
+        );
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "20 - _value", emptyMap()))
+        double previous = asc ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+                .setRequestCache(true)
+            )
+        int sigDigits = randomSignificantDigits();
+            .setQuery(matchAllQuery())
+    public void testMultiValuedFieldWithValueScriptWithParams() throws Exception {
+ * GitHub history for details.
+        );
+        SearchResponse searchResponse = client().prepareSearch("idx")
+                percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR)
+    @Override
+import static java.util.Collections.emptyMap;
                     .field("value")
             )
+        int sigDigits = randomSignificantDigits();
+        SearchResponse searchResponse = client().prepareSearch("idx")
+                assertThat(percentile.getValue(), greaterThanOrEqualTo(maxValue - allowedError));
+            equalTo(0L)
+ *
+                global("global").subAggregation(
+    public void testSingleValuedFieldWithValueScriptWithParams() throws Exception {
+            .setQuery(matchAllQuery())
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+ * KIND, either express or implied.  See the License for the
+    }
+                .get()
+                .indices()
+                    .numberOfSignificantValueDigits(sigDigits)
+        List<? extends Terms.Bucket> buckets = terms.getBuckets();
+                    break;
+import static org.opensearch.index.query.QueryBuilders.termQuery;
+        int sigDigits = randomSignificantDigits();
+import java.util.Collection;
+import org.opensearch.plugins.Plugin;
+import static org.hamcrest.Matchers.notNullValue;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
             .get();
-
+        int sigDigits = randomSignificantDigits();
+/*
+            }
+ * license agreements. See the NOTICE file distributed with
+                .setRequestCache(true)
+        final double[] pcts = randomPercents(minValue, maxValue);
+                    .field("value")
+        assertThat(reversePercentiles.percent(100), equalTo(Double.NaN));
+            .addAggregation(
+        assertThat(reversePercentiles, notNullValue());
+    public void testMultiValuedFieldWithValueScript() throws Exception {
+        PercentileRanks values = global.getAggregations().get("percentile_ranks");
+        assertSearchResponse(r);
+                .prepareStats("cache_test_idx")
         assertHitCount(searchResponse, 10);
-
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+            if (percentile.getPercent() == 100) {
+            )
+                .get()
+    public void testSingleValuedFieldPartiallyUnmapped() throws Exception {
+        assertSearchResponse(r);
+        int sigDigits = randomSignificantDigits();
+import org.opensearch.search.aggregations.bucket.histogram.Histogram;
+            )
+                .indices()
+                .setQuery(matchAllQuery())
+                    .field("values")
+                histogram("histo").field("value")
+                default:
+        }
+    }
+            equalTo(2L)
         final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+    public void testMultiValuedField() throws Exception {
+        Map<String, Object> params = new HashMap<>();
+                .getTotal()
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+ * Modifications Copyright OpenSearch Contributors. See
+                            percentileRanks("ranks", new double[] { 99 }).method(PercentilesMethod.HDR).field("value")
+        final int length = randomIntBetween(1, 20);
+                    .subAggregation(
+    @Override
+                .indices()
+    @Override
+ */
+        int sigDigits = randomSignificantDigits();
+            )
+                .getMissCount(),
+    @Override
+                .setRequestCache(true)
+            .setQuery(matchAllQuery())
+        assertHitCount(searchResponse, 10);
+                .getMissCount(),
+    /**
+    }
+            )
+            .addAggregation(
+                    .numberOfSignificantValueDigits(sigDigits)
+    protected Collection<Class<? extends Plugin>> nodePlugins() {
+            .addAggregation(
+                    .numberOfSignificantValueDigits(sigDigits)
+                    .subAggregation(
+        SearchResponse searchResponse = client().prepareSearch("idx")
+                            .method(PercentilesMethod.HDR)
+            .addAggregation(
+            prepareCreate("cache_test_idx").setMapping("d", "type=long")
+        assertThat(
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - dec", params))
+    public void testNullValuesField() throws Exception {
+    }
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+                .setRequestCache(true)
+            .get();
+        assertThat(e.getMessage(), equalTo("[values] must not be an empty array: [percentile_ranks]"));
+        assertThat(reversePercentiles.percent(10), equalTo(Double.NaN));
+                .get()
+            .get();
+    @Override
+        assertHitCount(searchResponse, 10);
+        );
+            .get();
+    }
+        assertHitCount(searchResponse, 10);
+        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
+import static org.opensearch.index.query.QueryBuilders.matchAllQuery;
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+                .setSettings(Settings.builder().put("requests.cache.enable", true).put("number_of_shards", 1).put("number_of_replicas", 1))
+            .get();
+        r = client().prepareSearch("cache_test_idx")
+                    .field("values")
+                    .interval(1L)
+            equalTo(0L)
+                .getRequestCache()
+            .get();
+ * not use this file except in compliance with the License.
+    @Override
+        int sigDigits = randomSignificantDigits();
+                .prepareStats("cache_test_idx")
+        SearchResponse searchResponse = client().prepareSearch("idx")
+            IllegalArgumentException.class,
+        assertAcked(
+                .get()
+                    .field("d")
+            .setSize(0)
+        for (int i = 0; i < percents.length; ++i) {
+        final double[] pcts = new double[0];
+            .setQuery(matchAllQuery())
+     * Ensure requests using nondeterministic scripts do not get cached.
+            .get();
+                    break;
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(2L));
+package org.opensearch.search.aggregations.metrics;
+            Terms.Bucket bucket = buckets.get(i);
+            client().admin()
+        for (Histogram.Bucket bucket : histo.getBuckets()) {
+        assertThat(global, notNullValue());
+                .setQuery(matchAllQuery())
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
+                    percents[i] = maxValue;
+        // Make sure we are starting with a clear cache
+            .get();
+        assertHitCount(searchResponse, 10);
+        assertConsistent(pcts, values, minValues, maxValues, sigDigits);
+    public void testSingleValuedFieldWithValueScript() throws Exception {
+ */
+    @Override
+        assertThat(reversePercentiles.getName(), equalTo("percentile_ranks"));
+    }
+                .get()
+                .getRequestCache()
+            .get();
+                .indices()
+        assertSearchResponse(r);
+            )
+            .setQuery(matchAllQuery())
+    }
+                    .numberOfSignificantValueDigits(sigDigits)
+                    .numberOfSignificantValueDigits(sigDigits)
+        assertHitCount(searchResponse, 10);
+        int sigDigits = randomSignificantDigits();
+                )
+            )
+        SearchResponse searchResponse = client().prepareSearch("idx")
+        // Test that a request using a deterministic script gets cached
+    public HDRPercentileRanksIT(Settings staticSettings) {
+            assertThat(percentile.getValue(), equalTo(pcts[i]));
+        int sigDigits = randomSignificantDigits();
+                .getTotal()
+        assertThat(
+        params.put("dec", 1);
+        int sigDigits = randomSignificantDigits();
+import java.util.List;
+                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        Script script = AggregationTestScriptsPlugin.DECREMENT_ALL_VALUES;
+            .addAggregation(
+            assertThat(percentile.getPercent(), lessThanOrEqualTo(100.0));
+            assertThat(ranks.percent(99), equalTo(Double.NaN));
+            )
+            .get();
+        Histogram histo = searchResponse.getAggregations().get("histo");
+    @Override
+        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "Math.random()", emptyMap()))
+            assertThat(bucket.getDocCount(), equalTo(1L));
+            () -> client().prepareSearch("idx")
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+                    .field("value")
+import org.opensearch.script.Script;
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+            .setQuery(matchAllQuery())
+        int sigDigits = randomSignificantDigits();
+            .setQuery(matchAllQuery())
+            equalTo(0L)
+        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
+            .addAggregation(
+        assertHitCount(searchResponse, 10);
+        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
+    public void testOrderBySubAggregation() {
+        );
+import java.util.Map;
+            )
+        assertHitCount(searchResponse, 10);
+        SearchResponse searchResponse = client().prepareSearch("idx")
+            )
+        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
+                            .method(PercentilesMethod.HDR)
+        boolean asc = randomBoolean();
+        }
+    public void testSingleValuedFieldGetProperty() throws Exception {
+        assertThat(reversePercentiles.percent(15), equalTo(Double.NaN));
+        );
+ * under the License.
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - dec", params))
+    private static int randomSignificantDigits() {
+            client().admin()
+        assertThat(
+    @Override
+                .get()
+            .addAggregation(
+                .getTotal()
+                .getTotal()
+        final double[] pcts = randomPercents(minValues, maxValues);
+        assertHitCount(searchResponse, 10);
+        assertThat(global.getAggregations(), notNullValue());
+                assertThat(p99, greaterThanOrEqualTo(previous));
+import org.opensearch.action.search.SearchResponse;
+                .prepareStats("cache_test_idx")
+            .get();
+        Script script = new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['value'].value - dec", params);
         assertConsistent(pcts, values, minValue, maxValue, sigDigits);
     }
-
+            assertThat(bucket, notNullValue());
     @Override
-    public void testSingleValuedFieldWithValueScript() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("value")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
-            )
             .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
-    }
-
-    @Override
-    public void testSingleValuedFieldWithValueScriptWithParams() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        Map<String, Object> params = new HashMap<>();
-        params.put("dec", 1);
-        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
+                .setRequestCache(true)
+                .indices()
+            client().admin()
             .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("value")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - dec", params))
-            )
+        assertThat(global.getDocCount(), equalTo(10L));
+import java.util.HashMap;
+import static org.opensearch.search.aggregations.AggregationBuilders.terms;
             .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
-    }
-
-    @Override
-    public void testMultiValuedField() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValues, maxValues);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("values")
+import org.opensearch.search.aggregations.InternalAggregation;
+                .getHitCount(),
             )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
+            IllegalArgumentException.class,
         final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValues, maxValues, sigDigits);
-    }
-
-    @Override
-    public void testMultiValuedFieldWithValueScript() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("values")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
+        assertThat(reversePercentiles, notNullValue());
             )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
-    }
-
-    public void testMultiValuedFieldWithValueScriptReverse() throws Exception {
+        assertThat(reversePercentiles.percent(0), equalTo(Double.NaN));
+        );
         int sigDigits = randomSignificantDigits();
         final double[] pcts = randomPercents(20 - maxValues, 20 - minValues);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("values")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "20 - _value", emptyMap()))
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, 20 - maxValues, 20 - minValues, sigDigits);
-    }
-
-    @Override
-    public void testMultiValuedFieldWithValueScriptWithParams() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        Map<String, Object> params = new HashMap<>();
-        params.put("dec", 1);
-        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .field("values")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - dec", params))
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
-    }
-
-    @Override
-    public void testScriptSingleValued() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValue, maxValue);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['value'].value", emptyMap()))
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue, maxValue, sigDigits);
-    }
-
-    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
     public void testScriptSingleValuedWithParams() throws Exception {
+        assertThat(terms, notNullValue());
         int sigDigits = randomSignificantDigits();
-        Map<String, Object> params = new HashMap<>();
-        params.put("dec", 1);
-
-        Script script = new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['value'].value - dec", params);
-
-        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
         SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
                     .numberOfSignificantValueDigits(sigDigits)
-                    .script(script)
-            )
-            .get();
-
+        assertThat(values.getName(), equalTo("percentile_ranks"));
+            assertThat(ranks, notNullValue());
         assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
+                terms("terms").field("value")
+     * Make sure that a request using a deterministic script or not using a script get cached.
+            .setQuery(matchAllQuery())
     }
-
-    @Override
-    public void testScriptMultiValued() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        final double[] pcts = randomPercents(minValues, maxValues);
-
-        Script script = new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "doc['values']", emptyMap());
-
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .script(script)
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
+                case 1:
+        assertThat(
         final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+            )
+                    .script(script)
+                .getTotal()
+                case 0:
+            .get();
+                    .numberOfSignificantValueDigits(sigDigits)
         assertConsistent(pcts, values, minValues, maxValues, sigDigits);
     }
-
-    @Override
-    public void testScriptMultiValuedWithParams() throws Exception {
-        int sigDigits = randomSignificantDigits();
-        Script script = AggregationTestScriptsPlugin.DECREMENT_ALL_VALUES;
-
-        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
-                    .numberOfSignificantValueDigits(sigDigits)
-                    .script(script)
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
-        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
-    }
-
-    public void testOrderBySubAggregation() {
-        int sigDigits = randomSignificantDigits();
-        boolean asc = randomBoolean();
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                histogram("histo").field("value")
-                    .interval(2L)
-                    .subAggregation(
-                        percentileRanks("percentile_ranks", new double[] { 99 }).field("value")
-                            .method(PercentilesMethod.HDR)
-                            .numberOfSignificantValueDigits(sigDigits)
-                    )
-                    .order(BucketOrder.aggregation("percentile_ranks", "99", asc))
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        Histogram histo = searchResponse.getAggregations().get("histo");
-        double previous = asc ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
-        for (Histogram.Bucket bucket : histo.getBuckets()) {
-            PercentileRanks values = bucket.getAggregations().get("percentile_ranks");
-            double p99 = values.percent(99);
-            if (asc) {
-                assertThat(p99, greaterThanOrEqualTo(previous));
-            } else {
-                assertThat(p99, lessThanOrEqualTo(previous));
-            }
-            previous = p99;
-        }
-    }
-
-    @Override
-    public void testOrderByEmptyAggregation() throws Exception {
-        SearchResponse searchResponse = client().prepareSearch("idx")
-            .setQuery(matchAllQuery())
-            .addAggregation(
-                terms("terms").field("value")
-                    .order(BucketOrder.compound(BucketOrder.aggregation("filter>ranks.99", true)))
-                    .subAggregation(
-                        filter("filter", termQuery("value", 100)).subAggregation(
-                            percentileRanks("ranks", new double[] { 99 }).method(PercentilesMethod.HDR).field("value")
-                        )
-                    )
-            )
-            .get();
-
-        assertHitCount(searchResponse, 10);
-
-        Terms terms = searchResponse.getAggregations().get("terms");
-        assertThat(terms, notNullValue());
-        List<? extends Terms.Bucket> buckets = terms.getBuckets();
+/*
+import static org.opensearch.core.common.util.CollectionUtils.iterableAsArrayList;
+import static org.opensearch.search.aggregations.AggregationBuilders.filter;
+    private static double[] randomPercents(long minValue, long maxValue) {
+            equalTo(0L)
+                        .field("value")
+    public void testScriptMultiValued() throws Exception {
         assertThat(buckets, notNullValue());
-        assertThat(buckets.size(), equalTo(10));
-
-        for (int i = 0; i < 10; i++) {
-            Terms.Bucket bucket = buckets.get(i);
-            assertThat(bucket, notNullValue());
-            assertThat(bucket.getKeyAsNumber(), equalTo((long) i + 1));
-            assertThat(bucket.getDocCount(), equalTo(1L));
-            Filter filter = bucket.getAggregations().get("filter");
-            assertThat(filter, notNullValue());
-            assertThat(filter.getDocCount(), equalTo(0L));
-            PercentileRanks ranks = filter.getAggregations().get("ranks");
-            assertThat(ranks, notNullValue());
-            assertThat(ranks.percent(99), equalTo(Double.NaN));
-
-        }
-    }
-
-    /**
-     * Make sure that a request using a deterministic script or not using a script get cached.
-     * Ensure requests using nondeterministic scripts do not get cached.
-     */
-    public void testScriptCaching() throws Exception {
-        assertAcked(
-            prepareCreate("cache_test_idx").setMapping("d", "type=long")
-                .setSettings(Settings.builder().put("requests.cache.enable", true).put("number_of_shards", 1).put("number_of_replicas", 1))
-                .get()
-        );
-        indexRandom(
-            true,
+            switch (randomInt(20)) {
+                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        params.put("dec", 1);
+        assertThat(reversePercentiles.percent(15), equalTo(Double.NaN));
+            PercentileRanks values = bucket.getAggregations().get("percentile_ranks");
+import static org.opensearch.search.aggregations.AggregationBuilders.percentileRanks;
+                )
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(
+        Map<String, Object> params = new HashMap<>();
+import org.opensearch.search.aggregations.bucket.terms.Terms;
+                    .order(BucketOrder.aggregation("percentile_ranks", "99", asc))
             client().prepareIndex("cache_test_idx").setId("1").setSource("s", 1),
-            client().prepareIndex("cache_test_idx").setId("2").setSource("s", 2)
-        );
-
-        // Make sure we are starting with a clear cache
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getHitCount(),
-            equalTo(0L)
-        );
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getMissCount(),
-            equalTo(0L)
-        );
-
-        // Test that a request using a nondeterministic script does not get cached
-        SearchResponse r = client().prepareSearch("cache_test_idx")
-            .setSize(0)
-            .addAggregation(
-                percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR)
-                    .field("d")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "Math.random()", emptyMap()))
+                    )
             )
-            .get();
-        assertSearchResponse(r);
-
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
+        assertThat(e.getMessage(), equalTo("[values] must not be null: [percentile_ranks]"));
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        for (int i = 1; i < percentileList.size(); ++i) {
                 .getTotal()
-                .getRequestCache()
-                .getHitCount(),
-            equalTo(0L)
-        );
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getMissCount(),
-            equalTo(0L)
-        );
-
-        // Test that a request using a deterministic script gets cached
-        r = client().prepareSearch("cache_test_idx")
-            .setSize(0)
-            .addAggregation(
-                percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR)
-                    .field("d")
-                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
-            )
-            .get();
-        assertSearchResponse(r);
-
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getHitCount(),
-            equalTo(0L)
-        );
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getMissCount(),
-            equalTo(1L)
-        );
-
-        // Ensure that non-scripted requests are cached as normal
-        r = client().prepareSearch("cache_test_idx")
-            .setSize(0)
-            .addAggregation(percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR).field("d"))
-            .get();
-        assertSearchResponse(r);
-
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getHitCount(),
-            equalTo(0L)
-        );
-        assertThat(
-            client().admin()
-                .indices()
-                .prepareStats("cache_test_idx")
-                .setRequestCache(true)
-                .get()
-                .getTotal()
-                .getRequestCache()
-                .getMissCount(),
-            equalTo(2L)
-        );
-        internalCluster().wipeIndices("cache_test_idx");
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+        Histogram.Bucket bucket = histo.getBuckets().get(1);
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+                        .numberOfSignificantValueDigits(sigDigits)
+ *
+        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
+                        .numberOfSignificantValueDigits(sigDigits)
+                    .numberOfSignificantValueDigits(sigDigits)
     }
-
+        assertThat(values, notNullValue());
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+    }
+                    .numberOfSignificantValueDigits(sigDigits)
+                .getRequestCache()
+import org.opensearch.search.aggregations.bucket.filter.Filter;
+        assertThat(reversePercentiles.getName(), equalTo("percentile_ranks"));
+                histogram("histo").field("value")
+                    .field("values")
+            .get();
+                .getTotal()
+                            .numberOfSignificantValueDigits(sigDigits)
+    public void testScriptSingleValued() throws Exception {
+                .setRequestCache(true)
+        for (int i = 0; i < 10; i++) {
+        assertConsistent(pcts, values, minValues - 1, maxValues - 1, sigDigits);
+            .get();
+        );
+        );
+        );
+            .addAggregation(percentileRanks("foo", new double[] { 50.0 }).method(PercentilesMethod.HDR).field("d"))
+        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
+                .getHitCount(),
+            } else {
+                    percents[i] = minValue;
+        final double[] pcts = randomPercents(minValue, maxValue);
+                    .script(script)
+        final double[] pcts = new double[] { minValue - 1, maxValue + 1 };
+    }
+        params.put("dec", 1);
 }
+            .addAggregation(
+                    .order(BucketOrder.compound(BucketOrder.aggregation("filter>ranks.99", true)))
+            .get();
+        final double[] percents = new double[length];
+                    .minDocCount(0)
+                .get()
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+            .addAggregation(
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+        final double[] pcts = randomPercents(minValues - 1, maxValues - 1);
+            client().admin()
+        SearchResponse searchResponse = client().prepareSearch("idx")
+import static org.opensearch.search.aggregations.AggregationBuilders.global;
+            assertThat(percentile.getPercent(), greaterThanOrEqualTo(0.0));
+                    .interval(2L)
+        assertHitCount(searchResponse, 10);
+    }
+            if (asc) {
+ * this work for additional information regarding copyright
+        assertThat(global.getName(), equalTo("global"));
+        return Collections.singleton(AggregationTestScriptsPlugin.class);
+        final double[] pcts = null;
+            .addAggregation(
+                .getMissCount(),
+            .setQuery(matchAllQuery())
+            client().admin()
+        super(staticSettings);
+    public void testUnmapped() throws Exception {
+import org.apache.logging.log4j.LogManager;
+                .addAggregation(
+        assertThat(searchResponse.getHits().getTotalHits().value(), equalTo(0L));
+import org.opensearch.common.settings.Settings;
+            .addAggregation(
+public class HDRPercentileRanksIT extends AbstractNumericTestCase {
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+                    .field("values")
+                .indices()
+        IllegalArgumentException e = expectThrows(
+        SearchResponse r = client().prepareSearch("cache_test_idx")
+        assertThat(
+            )
+    }
+        internalCluster().wipeIndices("cache_test_idx");
+                .indices()
+        );
+            .setQuery(matchAllQuery())
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+                        )
+        assertHitCount(searchResponse, 10);
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+                )
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+    @Override
+            }
+    }
+            client().prepareIndex("cache_test_idx").setId("2").setSource("s", 2)
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        assertThat(reversePercentiles.percent(10), equalTo(Double.NaN));
+                    percents[i] = (randomDouble() * (maxValue - minValue)) + minValue;
+            .addAggregation(
+                .prepareStats("cache_test_idx")
+            previous = p99;
+            .addAggregation(
+                .getHitCount(),
+        indexRandom(
+            )
+            PercentileRanks ranks = filter.getAggregations().get("ranks");
+                .get()
+            .get();
+            equalTo(1L)
+        Map<String, Object> params = new HashMap<>();
+        final double[] pcts = randomPercents(minValue, maxValue);
+            client().admin()
+        return percents;
+            .setSize(0)
+                percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+        final double[] pcts = randomPercents(minValue - 1, maxValue - 1);
+    @Override
+import static org.hamcrest.Matchers.equalTo;
+        SearchResponse searchResponse = client().prepareSearch("idx")
+        int sigDigits = randomSignificantDigits();
+    }
+        // Test that a request using a nondeterministic script does not get cached
+        final PercentileRanks values = searchResponse.getAggregations().get("percentile_ranks");
+            .addAggregation(
+        assertThat(((InternalAggregation) global).getProperty("percentile_ranks"), sameInstance(values));
+                    .script(new Script(ScriptType.INLINE, AggregationTestScriptsPlugin.NAME, "_value - 1", emptyMap()))
+        SearchResponse searchResponse = client().prepareSearch("empty_bucket_idx")
+        final double[] pcts = randomPercents(minValue, maxValue);
+        assertThat(
+        }
+                    percentileRanks("percentile_ranks", pcts).method(PercentilesMethod.HDR)
+            double p99 = values.percent(99);
+            .setQuery(matchAllQuery())
+            .setQuery(matchAllQuery())
+    private void assertConsistent(double[] pcts, PercentileRanks values, long minValue, long maxValue, int numberSigDigits) {
+        SearchResponse searchResponse = client().prepareSearch("idx")
+    public void testScriptCaching() throws Exception {
+            .setQuery(matchAllQuery())
+import org.opensearch.search.aggregations.BucketOrder;
+        assertHitCount(searchResponse, 10);
+    }
+            }
+        PercentileRanks reversePercentiles = searchResponse.getAggregations().get("percentile_ranks");
+                    .numberOfSignificantValueDigits(sigDigits)
+        int sigDigits = randomSignificantDigits();
+                assertThat(percentile.getValue(), lessThanOrEqualTo(minValue + allowedError));
+                double allowedError = maxValue / Math.pow(10, numberSigDigits);
+    }
+    public void testSingleValuedFieldOutsideRange() throws Exception {
+                            .numberOfSignificantValueDigits(sigDigits)
+ * specific language governing permissions and limitations
+    public void testSingleValuedField() throws Exception {
+                    .field("d")
+            true,
+            )
+                        .numberOfSignificantValueDigits(sigDigits)
+                    )
+                    .numberOfSignificantValueDigits(sigDigits)
+            Filter filter = bucket.getAggregations().get("filter");
+                        .field("value")
+                        filter("filter", termQuery("value", 100)).subAggregation(
+        assertHitCount(searchResponse, 10);
+     */
+    }
+        SearchResponse searchResponse = client().prepareSearch("idx")
+    public void testEmptyAggregation() throws Exception {
+            assertThat(bucket.getKeyAsNumber(), equalTo((long) i + 1));
+                .getRequestCache()
+        assertConsistent(pcts, values, minValue - 1, maxValue - 1, sigDigits);
+        }
+            .setQuery(matchAllQuery())
+ * SPDX-License-Identifier: Apache-2.0
+    }

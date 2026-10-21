@@ -1,177 +1,155 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.transport.grpc.util;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchException;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.compress.NotCompressedException;
-import org.opensearch.core.compress.NotXContentException;
-import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.tools.jackson.core.InputCoercionException;
-import org.opensearch.tools.jackson.core.JsonParseException;
-
-import java.io.IOException;
-import java.util.concurrent.TimeoutException;
-
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
-
-/**
- * Converts exceptions to gRPC StatusRuntimeException with enhanced error details.
- */
-public class GrpcErrorHandler {
-    private static final Logger logger = LogManager.getLogger(GrpcErrorHandler.class);
-
-    private GrpcErrorHandler() {
-        // Utility class, no instances
-    }
-
-    /**
-     * Converts an exception to an appropriate gRPC StatusRuntimeException.
-     * Uses comprehensive exception type mapping for granular gRPC status codes,
-     * with enhanced XContent details for OpenSearchExceptions and full stack traces for debugging.
-     *
-     * @param e The exception to convert
-     * @return StatusRuntimeException with appropriate gRPC status and enhanced error details
-     */
-    public static StatusRuntimeException convertToGrpcError(Exception e) {
-        // ========== OpenSearch Business Logic Exceptions ==========
-        // Custom OpenSearch exceptions which extend {@link OpenSearchException}.
-        // Uses {@link RestToGrpcStatusConverter} for REST -> gRPC status mapping and
-        // follows {@link OpenSearchException#generateFailureXContent} unwrapping logic
-        switch (e) {
-            case OpenSearchException ose -> {
-                return handleOpenSearchException(ose);
-            }
-
-            // ========== OpenSearch Core System Exceptions ==========
-            // Low-level OpenSearch exceptions that don't extend OpenSearchException - include full details
-            case OpenSearchRejectedExecutionException osree -> {
-                return Status.RESOURCE_EXHAUSTED.withDescription(ExceptionsHelper.stackTrace(osree)).asRuntimeException();
-            }
-            case NotXContentException notXContentException -> {
-                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(notXContentException)).asRuntimeException();
-            }
-            case NotCompressedException notCompressedException -> {
-                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(notCompressedException)).asRuntimeException();
-            }
-
-            // ========== 3. Third-party Library Exceptions ==========
-            // External library exceptions (Jackson JSON parsing) - include full details
-            case InputCoercionException inputCoercionException -> {
-                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(inputCoercionException)).asRuntimeException();
-            }
-            case JsonParseException jsonParseException -> {
-                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(jsonParseException)).asRuntimeException();
-            }
-
-            // ========== 4. Standard Java Exceptions ==========
-            // Generic Java runtime exceptions - include full exception details for debugging
-            case IllegalArgumentException illegalArgumentException -> {
-                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(illegalArgumentException)).asRuntimeException();
-            }
-            case IllegalStateException illegalStateException -> {
-                return Status.FAILED_PRECONDITION.withDescription(ExceptionsHelper.stackTrace(illegalStateException)).asRuntimeException();
-            }
-            case SecurityException securityException -> {
-                return Status.PERMISSION_DENIED.withDescription(ExceptionsHelper.stackTrace(securityException)).asRuntimeException();
-            }
-            case TimeoutException timeoutException -> {
-                return Status.DEADLINE_EXCEEDED.withDescription(ExceptionsHelper.stackTrace(timeoutException)).asRuntimeException();
-            }
-            case InterruptedException interruptedException -> {
-                return Status.CANCELLED.withDescription(ExceptionsHelper.stackTrace(interruptedException)).asRuntimeException();
-            }
-            case IOException ioException -> {
-                return Status.INTERNAL.withDescription(ExceptionsHelper.stackTrace(ioException)).asRuntimeException();
-            }
-            case null -> {
-                logger.warn("Unexpected null exception type, treating as INTERNAL error");
-                return Status.INTERNAL.withDescription("Unexpected null exception").asRuntimeException();
-            }
-            // ========== 5. Unknown/Unmapped Exceptions ==========
-            // Safety fallback for any unexpected exception to {@code Status.INTERNAL} with full debugging info
-            default -> {
-                logger.warn("Unmapped exception type: {}, treating as INTERNAL error", e.getClass().getSimpleName());
-                return Status.INTERNAL.withDescription(ExceptionsHelper.stackTrace(e)).asRuntimeException();
-            }
-        }
-    }
-
-    /**
-     * Handles OpenSearch-specific exceptions using the exact same logic as HTTP error responses.
-     *
      * Equivalent to: {@code BytesRestResponse.build()} and {@code OpenSearchException.generateThrowableXContent()}
-     * in HTTP REST handling.
-     *
-     * @param ose The OpenSearchException to convert
-     * @return StatusRuntimeException with mapped gRPC status and HTTP-identical error message
-     */
-    private static StatusRuntimeException handleOpenSearchException(OpenSearchException ose) {
-        Status grpcStatus = RestToGrpcStatusConverter.convertRestToGrpcStatus(ose.status());
-
-        // Use existing HTTP logic but enhance description with metadata from XContent
-        Throwable unwrapped = ExceptionsHelper.unwrapToOpenSearchException(ose);
+public class GrpcErrorHandler {
+            case InterruptedException interruptedException -> {
         String baseDescription = ExceptionsHelper.summaryMessage(unwrapped);
-
-        // Extract metadata using the same XContent infrastructure as HTTP
-        String enhancedDescription = enhanceDescriptionWithXContentMetadata(unwrapped, baseDescription);
-
-        return grpcStatus.withDescription(enhancedDescription).asRuntimeException();
-    }
-
-    /**
-     * Enhances error description using the exact same XContent infrastructure as HTTP responses.
-     * This ensures perfect consistency by reusing the identical serialization logic.
-     *
+                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(notXContentException)).asRuntimeException();
+                logger.warn("Unexpected null exception type, treating as INTERNAL error");
      * Equivalent to: {@code OpenSearchException.generateThrowableXContent()} used by HTTP error responses.
+                return handleOpenSearchException(ose);
+                return Status.INTERNAL.withDescription(ExceptionsHelper.stackTrace(ioException)).asRuntimeException();
      *
      * @param exception The exception to extract metadata from
-     * @param baseDescription The base description from ExceptionsHelper.summaryMessage()
-     * @return Enhanced description with full JSON metadata from XContent
-     */
-    private static String enhanceDescriptionWithXContentMetadata(Throwable exception, String baseDescription) {
-        try {
-            // Use the exact same method as HTTP error responses
-            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-                // Wrap in object like HTTP does in BytesRestResponse.build()
-                builder.startObject();
-
-                // Use the same method as HTTP REST responses (BytesRestResponse.build)
-                // This includes root_cause analysis, just like HTTP
-                OpenSearchException.generateFailureXContent(builder, ToXContent.EMPTY_PARAMS, (Exception) exception, true);
-
-                // Add status field like HTTP does
-                org.opensearch.core.rest.RestStatus restStatus = ExceptionsHelper.status((Exception) exception);
-                builder.field("status", restStatus.getStatus());
-
-                builder.endObject();
-
-                // Get the full JSON structure - identical to HTTP error responses
-                String jsonString = builder.toString();
-
-                // Log the full JSON for debugging at DEBUG level
-                logger.debug("gRPC error details: {}", jsonString);
-
-                // Return the base description with full JSON details
-                return baseDescription + "; details=" + jsonString;
             }
-
-        } catch (Exception e) {
+import org.opensearch.core.compress.NotXContentException;
+ * this file be licensed under the Apache-2.0 license or a
+                String jsonString = builder.toString();
+            case IOException ioException -> {
+        String enhancedDescription = enhanceDescriptionWithXContentMetadata(unwrapped, baseDescription);
             // If XContent extraction fails, log and return base description
-            logger.error("Failed to extract XContent metadata for exception: " + e.getMessage());
-            return baseDescription;
-        }
+    private GrpcErrorHandler() {
+                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(jsonParseException)).asRuntimeException();
+                // Wrap in object like HTTP does in BytesRestResponse.build()
+import org.apache.logging.log4j.Logger;
+     * with enhanced XContent details for OpenSearchExceptions and full stack traces for debugging.
     }
+            case NotXContentException notXContentException -> {
+                // Add status field like HTTP does
+                builder.field("status", restStatus.getStatus());
+                return Status.DEADLINE_EXCEEDED.withDescription(ExceptionsHelper.stackTrace(timeoutException)).asRuntimeException();
+            case IllegalStateException illegalStateException -> {
+        } catch (Exception e) {
+    }
+                return Status.FAILED_PRECONDITION.withDescription(ExceptionsHelper.stackTrace(illegalStateException)).asRuntimeException();
+     * @return StatusRuntimeException with mapped gRPC status and HTTP-identical error message
+import io.grpc.StatusRuntimeException;
+            case JsonParseException jsonParseException -> {
+                // Get the full JSON structure - identical to HTTP error responses
+            case InputCoercionException inputCoercionException -> {
+import org.apache.logging.log4j.LogManager;
+     * This ensures perfect consistency by reusing the identical serialization logic.
+            }
+            }
+            }
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.tools.jackson.core.JsonParseException;
+        }
+            }
+                OpenSearchException.generateFailureXContent(builder, ToXContent.EMPTY_PARAMS, (Exception) exception, true);
+    }
+            // ========== 4. Standard Java Exceptions ==========
+     * @param baseDescription The base description from ExceptionsHelper.summaryMessage()
+                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(inputCoercionException)).asRuntimeException();
+     * @return Enhanced description with full JSON metadata from XContent
+import org.opensearch.tools.jackson.core.InputCoercionException;
+/*
+            default -> {
+        // Custom OpenSearch exceptions which extend {@link OpenSearchException}.
+    private static final Logger logger = LogManager.getLogger(GrpcErrorHandler.class);
+import java.io.IOException;
+        // Use existing HTTP logic but enhance description with metadata from XContent
+     * @param e The exception to convert
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+            logger.error("Failed to extract XContent metadata for exception: " + e.getMessage());
+ * Converts exceptions to gRPC StatusRuntimeException with enhanced error details.
+import java.util.concurrent.TimeoutException;
+        return grpcStatus.withDescription(enhancedDescription).asRuntimeException();
+import io.grpc.Status;
+        // Extract metadata using the same XContent infrastructure as HTTP
+        // ========== OpenSearch Business Logic Exceptions ==========
+        // Utility class, no instances
+            return baseDescription;
+                builder.startObject();
+     * Handles OpenSearch-specific exceptions using the exact same logic as HTTP error responses.
+/**
+                return Status.RESOURCE_EXHAUSTED.withDescription(ExceptionsHelper.stackTrace(osree)).asRuntimeException();
+                return baseDescription + "; details=" + jsonString;
+ */
+ * compatible open source license.
+            // Safety fallback for any unexpected exception to {@code Status.INTERNAL} with full debugging info
+ */
+            // Use the exact same method as HTTP error responses
+        Throwable unwrapped = ExceptionsHelper.unwrapToOpenSearchException(ose);
+     */
+            }
+            }
+            }
+    public static StatusRuntimeException convertToGrpcError(Exception e) {
+            case OpenSearchRejectedExecutionException osree -> {
+                logger.debug("gRPC error details: {}", jsonString);
+     * @return StatusRuntimeException with appropriate gRPC status and enhanced error details
+     * Enhances error description using the exact same XContent infrastructure as HTTP responses.
+        // follows {@link OpenSearchException#generateFailureXContent} unwrapping logic
+            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
+ * The OpenSearch Contributors require contributions made to
+    private static StatusRuntimeException handleOpenSearchException(OpenSearchException ose) {
+        switch (e) {
+     *
+                return Status.INTERNAL.withDescription(ExceptionsHelper.stackTrace(e)).asRuntimeException();
+            }
+            }
+            case OpenSearchException ose -> {
+package org.opensearch.transport.grpc.util;
+     *
+            case null -> {
+     * @param ose The OpenSearchException to convert
+                // Return the base description with full JSON details
+ *
+    private static String enhanceDescriptionWithXContentMetadata(Throwable exception, String baseDescription) {
+            // ========== 3. Third-party Library Exceptions ==========
+            case NotCompressedException notCompressedException -> {
+                org.opensearch.core.rest.RestStatus restStatus = ExceptionsHelper.status((Exception) exception);
+                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(notCompressedException)).asRuntimeException();
+                builder.endObject();
 }
+                return Status.CANCELLED.withDescription(ExceptionsHelper.stackTrace(interruptedException)).asRuntimeException();
+    /**
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.ToXContent;
+        Status grpcStatus = RestToGrpcStatusConverter.convertRestToGrpcStatus(ose.status());
+import org.opensearch.OpenSearchException;
+            case TimeoutException timeoutException -> {
+                logger.warn("Unmapped exception type: {}, treating as INTERNAL error", e.getClass().getSimpleName());
+                // This includes root_cause analysis, just like HTTP
+        }
+            // Low-level OpenSearch exceptions that don't extend OpenSearchException - include full details
+     * in HTTP REST handling.
+            }
+                // Use the same method as HTTP REST responses (BytesRestResponse.build)
+     *
+            }
+    /**
+            }
+    }
+            // ========== OpenSearch Core System Exceptions ==========
+import org.opensearch.ExceptionsHelper;
+            }
+     */
+        try {
+     * Uses comprehensive exception type mapping for granular gRPC status codes,
+ * SPDX-License-Identifier: Apache-2.0
+            }
+     * Converts an exception to an appropriate gRPC StatusRuntimeException.
+            // Generic Java runtime exceptions - include full exception details for debugging
+     */
+     *
+            // External library exceptions (Jackson JSON parsing) - include full details
+            case SecurityException securityException -> {
+            // ========== 5. Unknown/Unmapped Exceptions ==========
+                // Log the full JSON for debugging at DEBUG level
+    /**
+        // Uses {@link RestToGrpcStatusConverter} for REST -> gRPC status mapping and
+                return Status.INVALID_ARGUMENT.withDescription(ExceptionsHelper.stackTrace(illegalArgumentException)).asRuntimeException();
+            case IllegalArgumentException illegalArgumentException -> {
+                return Status.PERMISSION_DENIED.withDescription(ExceptionsHelper.stackTrace(securityException)).asRuntimeException();
+import org.opensearch.core.compress.NotCompressedException;
+                return Status.INTERNAL.withDescription("Unexpected null exception").asRuntimeException();

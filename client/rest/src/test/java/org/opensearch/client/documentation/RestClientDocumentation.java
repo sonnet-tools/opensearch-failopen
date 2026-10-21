@@ -1,578 +1,552 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client.documentation;
-
-import org.apache.hc.client5.http.auth.AuthScope;
-import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
-import org.apache.hc.client5.http.config.RequestConfig;
-import org.apache.hc.client5.http.impl.async.HttpAsyncClientBuilder;
-import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
-import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
-import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
-import org.apache.hc.core5.function.Factory;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.apache.hc.core5.http.message.BasicHeader;
-import org.apache.hc.core5.http.message.RequestLine;
-import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
-import org.apache.hc.core5.reactor.IOReactorConfig;
-import org.apache.hc.core5.reactor.ssl.TlsDetails;
-import org.apache.hc.core5.ssl.SSLContextBuilder;
-import org.apache.hc.core5.ssl.SSLContexts;
-import org.apache.hc.core5.util.Timeout;
-import org.opensearch.client.Cancellable;
-import org.opensearch.client.HttpAsyncResponseConsumerFactory;
-import org.opensearch.client.Node;
-import org.opensearch.client.NodeSelector;
-import org.opensearch.client.Request;
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.Response;
-import org.opensearch.client.ResponseListener;
-import org.opensearch.client.RestClient;
-import org.opensearch.client.RestClientBuilder;
-import org.opensearch.client.RestClientBuilder.HttpClientConfigCallback;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.KeyStore;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateFactory;
-import java.util.Base64;
-import java.util.Iterator;
-import java.util.concurrent.CountDownLatch;
-
-/**
- * This class is used to generate the Java low-level REST client documentation.
- * You need to wrap your code between two tags like:
- * // tag::example[]
- * // end::example[]
- * <p>
- * Where example is your tag name.
- * <p>
- * Then in the documentation, you can extract what is between tag and end tags with
- * ["source","java",subs="attributes,callouts,macros"]
- * --------------------------------------------------
- * include-tagged::{doc-tests}/RestClientDocumentation.java[example]
- * --------------------------------------------------
- * <p>
- * Note that this is not a test class as we are only interested in testing that docs snippets compile. We don't want
- * to send requests to a node and we don't even have the tools to do it.
- */
-@SuppressWarnings("unused")
-public class RestClientDocumentation {
-    private static final String TOKEN = "DUMMY";
-
-    // tag::rest-client-options-singleton
-    private static final RequestOptions COMMON_OPTIONS;
-    static {
-        RequestOptions.Builder builder = RequestOptions.DEFAULT.toBuilder();
-        builder.addHeader("Authorization", "Bearer " + TOKEN); // <1>
-        builder.setHttpAsyncResponseConsumerFactory(           // <2>
-            new HttpAsyncResponseConsumerFactory
-                .HeapBufferedResponseConsumerFactory(30 * 1024 * 1024 * 1024));
-        COMMON_OPTIONS = builder.build();
-    }
-    // end::rest-client-options-singleton
-
-    @SuppressWarnings("unused")
-    public void usage() throws IOException, InterruptedException, ParseException {
-
-        //tag::rest-client-init
-        RestClient restClient = RestClient.builder(
-            new HttpHost("http", "localhost", 9200),
-            new HttpHost("http", "localhost", 9201)).build();
-        //end::rest-client-init
-
-        //tag::rest-client-close
-        restClient.close();
-        //end::rest-client-close
-
-        {
-            //tag::rest-client-init-default-headers
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("http", "localhost", 9200));
-            Header[] defaultHeaders = new Header[]{new BasicHeader("header", "value")};
-            builder.setDefaultHeaders(defaultHeaders); // <1>
-            //end::rest-client-init-default-headers
-        }
-        {
-            //tag::rest-client-init-node-selector
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("http", "localhost", 9200));
-            builder.setNodeSelector(NodeSelector.SKIP_DEDICATED_CLUSTER_MANAGERS); // <1>
-            //end::rest-client-init-node-selector
-        }
-        {
-            //tag::rest-client-init-allocation-aware-selector
-            RestClientBuilder builder = RestClient.builder(
-                    new HttpHost("http", "localhost", 9200));
-            builder.setNodeSelector(new NodeSelector() { // <1>
-                @Override
-                public void select(Iterable<Node> nodes) {
-                    /*
-                     * Prefer any node that belongs to rack_one. If none is around
-                     * we will go to another rack till it's time to try and revive
-                     * some of the nodes that belong to rack_one.
-                     */
-                    boolean foundOne = false;
-                    for (Node node : nodes) {
-                        String rackId = node.getAttributes().get("rack_id").get(0);
-                        if ("rack_one".equals(rackId)) {
-                            foundOne = true;
-                            break;
-                        }
-                    }
-                    if (foundOne) {
-                        Iterator<Node> nodesIt = nodes.iterator();
-                        while (nodesIt.hasNext()) {
-                            Node node = nodesIt.next();
-                            String rackId = node.getAttributes().get("rack_id").get(0);
-                            if ("rack_one".equals(rackId) == false) {
-                                nodesIt.remove();
-                            }
-                        }
-                    }
-                }
-            });
-            //end::rest-client-init-allocation-aware-selector
-        }
-        {
-            //tag::rest-client-init-failure-listener
-            RestClientBuilder builder = RestClient.builder(
-                    new HttpHost("http", "localhost", 9200));
-            builder.setFailureListener(new RestClient.FailureListener() {
-                @Override
-                public void onFailure(Node node) {
-                    // <1>
-                }
-            });
-            //end::rest-client-init-failure-listener
-        }
-        {
-            //tag::rest-client-init-request-config-callback
-            RestClientBuilder builder = RestClient.builder(
-                    new HttpHost("http", "localhost", 9200));
-            builder.setRequestConfigCallback(
-                new RestClientBuilder.RequestConfigCallback() {
+            String apiKeyAuth =
                     @Override
-                    public RequestConfig.Builder customizeRequestConfig(
-                            RequestConfig.Builder requestConfigBuilder) {
-                        return requestConfigBuilder.setResponseTimeout(Timeout.ofMilliseconds(10000)); // <1>
-                    }
-                });
-            //end::rest-client-init-request-config-callback
-        }
-        {
-            //tag::rest-client-init-client-config-callback
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("http", "localhost", 9200));
-            builder.setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                            HttpAsyncClientBuilder httpClientBuilder) {
-                        return httpClientBuilder.setProxy(
-                            new HttpHost("http", "proxy", 9000));  // <1>
-                    }
-                });
-            //end::rest-client-init-client-config-callback
-        }
-
-        {
-            //tag::rest-client-sync
-            Request request = new Request(
-                "GET",  // <1>
-                "/");   // <2>
-            Response response = restClient.performRequest(request);
-            //end::rest-client-sync
-        }
-        {
-            //tag::rest-client-async
-            Request request = new Request(
-                "GET",  // <1>
-                "/");   // <2>
-            Cancellable cancellable = restClient.performRequestAsync(request,
-                new ResponseListener() {
-                    @Override
-                    public void onSuccess(Response response) {
-                        // <3>
-                    }
-
-                    @Override
-                    public void onFailure(Exception exception) {
-                        // <4>
-                    }
-            });
-            //end::rest-client-async
-        }
-        {
-            Request request = new Request("GET", "/");
-            //tag::rest-client-parameters
-            request.addParameter("pretty", "true");
-            //end::rest-client-parameters
-            //tag::rest-client-body
-            request.setEntity(new StringEntity(
-                    "{\"json\":\"text\"}",
-                    ContentType.APPLICATION_JSON));
-            //end::rest-client-body
-            //tag::rest-client-body-shorter
-            request.setJsonEntity("{\"json\":\"text\"}");
-            //end::rest-client-body-shorter
-            //tag::rest-client-options-set-singleton
-            request.setOptions(COMMON_OPTIONS);
-            //end::rest-client-options-set-singleton
-            {
-                //tag::rest-client-options-customize-header
-                RequestOptions.Builder options = COMMON_OPTIONS.toBuilder();
-                options.addHeader("cats", "knock things off of other things");
-                request.setOptions(options);
-                //end::rest-client-options-customize-header
-            }
-        }
-        {
-            HttpEntity[] documents = new HttpEntity[10];
-            //tag::rest-client-async-example
-            final CountDownLatch latch = new CountDownLatch(documents.length);
-            for (int i = 0; i < documents.length; i++) {
-                Request request = new Request("PUT", "/posts/doc/" + i);
-                //let's assume that the documents are stored in an HttpEntity array
-                request.setEntity(documents[i]);
-                restClient.performRequestAsync(
-                        request,
-                        new ResponseListener() {
-                            @Override
-                            public void onSuccess(Response response) {
-                                // <1>
-                                latch.countDown();
-                            }
-
-                            @Override
-                            public void onFailure(Exception exception) {
-                                // <2>
-                                latch.countDown();
-                            }
-                        }
-                );
-            }
-            latch.await();
-            //end::rest-client-async-example
-        }
-        {
-            //tag::rest-client-async-cancel
-            Request request = new Request("GET", "/posts/_search");
-            Cancellable cancellable = restClient.performRequestAsync(
-                request,
-                new ResponseListener() {
-                    @Override
-                    public void onSuccess(Response response) {
-                        // <1>
-                    }
-
-                    @Override
-                    public void onFailure(Exception exception) {
-                        // <2>
-                    }
-                }
             );
-            cancellable.cancel();
-            //end::rest-client-async-cancel
-        }
+            RestClientBuilder builder = RestClient.builder(
+import org.apache.hc.core5.reactor.ssl.TlsDetails;
+            //tag::rest-client-config-tcpKeepIdle/tcpKeepInterval/tcpKeepCount
+import org.apache.hc.core5.function.Factory;
+            RestClientBuilder builder = RestClient.builder(
+            RestClientBuilder builder = RestClient.builder(
+            //tag::rest-client-auth-api-key
+                            RequestConfig.Builder requestConfigBuilder) {
+                    public HttpAsyncClientBuilder customizeHttpClient(
+                    public HttpAsyncClientBuilder customizeHttpClient(
+ *
+            String apiKeyId = "uqlEyn8B_gQ_jlvwDIvM";
+                new Header[]{new BasicHeader("Authorization",
+ * You may obtain a copy of the License at
+                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
+import org.apache.hc.core5.http.message.RequestLine;
         {
-            //tag::rest-client-response2
-            Response response = restClient.performRequest(new Request("GET", "/"));
-            RequestLine requestLine = response.getRequestLine(); // <1>
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+        {
+import org.opensearch.client.RequestOptions;
+            RestClientBuilder builder = RestClient.builder(
+            Request request = new Request("GET", "/posts/_search");
+            Request request = new Request(
+                                })
+import java.security.cert.Certificate;
+ * Where example is your tag name.
+            //tag::rest-client-options-set-singleton
+                                            .setTcpKeepCount(10)
+            RestClientBuilder builder = RestClient.builder(
+            //end::rest-client-options-set-singleton
+                                .build());
+import org.opensearch.client.NodeSelector;
+import java.nio.file.Path;
+            request.setOptions(COMMON_OPTIONS);
+                            }
+                        return httpClientBuilder.setIOReactorConfig(
+import org.apache.hc.core5.http.Header;
+            SSLContextBuilder sslContextBuilder = SSLContexts.custom()
+        }
+                    new HttpHost("localhost", 9200))
+            builder.setDefaultHeaders(defaultHeaders);
+                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+            builder.setDefaultHeaders(defaultHeaders); // <1>
+        {
+                        public RequestConfig.Builder customizeRequestConfig(
+import org.apache.hc.core5.http.ParseException;
+                                .setTlsStrategy(tlsStrategy)
             HttpHost host = response.getHost(); // <2>
-            int statusCode = response.getStatusLine().getStatusCode(); // <3>
-            Header[] headers = response.getHeaders(); // <4>
-            String responseBody = EntityUtils.toString(response.getEntity()); // <5>
+        }
+                    "ApiKey " + apiKeyAuth)};
+                        while (nodesIt.hasNext()) {
+                    }
+ * <p>
+            //tag::rest-client-config-timeouts
+import java.util.Base64;
+            KeyStore truststore = KeyStore.getInstance("pkcs12");
             //end::rest-client-response2
         }
-    }
-
-    @SuppressWarnings("unused")
-    public void commonConfiguration() throws Exception {
-        {
-            //tag::rest-client-config-timeouts
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("localhost", 9200))
-                .setRequestConfigCallback(
-                    new RestClientBuilder.RequestConfigCallback() {
-                        @Override
-                        public RequestConfig.Builder customizeRequestConfig(
-                                RequestConfig.Builder requestConfigBuilder) {
-                            return requestConfigBuilder
-                                .setConnectTimeout(Timeout.ofMilliseconds(5000))
-                                .setResponseTimeout(Timeout.ofMilliseconds(60000));
-                        }
-                    });
-            //end::rest-client-config-timeouts
-        }
-        {
-            //tag::rest-client-config-request-options-timeouts
-            RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(Timeout.ofMilliseconds(5000))
-                .setResponseTimeout(Timeout.ofMilliseconds(60000))
-                .build();
-            RequestOptions options = RequestOptions.DEFAULT.toBuilder()
-                .setRequestConfig(requestConfig)
-                .build();
-            //end::rest-client-config-request-options-timeouts
-        }
-        {
-            //tag::rest-client-config-threads
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                            HttpAsyncClientBuilder httpClientBuilder) {
-                        return httpClientBuilder.setIOReactorConfig(
-                            IOReactorConfig.custom()
-                                .setIoThreadCount(1)
-                                .build());
+                //end::rest-client-options-customize-header
                     }
-                });
-            //end::rest-client-config-threads
-        }
-        {
-            //tag::rest-client-config-tcpKeepIdle/tcpKeepInterval/tcpKeepCount
             RestClientBuilder builder = RestClient.builder(
-                    new HttpHost("localhost", 9200))
-                    .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                        @Override
-                        public HttpAsyncClientBuilder customizeHttpClient(
-                                HttpAsyncClientBuilder httpClientBuilder) {
-                            return httpClientBuilder.setIOReactorConfig(
-                                    IOReactorConfig.custom()
-                                            .setTcpKeepIdle(200)
-                                            .setTcpKeepInterval(10)
-                                            .setTcpKeepCount(10)
-                                            .build());
-                        }
-                    });
-            //end::rest-client-config-tcpKeepIdle/tcpKeepInterval/tcpKeepCount
-        }
-        {
-            //tag::rest-client-config-basic-auth
-            final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-            credentialsProvider.setCredentials(new AuthScope(new HttpHost("localhost", 9200)),
-                  new UsernamePasswordCredentials("user", "password".toCharArray()));
-
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+    static {
+            HttpEntity[] documents = new HttpEntity[10];
+            }
+                .build();
+ * The OpenSearch Contributors require contributions made to
+                        return httpClientBuilder.setProxy(
                     @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                            HttpAsyncClientBuilder httpClientBuilder) {
-                        return httpClientBuilder
-                            .setDefaultCredentialsProvider(credentialsProvider);
-                    }
-                });
-            //end::rest-client-config-basic-auth
-        }
-        {
-            //tag::rest-client-config-disable-preemptive-auth
-            final BasicCredentialsProvider credentialsProvider =
-                new BasicCredentialsProvider();
-            credentialsProvider.setCredentials(new AuthScope(new HttpHost("localhost", 9200)),
-                new UsernamePasswordCredentials("user", "password".toCharArray()));
-
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                            HttpAsyncClientBuilder httpClientBuilder) {
                         httpClientBuilder.disableAuthCaching(); // <1>
+import java.io.IOException;
+            builder.setHttpClientConfigCallback(new HttpClientConfigCallback() {
+                                .build();
+                                // <1>
+ */
+            RestClientBuilder builder = RestClient.builder(
+        {
+ */
+            String keyStorePass = "";
+                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                  new UsernamePasswordCredentials("user", "password".toCharArray()));
+                restClient.performRequestAsync(
+import org.opensearch.client.RestClientBuilder;
+            }
+            int statusCode = response.getStatusLine().getStatusCode(); // <3>
+                    public HttpAsyncClientBuilder customizeHttpClient(
+import org.opensearch.client.Response;
+            credentialsProvider.setCredentials(new AuthScope(new HttpHost("localhost", 9200)),
+                    .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+                    }
+            //end::rest-client-init-default-headers
+                    @Override
+            //tag::rest-client-config-basic-auth
+                new HttpHost("localhost", 9200))
+            String apiKeySecret = "HxHWk2m4RN-V_qg9cDpuX";
+            }
+                        return httpClientBuilder.setConnectionManager(connectionManager);
+                     * some of the nodes that belong to rack_one.
+import java.io.InputStream;
+                    (apiKeyId + ":" + apiKeySecret)
+ * Unless required by applicable law or agreed to in writing,
+                            }
+                options.addHeader("cats", "knock things off of other things");
+            //tag::rest-client-init-node-selector
+            //end::rest-client-parameters
+ * Note that this is not a test class as we are only interested in testing that docs snippets compile. We don't want
+                .build();
+            });
+                keyStore.load(is, keyStorePass.toCharArray());
+        }
+                        // <3>
+                    @Override
+                new RestClientBuilder.RequestConfigCallback() {
+            SSLContextBuilder sslBuilder = SSLContexts.custom()
+                new HttpHost("http", "localhost", 9200));
+            //tag::rest-client-config-encrypted-communication
+                new HttpHost("localhost", 9200))
+        {
+            Cancellable cancellable = restClient.performRequestAsync(
+        }
+/*
+import org.opensearch.client.Cancellable;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+                        Iterator<Node> nodesIt = nodes.iterator();
+                    @Override
+            //end::rest-client-config-tcpKeepIdle/tcpKeepInterval/tcpKeepCount
+                                        return new TlsDetails(sslEngine.getSession(), sslEngine.getApplicationProtocol());
+                                    @Override
+                new ResponseListener() {
+        {
+                                .build();
+                });
+            //end::rest-client-async
+                            IOReactorConfig.custom()
+import org.apache.hc.core5.reactor.IOReactorConfig;
+        {
+            //tag::rest-client-init-default-headers
+                            HttpAsyncClientBuilder httpClientBuilder) {
+                                })
+    public void commonConfiguration() throws Exception {
+                        @Override
+ * You need to wrap your code between two tags like:
+                            HttpAsyncClientBuilder httpClientBuilder) {
+                        // <1>
+                        // <2>
+import org.apache.hc.core5.http.HttpEntity;
+            request.addParameter("pretty", "true");
+            });
+                .setRequestConfig(requestConfig)
+            Path trustStorePath = Paths.get("/path/to/your/truststore.p12");
+ * the Apache License, Version 2.0 (the "License"); you may
+                @Override
+        {
+                    public HttpAsyncClientBuilder customizeHttpClient(
+                                .build();
+            Response response = restClient.performRequest(request);
+                    public HttpAsyncClientBuilder customizeHttpClient(
+                                nodesIt.remove();
+            //end::rest-client-config-threads
+            builder.setNodeSelector(NodeSelector.SKIP_DEDICATED_CLUSTER_MANAGERS); // <1>
+            //tag::rest-client-config-mutual-tls-authentication
+                    }
+            //end::rest-client-config-mutual-tls-authentication
                         return httpClientBuilder
+}
+                    @Override
+                    }
+            //tag::rest-client-async-cancel
+                            return httpClientBuilder.setIOReactorConfig(
+ * Then in the documentation, you can extract what is between tag and end tags with
+            try (InputStream is = Files.newInputStream(caCertificatePath)) {
+                    }
+                                    IOReactorConfig.custom()
+                        }
+                            }
+    @SuppressWarnings("unused")
+                    "Bearer u6iuAxZ0RG1Kcm5jVFI4eU4tZU9aVFEwT2F3")};
+                trustedCa = factory.generateCertificate(is);
+            Path keyStorePath = Paths.get("/path/to/your/keystore.p12");
+            //tag::rest-client-config-disable-preemptive-auth
+                                .build();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+            Cancellable cancellable = restClient.performRequestAsync(request,
+                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
+import org.apache.hc.client5.http.config.RequestConfig;
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+ *
+                new HttpHost("http", "localhost", 9200));
+                        HttpAsyncClientBuilder httpClientBuilder) {
+                "GET",  // <1>
+            //tag::rest-client-config-request-options-timeouts
                             .setDefaultCredentialsProvider(credentialsProvider);
                     }
-                });
-            //end::rest-client-config-disable-preemptive-auth
-        }
-        {
-            String keyStorePass = "";
-            //tag::rest-client-config-encrypted-communication
-            Path trustStorePath = Paths.get("/path/to/truststore.p12");
-            KeyStore truststore = KeyStore.getInstance("pkcs12");
-            try (InputStream is = Files.newInputStream(trustStorePath)) {
-                truststore.load(is, keyStorePass.toCharArray());
-            }
-            SSLContextBuilder sslBuilder = SSLContexts.custom()
-                .loadTrustMaterial(truststore, null);
-            final SSLContext sslContext = sslBuilder.build();
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("https", "localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                            HttpAsyncClientBuilder httpClientBuilder) {
-                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
-                                .setSslContext(sslContext)
-                                // See https://issues.apache.org/jira/browse/HTTPCLIENT-2219
-                                .setTlsDetailsFactory(new Factory<SSLEngine, TlsDetails>() {
-                                    @Override
-                                    public TlsDetails create(final SSLEngine sslEngine) {
-                                        return new TlsDetails(sslEngine.getSession(), sslEngine.getApplicationProtocol());
-                                    }
-                                })
-                                .build();
-
-                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
-                                .setTlsStrategy(tlsStrategy)
-                                .build();
-
-                        return httpClientBuilder.setConnectionManager(connectionManager);
-                    }
-                });
-            //end::rest-client-config-encrypted-communication
-        }
-        {
-            //tag::rest-client-config-trust-ca-pem
-            Path caCertificatePath = Paths.get("/path/to/ca.crt");
-            CertificateFactory factory =
-                CertificateFactory.getInstance("X.509");
-            Certificate trustedCa;
-            try (InputStream is = Files.newInputStream(caCertificatePath)) {
-                trustedCa = factory.generateCertificate(is);
-            }
-            KeyStore trustStore = KeyStore.getInstance("pkcs12");
-            trustStore.load(null, null);
+import org.apache.hc.core5.http.ContentType;
             trustStore.setCertificateEntry("ca", trustedCa);
-            SSLContextBuilder sslContextBuilder = SSLContexts.custom()
-                .loadTrustMaterial(trustStore, null);
-            final SSLContext sslContext = sslContextBuilder.build();
-            RestClient.builder(
-                new HttpHost("https", "localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                        HttpAsyncClientBuilder httpClientBuilder) {
-                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
-                                .setSslContext(sslContext)
-                                // See please https://issues.apache.org/jira/browse/HTTPCLIENT-2219
-                                .setTlsDetailsFactory(new Factory<SSLEngine, TlsDetails>() {
-                                    @Override
-                                    public TlsDetails create(final SSLEngine sslEngine) {
-                                        return new TlsDetails(sslEngine.getSession(), sslEngine.getApplicationProtocol());
-                                    }
-                                })
-                                .build();
-
-                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
-                                .setTlsStrategy(tlsStrategy)
-                                .build();
-
-                        return httpClientBuilder.setConnectionManager(connectionManager);
-                    }
-                });
-            //end::rest-client-config-trust-ca-pem
-        }
-        {
-            String trustStorePass = "";
-            String keyStorePass = "";
-            //tag::rest-client-config-mutual-tls-authentication
-            Path trustStorePath = Paths.get("/path/to/your/truststore.p12");
-            Path keyStorePath = Paths.get("/path/to/your/keystore.p12");
-            KeyStore trustStore = KeyStore.getInstance("pkcs12");
-            KeyStore keyStore = KeyStore.getInstance("pkcs12");
-            try (InputStream is = Files.newInputStream(trustStorePath)) {
-                trustStore.load(is, trustStorePass.toCharArray());
-            }
-            try (InputStream is = Files.newInputStream(keyStorePath)) {
-                keyStore.load(is, keyStorePass.toCharArray());
-            }
-            SSLContextBuilder sslBuilder = SSLContexts.custom()
-                .loadTrustMaterial(trustStore, null)
+            new HttpHost("http", "localhost", 9200),
+                }
+            //end::rest-client-body
+import java.nio.file.Files;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            //end::rest-client-config-request-options-timeouts
+ * // tag::example[]
+            //tag::rest-client-async-example
+                            public void onFailure(Exception exception) {
                 .loadKeyMaterial(keyStore, keyStorePass.toCharArray());
-            final SSLContext sslContext = sslBuilder.build();
+        {
+                        if ("rack_one".equals(rackId)) {
+import org.apache.hc.core5.util.Timeout;
+            //end::rest-client-body-shorter
+ * under the License.
+            final CountDownLatch latch = new CountDownLatch(documents.length);
+ * Modifications Copyright OpenSearch Contributors. See
+        {
+        restClient.close();
+        {
+                public void onFailure(Node node) {
+ * ["source","java",subs="attributes,callouts,macros"]
+                new ResponseListener() {
             RestClientBuilder builder = RestClient.builder(
+public class RestClientDocumentation {
+            //tag::rest-client-parameters
+                                .setTlsDetailsFactory(new Factory<SSLEngine, TlsDetails>() {
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.core5.ssl.SSLContexts;
+            //tag::rest-client-config-threads
                 new HttpHost("https", "localhost", 9200))
-                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
-                    @Override
-                    public HttpAsyncClientBuilder customizeHttpClient(
-                        HttpAsyncClientBuilder httpClientBuilder) {
-                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
-                                .setSslContext(sslContext)
-                                .build();
-
-                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+            builder.setDefaultHeaders(defaultHeaders);
                                 .setTlsStrategy(tlsStrategy)
+                                // See please https://issues.apache.org/jira/browse/HTTPCLIENT-2219
+            Response response = restClient.performRequest(new Request("GET", "/"));
+                                            .build());
+                }
+ * <p>
+            //tag::rest-client-body-shorter
+                );
+/*
+            for (int i = 0; i < documents.length; i++) {
+import org.opensearch.client.RestClientBuilder.HttpClientConfigCallback;
+ * This class is used to generate the Java low-level REST client documentation.
+import java.security.KeyStore;
+                    public HttpAsyncClientBuilder customizeHttpClient(
+                    });
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+            latch.await();
+        }
+                        }
+            final SSLContext sslContext = sslBuilder.build();
+                .setConnectTimeout(Timeout.ofMilliseconds(5000))
+                    /*
+            //tag::rest-client-init-allocation-aware-selector
+                    @Override
+ * Licensed to Elasticsearch under one or more contributor
+                .loadTrustMaterial(trustStore, null)
+            RestClientBuilder builder = RestClient.builder(
+                });
+                    new HttpHost("http", "localhost", 9200));
+            try (InputStream is = Files.newInputStream(trustStorePath)) {
+                                        return new TlsDetails(sslEngine.getSession(), sslEngine.getApplicationProtocol());
+            String keyStorePass = "";
+                                RequestConfig.Builder requestConfigBuilder) {
+            //tag::rest-client-init-client-config-callback
+        {
+ * not use this file except in compliance with the License.
+import java.nio.charset.StandardCharsets;
+        {
+                new HttpHost("https", "localhost", 9200))
+                    }
+                                .setSslContext(sslContext)
+                //let's assume that the documents are stored in an HttpEntity array
+                                .setSslContext(sslContext)
+            //tag::rest-client-init-request-config-callback
+/**
+            RequestLine requestLine = response.getRequestLine(); // <1>
+import java.util.Iterator;
+                        }
+import org.apache.hc.client5.http.impl.async.HttpAsyncClientBuilder;
+                    "{\"json\":\"text\"}",
+            //tag::rest-client-async
+            Request request = new Request("GET", "/");
+            CertificateFactory factory =
+import org.apache.hc.core5.http.message.BasicHeader;
+            RequestOptions options = RequestOptions.DEFAULT.toBuilder()
+package org.opensearch.client.documentation;
+                "/");   // <2>
+            //tag::rest-client-config-trust-ca-pem
+        }
+                });
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+ *
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+                    public HttpAsyncClientBuilder customizeHttpClient(
+        RequestOptions.Builder builder = RequestOptions.DEFAULT.toBuilder();
+            final SSLContext sslContext = sslBuilder.build();
+                    @Override
+ * this file be licensed under the Apache-2.0 license or a
+            }
+                new BasicCredentialsProvider();
+                                latch.countDown();
+                new HttpHost("http", "localhost", 9200));
+    @SuppressWarnings("unused")
+            {
+            builder.setRequestConfigCallback(
+        {
+                .setResponseTimeout(Timeout.ofMilliseconds(60000))
+                    }
+            final BasicCredentialsProvider credentialsProvider =
+                        new ResponseListener() {
+                            String rackId = node.getAttributes().get("rack_id").get(0);
+            Header[] defaultHeaders =
+                new HttpHost("https", "localhost", 9200))
+        }
+            //end::rest-client-sync
+        }
+    }
+                    public void onSuccess(Response response) {
+                //tag::rest-client-options-customize-header
+            //tag::rest-client-auth-bearer-token
+ * specific language governing permissions and limitations
                                 .build();
-
+                                .setTlsStrategy(tlsStrategy)
+                new UsernamePasswordCredentials("user", "password".toCharArray()));
+                                .setResponseTimeout(Timeout.ofMilliseconds(60000));
+/*
+            //end::rest-client-auth-bearer-token
+            //end::rest-client-init-client-config-callback
+import org.opensearch.client.Node;
+ * // end::example[]
+ * SPDX-License-Identifier: Apache-2.0
+                            public void onSuccess(Response response) {
+            //end::rest-client-config-disable-preemptive-auth
+                            if ("rack_one".equals(rackId) == false) {
+                public void select(Iterable<Node> nodes) {
+                truststore.load(is, keyStorePass.toCharArray());
+                    });
+        }
+            //end::rest-client-config-basic-auth
+                .loadTrustMaterial(truststore, null);
+        }
+                    new HttpHost("http", "localhost", 9200));
+                        public HttpAsyncClientBuilder customizeHttpClient(
+            //end::rest-client-init-allocation-aware-selector
+import org.opensearch.client.HttpAsyncResponseConsumerFactory;
                         return httpClientBuilder.setConnectionManager(connectionManager);
+        }
+                            @Override
+                                            .setTcpKeepInterval(10)
+ * compatible open source license.
+                            foundOne = true;
+            KeyStore trustStore = KeyStore.getInstance("pkcs12");
+                    new RestClientBuilder.RequestConfigCallback() {
+                            return requestConfigBuilder
+                new HttpHost("localhost", 9200))
+            cancellable.cancel();
+            RestClientBuilder builder = RestClient.builder(
+                .setRequestConfigCallback(
+import org.apache.hc.client5.http.auth.AuthScope;
+                                latch.countDown();
+    private static final String TOKEN = "DUMMY";
+                                    }
+            Header[] defaultHeaders =
+import java.util.concurrent.CountDownLatch;
+ * GitHub history for details.
+            //tag::rest-client-body
+        {
+                                    }
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+import org.opensearch.client.Request;
+import java.security.cert.CertificateFactory;
+            //end::rest-client-init-request-config-callback
+                });
+                    for (Node node : nodes) {
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+                    public void onFailure(Exception exception) {
+            request.setEntity(new StringEntity(
+                        final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+        }
+        //tag::rest-client-close
+                        request,
+            builder.setFailureListener(new RestClient.FailureListener() {
+            RestClient.builder(
+                "GET",  // <1>
+                                    public TlsDetails create(final SSLEngine sslEngine) {
+@SuppressWarnings("unused")
+            Header[] defaultHeaders = new Header[]{new BasicHeader("header", "value")};
+                    @Override
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+                            HttpAsyncClientBuilder httpClientBuilder) {
+        {
+            //tag::rest-client-sync
+                new Header[]{new BasicHeader("Authorization",
+ * software distributed under the License is distributed on an
+            RestClientBuilder builder = RestClient.builder(
+                            Node node = nodesIt.next();
+        {
+                    }
+                            new HttpHost("http", "proxy", 9000));  // <1>
+                @Override
+            new HttpHost("http", "localhost", 9201)).build();
+ */
+ * <p>
+                                            .setTcpKeepIdle(200)
+            //end::rest-client-config-encrypted-communication
+            RestClientBuilder builder = RestClient.builder(
+    }
+        {
+            //tag::rest-client-init-failure-listener
+            builder.setNodeSelector(new NodeSelector() { // <1>
+                                    @Override
+            RestClientBuilder builder = RestClient.builder(
+ * KIND, either express or implied.  See the License for the
+                new HttpHost("localhost", 9200))
+        RestClient restClient = RestClient.builder(
+                    new HttpHost("http", "localhost", 9200));
+                        .getBytes(StandardCharsets.UTF_8));
+                }
+                                .build();
+import java.nio.file.Paths;
+                    public RequestConfig.Builder customizeRequestConfig(
+    private static final RequestOptions COMMON_OPTIONS;
+            //tag::rest-client-response2
+                request,
+                    @Override
+        }
+                    boolean foundOne = false;
+                CertificateFactory.getInstance("X.509");
+                    @Override
+        }
+        COMMON_OPTIONS = builder.build();
+                    @Override
+            RestClientBuilder builder = RestClient.builder(
+                Base64.getEncoder().encodeToString(
+                });
+        {
+ * to send requests to a node and we don't even have the tools to do it.
+        }
+            }
+                                // <2>
+                        }
+            //end::rest-client-config-timeouts
+                    public void onFailure(Exception exception) {
+        }
+            trustStore.load(null, null);
+            credentialsProvider.setCredentials(new AuthScope(new HttpHost("localhost", 9200)),
+            RequestConfig requestConfig = RequestConfig.custom()
+import org.opensearch.client.RestClient;
+                RequestOptions.Builder options = COMMON_OPTIONS.toBuilder();
+                                // See https://issues.apache.org/jira/browse/HTTPCLIENT-2219
+            try (InputStream is = Files.newInputStream(keyStorePath)) {
+                            @Override
+        {
+            KeyStore keyStore = KeyStore.getInstance("pkcs12");
+ * --------------------------------------------------
+ */
+                        final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
+                new HttpHost("http", "localhost", 9200));
                     }
                 });
-            //end::rest-client-config-mutual-tls-authentication
+            //end::rest-client-init-node-selector
+        builder.addHeader("Authorization", "Bearer " + TOKEN); // <1>
+            Header[] headers = response.getHeaders(); // <4>
         }
+                });
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
         {
-            //tag::rest-client-auth-bearer-token
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("http", "localhost", 9200));
-            Header[] defaultHeaders =
-                new Header[]{new BasicHeader("Authorization",
-                    "Bearer u6iuAxZ0RG1Kcm5jVFI4eU4tZU9aVFEwT2F3")};
-            builder.setDefaultHeaders(defaultHeaders);
-            //end::rest-client-auth-bearer-token
+                                .setTlsDetailsFactory(new Factory<SSLEngine, TlsDetails>() {
+    // end::rest-client-options-singleton
         }
-        {
-            //tag::rest-client-auth-api-key
-            String apiKeyId = "uqlEyn8B_gQ_jlvwDIvM";
-            String apiKeySecret = "HxHWk2m4RN-V_qg9cDpuX";
-            String apiKeyAuth =
-                Base64.getEncoder().encodeToString(
-                    (apiKeyId + ":" + apiKeySecret)
-                        .getBytes(StandardCharsets.UTF_8));
-            RestClientBuilder builder = RestClient.builder(
-                new HttpHost("http", "localhost", 9200));
-            Header[] defaultHeaders =
-                new Header[]{new BasicHeader("Authorization",
-                    "ApiKey " + apiKeyAuth)};
-            builder.setDefaultHeaders(defaultHeaders);
+                                .setConnectTimeout(Timeout.ofMilliseconds(5000))
+                        return httpClientBuilder
             //end::rest-client-auth-api-key
+                            .setDefaultCredentialsProvider(credentialsProvider);
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+            Certificate trustedCa;
+            final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+            //end::rest-client-init-failure-listener
+            request.setJsonEntity("{\"json\":\"text\"}");
         }
-
+                trustStore.load(is, trustStorePass.toCharArray());
+import org.opensearch.client.ResponseListener;
+                .setHttpClientConfigCallback(new HttpClientConfigCallback() {
+            //end::rest-client-async-example
+            Path caCertificatePath = Paths.get("/path/to/ca.crt");
+ * ownership. Elasticsearch licenses this file to you under
+            final SSLContext sslContext = sslContextBuilder.build();
+                        HttpAsyncClientBuilder httpClientBuilder) {
+                                HttpAsyncClientBuilder httpClientBuilder) {
+            Path trustStorePath = Paths.get("/path/to/truststore.p12");
+                            HttpAsyncClientBuilder httpClientBuilder) {
+                    }
+            });
+        builder.setHttpAsyncResponseConsumerFactory(           // <2>
+                        return requestConfigBuilder.setResponseTimeout(Timeout.ofMilliseconds(10000)); // <1>
+            //end::rest-client-config-trust-ca-pem
+            SSLContextBuilder sslBuilder = SSLContexts.custom()
+                new HttpHost("http", "localhost", 9200));
+import javax.net.ssl.SSLContext;
+                    }
+                     * Prefer any node that belongs to rack_one. If none is around
+import org.apache.hc.core5.http.HttpHost;
+                        // <4>
+import javax.net.ssl.SSLEngine;
+            String responseBody = EntityUtils.toString(response.getEntity()); // <5>
+            RestClientBuilder builder = RestClient.builder(
+                request.setOptions(options);
+        }
+                                .setSslContext(sslContext)
+            String trustStorePass = "";
+        {
+                Request request = new Request("PUT", "/posts/doc/" + i);
+                    }
+                    // <1>
+        //end::rest-client-close
+                        String rackId = node.getAttributes().get("rack_id").get(0);
+            try (InputStream is = Files.newInputStream(trustStorePath)) {
+                            break;
+                request.setEntity(documents[i]);
+import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
+                        @Override
+            Request request = new Request(
+            //end::rest-client-async-cancel
+                });
     }
-}
+                                    public TlsDetails create(final SSLEngine sslEngine) {
+        }
+                "/");   // <2>
+    public void usage() throws IOException, InterruptedException, ParseException {
+        //end::rest-client-init
+            }
+                    if (foundOne) {
+        {
+        }
+ * license agreements. See the NOTICE file distributed with
+                    public void onSuccess(Response response) {
+            new HttpAsyncResponseConsumerFactory
+                            HttpAsyncClientBuilder httpClientBuilder) {
+ * include-tagged::{doc-tests}/RestClientDocumentation.java[example]
+ * --------------------------------------------------
+                        return httpClientBuilder.setConnectionManager(connectionManager);
+                                .setIoThreadCount(1)
+                     * we will go to another rack till it's time to try and revive
+            KeyStore trustStore = KeyStore.getInstance("pkcs12");
+ * this work for additional information regarding copyright
+                     */
+                .loadTrustMaterial(trustStore, null);
+                .HeapBufferedResponseConsumerFactory(30 * 1024 * 1024 * 1024));
+                        }
+        //tag::rest-client-init
+                    ContentType.APPLICATION_JSON));
+    // tag::rest-client-options-singleton

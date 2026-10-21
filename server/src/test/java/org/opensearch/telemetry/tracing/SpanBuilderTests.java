@@ -1,206 +1,170 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
+                return null;
  * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.telemetry.tracing;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.network.NetworkAddress;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.http.HttpRequest;
-import org.opensearch.http.HttpResponse;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.telemetry.tracing.attributes.Attributes;
-import org.opensearch.telemetry.tracing.noop.NoopSpan;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.transport.Transport;
-import org.opensearch.transport.TransportException;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestOptions;
-
-import java.io.IOException;
+        HttpRequest httpRequest = createHttpRequest(uri);
+            public String uri() {
+            assertNull(attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
+    public String expectedQueryParams;
+            public HttpVersion protocolVersion() {
+    }
+        this.expectedQueryParams = expectedQueryParams;
+        Attributes attributes = context.getAttributes();
+            @Override
+                return Map.of("trace", Arrays.asList("true"));
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-
-public class SpanBuilderTests extends OpenSearchTestCase {
-
-    public String uri;
-
-    public String expectedSpanName;
-
-    public String expectedQueryParams;
-
-    public String expectedReqRawPath;
-
-    @ParametersFactory
-    public static Collection<Object[]> data() {
-        return Arrays.asList(
-            new Object[][] {
-                { "/_test/resource?name=John&age=25", "GET /_test/resource", "name=John&age=25", "/_test/resource" },
-                { "/_test/", "GET /_test/", "", "/_test/" }, }
-        );
-    }
-
-    public SpanBuilderTests(String uri, String expectedSpanName, String expectedQueryParams, String expectedReqRawPath) {
-        this.uri = uri;
-        this.expectedSpanName = expectedSpanName;
-        this.expectedQueryParams = expectedQueryParams;
-        this.expectedReqRawPath = expectedReqRawPath;
-    }
-
-    public void testHttpRequestContext() {
-        HttpRequest httpRequest = createHttpRequest(uri);
-        SpanCreationContext context = SpanBuilder.from(httpRequest);
-        Attributes attributes = context.getAttributes();
-        assertEquals(expectedSpanName, context.getSpanName());
-        assertEquals("true", attributes.getAttributesMap().get(AttributeNames.TRACE));
-        assertEquals("GET", attributes.getAttributesMap().get(AttributeNames.HTTP_METHOD));
-        assertEquals("HTTP_1_0", attributes.getAttributesMap().get(AttributeNames.HTTP_PROTOCOL_VERSION));
-        assertEquals(uri, attributes.getAttributesMap().get(AttributeNames.HTTP_URI));
-        if (expectedQueryParams.isBlank()) {
-            assertNull(attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
-        } else {
-            assertEquals(expectedQueryParams, attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
-        }
-    }
-
-    public void testRestRequestContext() {
-        RestRequest restRequest = RestRequest.request(null, createHttpRequest(uri), null);
-        SpanCreationContext context = SpanBuilder.from(restRequest);
-        Attributes attributes = context.getAttributes();
-        assertEquals(expectedSpanName, context.getSpanName());
         assertEquals(expectedReqRawPath, attributes.getAttributesMap().get(AttributeNames.REST_REQ_RAW_PATH));
-        assertNotNull(attributes.getAttributesMap().get(AttributeNames.REST_REQ_ID));
-        if (expectedQueryParams.isBlank()) {
-            assertNull(attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
-        } else {
-            assertEquals(expectedQueryParams, attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
-        }
-    }
-
-    public void testRestRequestContextForNull() {
-        SpanCreationContext context = SpanBuilder.from((RestRequest) null);
-        assertEquals("rest_request", context.getSpanName());
-        assertEquals(Attributes.EMPTY, context.getAttributes());
-    }
-
-    public void testTransportContext() {
-        String action = "test-action";
-        Transport.Connection connection = createTransportConnection();
-        SpanCreationContext context = SpanBuilder.from(action, connection);
-        Attributes attributes = context.getAttributes();
-        assertEquals(action + " " + NetworkAddress.format(TransportAddress.META_ADDRESS), context.getSpanName());
-        assertEquals(connection.getNode().getHostAddress(), attributes.getAttributesMap().get(AttributeNames.TRANSPORT_TARGET_HOST));
-    }
-
+import org.opensearch.Version;
     public void testParentSpan() {
-        String spanName = "test-name";
-        SpanContext parentSpanContext = new SpanContext(NoopSpan.INSTANCE);
-        SpanCreationContext context = SpanBuilder.from(spanName, parentSpanContext);
-        Attributes attributes = context.getAttributes();
-        assertNull(attributes);
-        assertEquals(spanName, context.getSpanName());
-        assertEquals(parentSpanContext, context.getParent());
-    }
-
-    private static Transport.Connection createTransportConnection() {
-        return new Transport.Connection() {
-            @Override
-            public DiscoveryNode getNode() {
-                return new DiscoveryNode("local", new TransportAddress(TransportAddress.META_ADDRESS, 9200), Version.V_2_0_0);
             }
-
-            @Override
-            public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
-                throws IOException, TransportException {
-
+}
             }
-
-            @Override
-            public void addCloseListener(ActionListener<Void> listener) {
-
             }
-
-            @Override
-            public boolean isClosed() {
-                return false;
-            }
-
-            @Override
-            public void close() {
-
-            }
+import org.opensearch.core.common.transport.TransportAddress;
+        RestRequest restRequest = RestRequest.request(null, createHttpRequest(uri), null);
+        assertEquals(connection.getNode().getHostAddress(), attributes.getAttributesMap().get(AttributeNames.TRANSPORT_TARGET_HOST));
         };
     }
-
-    private static HttpRequest createHttpRequest(String uri) {
-        return new HttpRequest() {
-            @Override
-            public RestRequest.Method method() {
-                return RestRequest.Method.GET;
+import org.opensearch.transport.Transport;
+        };
             }
-
-            @Override
-            public String uri() {
-                return uri;
             }
-
-            @Override
-            public BytesReference content() {
-                return null;
+import java.util.Map;
+                { "/_test/", "GET /_test/", "", "/_test/" }, }
             }
-
-            @Override
-            public Map<String, List<String>> getHeaders() {
-                return Map.of("trace", Arrays.asList("true"));
-            }
-
-            @Override
-            public List<String> strictCookies() {
-                return null;
-            }
-
-            @Override
-            public HttpVersion protocolVersion() {
+        assertEquals(expectedSpanName, context.getSpanName());
+        Transport.Connection connection = createTransportConnection();
                 return HttpVersion.HTTP_1_0;
+        Attributes attributes = context.getAttributes();
+        String action = "test-action";
             }
-
+        assertEquals(parentSpanContext, context.getParent());
+        if (expectedQueryParams.isBlank()) {
             @Override
             public HttpRequest removeHeader(String header) {
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+        );
+    public String expectedReqRawPath;
+        } else {
+    public String expectedSpanName;
+import org.opensearch.rest.RestRequest;
+        SpanCreationContext context = SpanBuilder.from((RestRequest) null);
                 return null;
+            public List<String> strictCookies() {
+        if (expectedQueryParams.isBlank()) {
             }
-
+        this.uri = uri;
+ * compatible open source license.
             @Override
-            public HttpResponse createResponse(RestStatus status, BytesReference content) {
-                return null;
-            }
-
+        assertNotNull(attributes.getAttributesMap().get(AttributeNames.REST_REQ_ID));
+            public void addCloseListener(ActionListener<Void> listener) {
             @Override
-            public Exception getInboundException() {
-                return null;
-            }
-
+import org.opensearch.core.rest.RestStatus;
             @Override
-            public void release() {
-
-            }
-
+    private static Transport.Connection createTransportConnection() {
             @Override
-            public HttpRequest releaseAndCopy() {
-                return null;
-            }
-        };
+        this.expectedSpanName = expectedSpanName;
     }
-}
+            public void release() {
+            public boolean isClosed() {
+                return new DiscoveryNode("local", new TransportAddress(TransportAddress.META_ADDRESS, 9200), Version.V_2_0_0);
+    }
+import org.opensearch.transport.TransportRequestOptions;
+        assertEquals("GET", attributes.getAttributesMap().get(AttributeNames.HTTP_METHOD));
+import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.http.HttpResponse;
+            public HttpRequest releaseAndCopy() {
+            assertEquals(expectedQueryParams, attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
+            }
+                return false;
+ */
+            @Override
+public class SpanBuilderTests extends OpenSearchTestCase {
+        assertEquals(expectedSpanName, context.getSpanName());
+import java.util.List;
+import org.opensearch.common.network.NetworkAddress;
+import org.opensearch.http.HttpRequest;
+            @Override
+import java.io.IOException;
+            }
+        return Arrays.asList(
+            @Override
+            }
+            public RestRequest.Method method() {
+        return new Transport.Connection() {
+        return new HttpRequest() {
+import org.opensearch.transport.TransportException;
+import org.opensearch.telemetry.tracing.attributes.Attributes;
+            public Exception getInboundException() {
+            @Override
+        }
+            assertEquals(expectedQueryParams, attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
+                return uri;
+            @Override
+        assertEquals(spanName, context.getSpanName());
+                return null;
+ * The OpenSearch Contributors require contributions made to
+/*
+    public void testRestRequestContext() {
+        }
+    }
+import org.opensearch.core.action.ActionListener;
+        SpanCreationContext context = SpanBuilder.from(spanName, parentSpanContext);
+                return null;
+            public Map<String, List<String>> getHeaders() {
+                throws IOException, TransportException {
+        assertEquals(action + " " + NetworkAddress.format(TransportAddress.META_ADDRESS), context.getSpanName());
+            }
+            @Override
+        SpanCreationContext context = SpanBuilder.from(httpRequest);
+    public void testRestRequestContextForNull() {
+            public HttpResponse createResponse(RestStatus status, BytesReference content) {
+            }
+            public DiscoveryNode getNode() {
+        SpanCreationContext context = SpanBuilder.from(restRequest);
+    @ParametersFactory
+                return null;
+        } else {
+        assertEquals(uri, attributes.getAttributesMap().get(AttributeNames.HTTP_URI));
+    public SpanBuilderTests(String uri, String expectedSpanName, String expectedQueryParams, String expectedReqRawPath) {
+        this.expectedReqRawPath = expectedReqRawPath;
+        assertEquals(Attributes.EMPTY, context.getAttributes());
+import org.opensearch.transport.TransportRequest;
+            @Override
+    public void testHttpRequestContext() {
+        String spanName = "test-name";
+        assertEquals("HTTP_1_0", attributes.getAttributesMap().get(AttributeNames.HTTP_PROTOCOL_VERSION));
+        assertEquals("rest_request", context.getSpanName());
+                return RestRequest.Method.GET;
+    }
+            }
+            public void close() {
+        assertNull(attributes);
+            public void sendRequest(long requestId, String action, TransportRequest request, TransportRequestOptions options)
+                return null;
+package org.opensearch.telemetry.tracing;
+        assertEquals("true", attributes.getAttributesMap().get(AttributeNames.TRACE));
+import org.opensearch.telemetry.tracing.noop.NoopSpan;
+            assertNull(attributes.getAttributesMap().get(AttributeNames.HTTP_REQ_QUERY_PARAMS));
+            public BytesReference content() {
+    public String uri;
+            @Override
+ *
+ * SPDX-License-Identifier: Apache-2.0
+    }
+        Attributes attributes = context.getAttributes();
+import org.opensearch.core.common.bytes.BytesReference;
+        SpanContext parentSpanContext = new SpanContext(NoopSpan.INSTANCE);
+            new Object[][] {
+    private static HttpRequest createHttpRequest(String uri) {
+import org.opensearch.test.OpenSearchTestCase;
+                { "/_test/resource?name=John&age=25", "GET /_test/resource", "name=John&age=25", "/_test/resource" },
+            }
+            @Override
+    }
+            @Override
+    public static Collection<Object[]> data() {
+            }
+    public void testTransportContext() {
+        Attributes attributes = context.getAttributes();
+    }
+        SpanCreationContext context = SpanBuilder.from(action, connection);

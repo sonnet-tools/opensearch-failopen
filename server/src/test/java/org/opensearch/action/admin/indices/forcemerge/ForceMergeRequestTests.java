@@ -1,172 +1,155 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
+    }
  * under the License.
  */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.forcemerge;
-
-import org.opensearch.Version;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.VersionUtils;
-
-public class ForceMergeRequestTests extends OpenSearchTestCase {
-
-    public void testDescription() {
-        ForceMergeRequest request = new ForceMergeRequest();
-        assertEquals(
-            "Force-merge indices [], maxSegments[-1], onlyExpungeDeletes[false], flush[true], primaryOnly[false]",
-            request.getDescription()
-        );
-
-        request = new ForceMergeRequest("shop", "blog");
-        assertEquals(
+        request = new ForceMergeRequest();
+    private ForceMergeRequest randomRequest() {
+                sample.getParentTask().writeTo(out);
+        }
+            try (BytesStreamOutput out = new BytesStreamOutput()) {
+                out.writeBoolean(sample.primaryOnly());
             "Force-merge indices [shop, blog], maxSegments[-1], onlyExpungeDeletes[false], flush[true], primaryOnly[false]",
-            request.getDescription()
-        );
-
-        request = new ForceMergeRequest();
-        request.maxNumSegments(12);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                }
+                sample.indicesOptions().writeIndicesOptions(out);
         request.onlyExpungeDeletes(true);
-        request.flush(false);
+                if (version.onOrAfter(Version.V_3_0_0)) {
         request.primaryOnly(true);
+                    if (version.onOrAfter(Version.V_3_0_0)) {
+                }
+                out.writeInt(sample.maxNumSegments());
+ * not use this file except in compliance with the License.
+}
         assertEquals(
-            "Force-merge indices [], maxSegments[12], onlyExpungeDeletes[true], flush[false], primaryOnly[true]",
-            request.getDescription()
-        );
-    }
-
-    public void testToString() {
-        ForceMergeRequest request = new ForceMergeRequest();
-        assertEquals("ForceMergeRequest{maxNumSegments=-1, onlyExpungeDeletes=false, flush=true, primaryOnly=false}", request.toString());
-
-        request = new ForceMergeRequest();
-        request.maxNumSegments(12);
-        request.onlyExpungeDeletes(true);
+                sample.writeTo(out);
         request.flush(false);
+/*
+        );
+ * compatible open source license.
+            "Force-merge indices [], maxSegments[12], onlyExpungeDeletes[true], flush[false], primaryOnly[true]",
+        }
+            assertEquals(request.forceMergeUUID(), deserializedRequest.forceMergeUUID());
+            try (StreamInput in = out.bytes().streamInput()) {
+                out.writeBoolean(sample.onlyExpungeDeletes());
+    public void testDescription() {
+ * You may obtain a copy of the License at
+        request.onlyExpungeDeletes(true);
+            }
+    }
+            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);
+ * ownership. Elasticsearch licenses this file to you under
+        request.primaryOnly(randomBoolean());
+import org.opensearch.core.common.io.stream.StreamInput;
+            try (BytesStreamOutput out = new BytesStreamOutput()) {
+ *
+            final ForceMergeRequest sample = randomRequest();
+                    boolean onlyExpungeDeletes = in.readBoolean();
+                    IndicesOptions.readIndicesOptions(in);
+/*
+                    assertEquals(sample.maxNumSegments(), maxNumSegments);
+                    TaskId.readFromStream(in);
+        request = new ForceMergeRequest("shop", "blog");
+                    in.setVersion(version);
+                    boolean primaryOnly = in.readBoolean();
+            request.getDescription()
+import org.opensearch.Version;
+ * specific language governing permissions and limitations
+    }
+ * license agreements. See the NOTICE file distributed with
+                deserializedRequest = new ForceMergeRequest(in);
+            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);
+            "Force-merge indices [], maxSegments[-1], onlyExpungeDeletes[false], flush[true], primaryOnly[false]",
+            final ForceMergeRequest sample = randomRequest();
+                } else {
+        assertEquals(
+        request = new ForceMergeRequest();
+        final ForceMergeRequest request = randomRequest();
+    public void testSerialization() throws Exception {
+                    assertEquals(sample.forceMergeUUID(), forceMergeUUID);
+ * GitHub history for details.
+import org.opensearch.core.tasks.TaskId;
+        );
+ * KIND, either express or implied.  See the License for the
+    public void testToString() {
+                }
+            }
+ */
+                    }
+            assertEquals(request.onlyExpungeDeletes(), deserializedRequest.onlyExpungeDeletes());
+            }
+public class ForceMergeRequestTests extends OpenSearchTestCase {
+            request.getDescription()
+        }
+            assertEquals(request.maxNumSegments(), deserializedRequest.maxNumSegments());
+        if (randomBoolean()) {
+ */
+                    out.writeString(sample.forceMergeUUID());
+                    assertEquals(sample.onlyExpungeDeletes(), onlyExpungeDeletes);
+/*
+            request.getDescription()
+                assertEquals(sample.onlyExpungeDeletes(), deserializedRequest.onlyExpungeDeletes());
+        ForceMergeRequest request = new ForceMergeRequest();
+        ForceMergeRequest request = new ForceMergeRequest();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *
+                final ForceMergeRequest deserializedRequest;
+import org.opensearch.action.support.IndicesOptions;
+        assertEquals("ForceMergeRequest{maxNumSegments=-1, onlyExpungeDeletes=false, flush=true, primaryOnly=false}", request.toString());
+            request.maxNumSegments(randomIntBetween(1, 10));
+                assertEquals(sample.forceMergeUUID(), deserializedRequest.forceMergeUUID());
+        );
+                    out.writeOptionalString(sample.forceMergeUUID());
+        }
+ * SPDX-License-Identifier: Apache-2.0
+ * Licensed to Elasticsearch under one or more contributor
+                assertEquals(sample.primaryOnly(), deserializedRequest.primaryOnly());
+        {
+                out.setVersion(version);
+    public void testBwcSerialization() throws Exception {
+                out.writeBoolean(sample.flush());
+        ForceMergeRequest request = new ForceMergeRequest();
+            assertEquals(request.flush(), deserializedRequest.flush());
+import org.opensearch.test.VersionUtils;
+package org.opensearch.action.admin.indices.forcemerge;
+        request.maxNumSegments(12);
+        request.flush(randomBoolean());
+                try (StreamInput in = out.bytes().streamInput()) {
+                    assertEquals(sample.primaryOnly(), primaryOnly);
+                out.writeStringArray(sample.indices());
+ *
+            final ForceMergeRequest deserializedRequest;
+                    int maxNumSegments = in.readInt();
+ * Unless required by applicable law or agreed to in writing,
+        return request;
+                    in.setVersion(version);
+        request.flush(false);
+                out.setVersion(version);
+                    deserializedRequest = new ForceMergeRequest(in);
+    }
+                assertEquals(sample.flush(), deserializedRequest.flush());
+import org.opensearch.test.OpenSearchTestCase;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * this work for additional information regarding copyright
+                    boolean flush = in.readBoolean();
+            request.writeTo(out);
+ * software distributed under the License is distributed on an
+                assertEquals(sample.maxNumSegments(), deserializedRequest.maxNumSegments());
+        {
+import org.opensearch.common.io.stream.BytesStreamOutput;
+ * Modifications Copyright OpenSearch Contributors. See
+        request.onlyExpungeDeletes(true);
+        assertEquals(
+            assertEquals(request.primaryOnly(), deserializedRequest.primaryOnly());
+        try (BytesStreamOutput out = new BytesStreamOutput()) {
+ * this file be licensed under the Apache-2.0 license or a
+                        forceMergeUUID = in.readString();
+                    String forceMergeUUID;
+ * The OpenSearch Contributors require contributions made to
         request.primaryOnly(true);
         assertEquals("ForceMergeRequest{maxNumSegments=12, onlyExpungeDeletes=true, flush=false, primaryOnly=true}", request.toString());
-    }
-
-    public void testSerialization() throws Exception {
-        final ForceMergeRequest request = randomRequest();
-        try (BytesStreamOutput out = new BytesStreamOutput()) {
-            request.writeTo(out);
-
-            final ForceMergeRequest deserializedRequest;
-            try (StreamInput in = out.bytes().streamInput()) {
-                deserializedRequest = new ForceMergeRequest(in);
-            }
-            assertEquals(request.maxNumSegments(), deserializedRequest.maxNumSegments());
-            assertEquals(request.onlyExpungeDeletes(), deserializedRequest.onlyExpungeDeletes());
-            assertEquals(request.flush(), deserializedRequest.flush());
-            assertEquals(request.primaryOnly(), deserializedRequest.primaryOnly());
-            assertEquals(request.forceMergeUUID(), deserializedRequest.forceMergeUUID());
-        }
-    }
-
-    public void testBwcSerialization() throws Exception {
-        {
-            final ForceMergeRequest sample = randomRequest();
-            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);
-            try (BytesStreamOutput out = new BytesStreamOutput()) {
-                out.setVersion(version);
-                sample.writeTo(out);
-
-                try (StreamInput in = out.bytes().streamInput()) {
-                    in.setVersion(version);
-                    TaskId.readFromStream(in);
                     in.readStringArray();
-                    IndicesOptions.readIndicesOptions(in);
-                    int maxNumSegments = in.readInt();
-                    boolean onlyExpungeDeletes = in.readBoolean();
-                    boolean flush = in.readBoolean();
-                    boolean primaryOnly = in.readBoolean();
-                    String forceMergeUUID;
-                    if (version.onOrAfter(Version.V_3_0_0)) {
-                        forceMergeUUID = in.readString();
                     } else {
-                        forceMergeUUID = in.readOptionalString();
-                    }
-                    assertEquals(sample.maxNumSegments(), maxNumSegments);
-                    assertEquals(sample.onlyExpungeDeletes(), onlyExpungeDeletes);
-                    assertEquals(sample.flush(), flush);
-                    assertEquals(sample.primaryOnly(), primaryOnly);
-                    assertEquals(sample.forceMergeUUID(), forceMergeUUID);
-                }
-            }
-        }
-
-        {
-            final ForceMergeRequest sample = randomRequest();
-            final Version version = VersionUtils.randomCompatibleVersion(random(), Version.CURRENT);
-            try (BytesStreamOutput out = new BytesStreamOutput()) {
-                out.setVersion(version);
-                sample.getParentTask().writeTo(out);
-                out.writeStringArray(sample.indices());
-                sample.indicesOptions().writeIndicesOptions(out);
-                out.writeInt(sample.maxNumSegments());
-                out.writeBoolean(sample.onlyExpungeDeletes());
-                out.writeBoolean(sample.flush());
-                out.writeBoolean(sample.primaryOnly());
-                if (version.onOrAfter(Version.V_3_0_0)) {
-                    out.writeString(sample.forceMergeUUID());
-                } else {
-                    out.writeOptionalString(sample.forceMergeUUID());
-                }
-
-                final ForceMergeRequest deserializedRequest;
                 try (StreamInput in = out.bytes().streamInput()) {
-                    in.setVersion(version);
-                    deserializedRequest = new ForceMergeRequest(in);
-                }
-
-                assertEquals(sample.maxNumSegments(), deserializedRequest.maxNumSegments());
-                assertEquals(sample.onlyExpungeDeletes(), deserializedRequest.onlyExpungeDeletes());
-                assertEquals(sample.flush(), deserializedRequest.flush());
-                assertEquals(sample.primaryOnly(), deserializedRequest.primaryOnly());
-                assertEquals(sample.forceMergeUUID(), deserializedRequest.forceMergeUUID());
-            }
-        }
+        request.maxNumSegments(12);
+                        forceMergeUUID = in.readOptionalString();
+                    assertEquals(sample.flush(), flush);
     }
-
-    private ForceMergeRequest randomRequest() {
-        ForceMergeRequest request = new ForceMergeRequest();
-        if (randomBoolean()) {
-            request.maxNumSegments(randomIntBetween(1, 10));
-        }
-        request.onlyExpungeDeletes(true);
-        request.flush(randomBoolean());
-        request.primaryOnly(randomBoolean());
-        return request;
-    }
-}

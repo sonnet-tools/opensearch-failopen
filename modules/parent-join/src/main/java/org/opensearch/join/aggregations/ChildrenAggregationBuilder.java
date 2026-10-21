@@ -1,221 +1,192 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.join.aggregations;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.join.mapper.ParentIdFieldMapper;
-import org.opensearch.join.mapper.ParentJoinFieldMapper;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregatorFactories.Builder;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.aggregations.support.ValuesSourceType;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;
-
-public class ChildrenAggregationBuilder extends ValuesSourceAggregationBuilder<ChildrenAggregationBuilder> {
-
-    public static final String NAME = "children";
-
-    private final String childType;
-    private Query parentFilter;
-    private Query childFilter;
-
-    /**
-     * @param name
-     *            the name of this aggregation
-     * @param childType
-     *            the type of children documents
-     */
-    public ChildrenAggregationBuilder(String name, String childType) {
-        super(name);
-        if (childType == null) {
-            throw new IllegalArgumentException("[childType] must not be null: [" + name + "]");
-        }
-        this.childType = childType;
-    }
-
-    protected ChildrenAggregationBuilder(ChildrenAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
-        super(clone, factoriesBuilder, metadata);
-        this.childType = clone.childType;
-        this.childFilter = clone.childFilter;
-        this.parentFilter = clone.parentFilter;
-    }
-
-    @Override
-    protected ValuesSourceType defaultValueSourceType() {
-        return CoreValuesSourceType.BYTES;
-    }
-
-    @Override
-    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
         return new ChildrenAggregationBuilder(this, factoriesBuilder, metadata);
     }
-
-    /**
-     * Read from a stream.
-     */
-    public ChildrenAggregationBuilder(StreamInput in) throws IOException {
-        super(in);
-        childType = in.readString();
-    }
-
-    @Override
-    protected void innerWriteTo(StreamOutput out) throws IOException {
-        out.writeString(childType);
-    }
-
-    @Override
-    public BucketCardinality bucketCardinality() {
-        return BucketCardinality.ONE;
-    }
-
-    @Override
-    protected ValuesSourceAggregatorFactory innerBuild(
-        QueryShardContext queryShardContext,
-        ValuesSourceConfig config,
-        AggregatorFactory parent,
-        Builder subFactoriesBuilder
-    ) throws IOException {
-        return new ChildrenAggregatorFactory(
-            name,
-            config,
-            childFilter,
-            parentFilter,
-            queryShardContext,
-            parent,
-            subFactoriesBuilder,
-            metadata
-        );
-    }
-
-    @Override
-    protected ValuesSourceConfig resolveConfig(QueryShardContext queryShardContext) {
-        ValuesSourceConfig config;
-
+    protected ChildrenAggregationBuilder(ChildrenAggregationBuilder clone, Builder factoriesBuilder, Map<String, Object> metadata) {
         ParentJoinFieldMapper parentJoinFieldMapper = ParentJoinFieldMapper.getMapper(queryShardContext.getMapperService());
-        if (parentJoinFieldMapper == null) {
-            // Unmapped field case
-            config = ValuesSourceConfig.resolveUnmapped(defaultValueSourceType(), queryShardContext);
-            return config;
-        }
-
-        ParentIdFieldMapper parentIdFieldMapper = parentJoinFieldMapper.getParentIdFieldMapper(childType, false);
-        if (parentIdFieldMapper == null) {
-            // Unmapped field case
-            config = ValuesSourceConfig.resolveUnmapped(defaultValueSourceType(), queryShardContext);
-            return config;
-        }
-
-        parentFilter = parentIdFieldMapper.getParentFilter();
-        childFilter = parentIdFieldMapper.getChildFilter(childType);
-        MappedFieldType fieldType = parentIdFieldMapper.fieldType();
-        config = ValuesSourceConfig.resolveFieldOnly(fieldType, queryShardContext);
-        return config;
-    }
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        builder.field(ParentToChildrenAggregator.TYPE_FIELD.getPreferredName(), childType);
-        return builder;
-    }
-
-    public static ChildrenAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {
-        String childType = null;
-
-        XContentParser.Token token;
-        String currentFieldName = null;
+     * @param childType
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        childType = in.readString();
+        return new ChildrenAggregatorFactory(
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.VALUE_STRING) {
-                if ("type".equals(currentFieldName)) {
-                    childType = parser.text();
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + aggregationName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "Unexpected token " + token + " in [" + aggregationName + "].");
-            }
-        }
-
-        if (childType == null) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                "Missing [child_type] field for children aggregation [" + aggregationName + "]"
-            );
-        }
-
-        return new ChildrenAggregationBuilder(aggregationName, childType);
     }
-
-    @Override
-    public int hashCode() {
+    public static ChildrenAggregationBuilder parse(String aggregationName, XContentParser parser) throws IOException {
         return Objects.hash(super.hashCode(), childType);
+import java.util.Map;
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
+    }
+import org.opensearch.join.mapper.ParentIdFieldMapper;
+ * not use this file except in compliance with the License.
+                } else {
         ChildrenAggregationBuilder other = (ChildrenAggregationBuilder) obj;
-        return Objects.equals(childType, other.childType);
-    }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
     @Override
-    public String getType() {
-        return NAME;
-    }
-
     @Override
-    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+        }
         return ValuesSourceRegistry.UNREGISTERED_KEY;
+ * You may obtain a copy of the License at
+                throw new ParsingException(parser.getTokenLocation(), "Unexpected token " + token + " in [" + aggregationName + "].");
+    protected ValuesSourceConfig resolveConfig(QueryShardContext queryShardContext) {
+        if (super.equals(obj) == false) return false;
     }
+        MappedFieldType fieldType = parentIdFieldMapper.fieldType();
+    protected ValuesSourceType defaultValueSourceType() {
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+            queryShardContext,
+    }
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
+ * The OpenSearch Contributors require contributions made to
+        }
+        ValuesSourceConfig config;
+        if (parentIdFieldMapper == null) {
+        QueryShardContext queryShardContext,
+        super(clone, factoriesBuilder, metadata);
+     */
+     * @param name
+    }
+    public ChildrenAggregationBuilder(String name, String childType) {
+            throw new IllegalArgumentException("[childType] must not be null: [" + name + "]");
+                currentFieldName = parser.currentName();
+                        parser.getTokenLocation(),
+            subFactoriesBuilder,
+    }
+    private final String childType;
+    public boolean equals(Object obj) {
+                parser.getTokenLocation(),
+     *            the type of children documents
+ *
+            );
+            if (token == XContentParser.Token.FIELD_NAME) {
+            parentFilter,
+ * GitHub history for details.
+        super(in);
+     */
+            return config;
+    @Override
+                "Missing [child_type] field for children aggregation [" + aggregationName + "]"
+            // Unmapped field case
+ * Unless required by applicable law or agreed to in writing,
+public class ChildrenAggregationBuilder extends ValuesSourceAggregationBuilder<ChildrenAggregationBuilder> {
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+ */
+        if (childType == null) {
+    /**
+import org.opensearch.index.mapper.MappedFieldType;
+    }
+import java.io.IOException;
+        super(name);
+            config = ValuesSourceConfig.resolveUnmapped(defaultValueSourceType(), queryShardContext);
+import org.opensearch.index.query.QueryShardContext;
+        this.childFilter = clone.childFilter;
+    public static final String NAME = "children";
+ * Modifications Copyright OpenSearch Contributors. See
+        this.childType = childType;
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+        return CoreValuesSourceType.BYTES;
+import org.opensearch.search.aggregations.AggregatorFactory;
+    protected ValuesSourceRegistry.RegistryKey<?> getRegistryKey() {
+        out.writeString(childType);
+                if ("type".equals(currentFieldName)) {
+    @Override
+        }
+ * under the License.
+ *
+    @Override
+        ValuesSourceConfig config,
+import org.opensearch.search.aggregations.support.ValuesSourceType;
+        Builder subFactoriesBuilder
+import org.opensearch.core.common.io.stream.StreamInput;
+    public String getType() {
+        config = ValuesSourceConfig.resolveFieldOnly(fieldType, queryShardContext);
+    }
+ * software distributed under the License is distributed on an
+    protected ValuesSourceAggregatorFactory innerBuild(
+            parent,
+ * the Apache License, Version 2.0 (the "License"); you may
+    public ChildrenAggregationBuilder(StreamInput in) throws IOException {
+        ParentIdFieldMapper parentIdFieldMapper = parentJoinFieldMapper.getParentIdFieldMapper(childType, false);
+    public BucketCardinality bucketCardinality() {
+ * this file be licensed under the Apache-2.0 license or a
+        return BucketCardinality.ONE;
+        return new ChildrenAggregationBuilder(aggregationName, childType);
+            }
+    }
+        return builder;
+        String currentFieldName = null;
+            config,
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
+ * SPDX-License-Identifier: Apache-2.0
+package org.opensearch.join.aggregations;
+                    childType = parser.text();
+import org.opensearch.search.aggregations.support.ValuesSourceAggregationBuilder;
+        }
+/*
+/*
+    @Override
+ * specific language governing permissions and limitations
+    }
+import org.opensearch.search.aggregations.AggregationBuilder;
+        AggregatorFactory parent,
+import org.opensearch.core.common.ParsingException;
+        if (childType == null) {
+ * this work for additional information regarding copyright
+            // Unmapped field case
+                    throw new ParsingException(
+ * license agreements. See the NOTICE file distributed with
+        );
+            } else {
+ *
+        return NAME;
+import org.opensearch.core.xcontent.XContentParser;
+            config = ValuesSourceConfig.resolveUnmapped(defaultValueSourceType(), queryShardContext);
+            name,
+        return config;
+        parentFilter = parentIdFieldMapper.getParentFilter();
+            throw new ParsingException(
+            return config;
+    private Query childFilter;
+import org.apache.lucene.search.Query;
+        String childType = null;
+ * compatible open source license.
+        builder.field(ParentToChildrenAggregator.TYPE_FIELD.getPreferredName(), childType);
+        }
+ */
+    ) throws IOException {
+        this.childType = clone.childType;
+            childFilter,
+ * KIND, either express or implied.  See the License for the
+     * Read from a stream.
+        if (this == obj) return true;
+    @Override
 }
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+            } else if (token == XContentParser.Token.VALUE_STRING) {
+        if (obj == null || getClass() != obj.getClass()) return false;
+    protected AggregationBuilder shallowCopy(Builder factoriesBuilder, Map<String, Object> metadata) {
+    protected void innerWriteTo(StreamOutput out) throws IOException {
+    @Override
+import org.opensearch.search.aggregations.AggregatorFactories.Builder;
+     *            the name of this aggregation
+import java.util.Objects;
+    }
+import org.opensearch.core.xcontent.XContentBuilder;
+            metadata
+    @Override
+    @Override
+    @Override
+    /**
+    public int hashCode() {
+                }
+    }
+    }
+        childFilter = parentIdFieldMapper.getChildFilter(childType);
+ * Licensed to Elasticsearch under one or more contributor
+        XContentParser.Token token;
+        if (parentJoinFieldMapper == null) {
+ * ownership. Elasticsearch licenses this file to you under
+    private Query parentFilter;
+        this.parentFilter = clone.parentFilter;
+        return Objects.equals(childType, other.childType);
+                        "Unknown key for a " + token + " in [" + aggregationName + "]: [" + currentFieldName + "]."
+import org.opensearch.join.mapper.ParentJoinFieldMapper;
+/*
+                    );

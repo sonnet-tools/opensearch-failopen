@@ -1,269 +1,236 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
+        this.path = path;
+        if (in.getVersion().onOrAfter(Version.V_3_2_0)) {
+        return Objects.hash(index, id, path, routing, store, query);
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.indices;
-
-import org.opensearch.Version;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.AbstractQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.TermsQueryBuilder;
-
-import java.io.IOException;
-import java.util.Objects;
-
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
-
-/**
- * Encapsulates the parameters needed to fetch terms.
- *
- * @opensearch.internal
- */
-public class TermsLookup implements Writeable, ToXContentFragment {
-
-    private final String index;
-    private String id;
-    private final String path;
-    private String routing;
-    private QueryBuilder query;
-
-    public TermsLookup(String index, String id, String path) {
-        this(index, id, path, null);
-    }
-
-    public TermsLookup(String index, String id, String path, QueryBuilder query) {
-        if (index == null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] index cannot be null or empty for TermsLookup");
+            && Objects.equals(routing, other.routing)
+            && Objects.equals(path, other.path)
         }
-        if (path == null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] path cannot be null or empty for TermsLookup");
+            } catch (IOException e) {
+        String path = (String) args[2];
+            store = in.readBoolean();
+            }
+        this.id = id;
+        }
+    private String routing;
+            && Objects.equals(query, other.query);
+        return index;
+    public String index() {
+            builder.field("query");
+    @Override
+        index = in.readString();
+        return this;
+        id = in.readString();
+        if (id != null && query != null) {
+    public TermsLookup id(String id) {
+    public String routing() {
+    public boolean equals(Object obj) {
+        return store;
+        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
+    public TermsLookup store(boolean store) {
+        String index = (String) args[0];
+            out.writeOptionalWriteable(query);
+        return this;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * You may obtain a copy of the License at
+            try {
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] index cannot be null or empty for TermsLookup");
+        return new TermsLookup(index, id, path, query);
+    }
+        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
+    public static TermsLookup parseTermsLookup(XContentParser parser) throws IOException {
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+        }
         }
         if (id == null && query == null) {
-            throw new IllegalArgumentException(
+        out.writeString(index);
+ * Encapsulates the parameters needed to fetch terms.
                 "[" + TermsQueryBuilder.NAME + "] query lookup element requires specifying either the id or the query."
-            );
-        }
-        if (id != null && query != null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
-
-        }
-
-        this.index = index;
-        this.id = id;
-        this.path = path;
-        this.query = query;
+        this.routing = routing;
+        builder.field("path", path);
+import org.opensearch.Version;
+            throw new IllegalArgumentException(
+    public TermsLookup(String index, String id, String path, QueryBuilder query) {
+    public String path() {
+import org.opensearch.index.query.AbstractQueryBuilder;
     }
-
-    public String index() {
-        return index;
     }
-
-    public String id() {
-        return id;
+/*
+ * not use this file except in compliance with the License.
+    public String toString() {
     }
-
-    /**
-     * Read from a stream.
-     */
-    public TermsLookup(StreamInput in) throws IOException {
-        if (in.getVersion().before(Version.V_2_0_0)) {
-            in.readOptionalString();
-        }
-        id = in.readString();
-        path = in.readString();
-        index = in.readString();
-        routing = in.readOptionalString();
-        if (in.getVersion().onOrAfter(Version.V_2_17_0)) {
-            store = in.readBoolean();
-        }
-        if (in.getVersion().onOrAfter(Version.V_3_2_0)) {
+    static {
+        PARSER.declareString(constructorArg(), new ParseField("path")); // Required
+        QueryBuilder query = (QueryBuilder) args[3]; // Optional id or query but not both
             query = in.readOptionalWriteable(inStream -> inStream.readNamedWriteable(QueryBuilder.class));
         }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        if (out.getVersion().before(Version.V_2_0_0)) {
-            out.writeOptionalString(MapperService.SINGLE_MAPPING_NAME);
         }
-        out.writeString(id);
-        out.writeString(path);
-        out.writeString(index);
-        out.writeOptionalString(routing);
-        if (out.getVersion().onOrAfter(Version.V_2_17_0)) {
-            out.writeBoolean(store);
-        }
-        if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
-            out.writeOptionalWriteable(query);
-        }
-    }
-
-    public String path() {
-        return path;
-    }
-
-    public String routing() {
-        return routing;
-    }
-
-    public TermsLookup routing(String routing) {
-        this.routing = routing;
-        return this;
-    }
-
-    private boolean store;
-
-    public boolean store() {
-        return store;
-    }
-
-    public TermsLookup store(boolean store) {
-        this.store = store;
-        return this;
-    }
-
-    public QueryBuilder query() {
-        return query;
-    }
-
-    public TermsLookup query(QueryBuilder query) {
-        this.query = query;
-        return this;
-    }
-
-    public void setQuery(QueryBuilder query) {
-        if (this.id != null && query != null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
-        }
-        this.query = query;
-    }
-
-    public TermsLookup id(String id) {
-        if (this.query != null && id != null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
-        }
-        this.id = id;
-        return this;
-    }
-
-    private static final ConstructingObjectParser<TermsLookup, Void> PARSER = new ConstructingObjectParser<>("terms_lookup", args -> {
-        String index = (String) args[0];
-        String id = (String) args[1]; // Optional id or query but not both
-        String path = (String) args[2];
-        QueryBuilder query = (QueryBuilder) args[3]; // Optional id or query but not both
-
-        // Validation: Either id or query must be present, but not both
         if (id == null && query == null) {
-            throw new IllegalArgumentException(
+        return PARSER.parse(parser, null);
+        }
+        }
+        PARSER.declareString(constructorArg(), new ParseField("index")); // Required
+        this.query = query;
+    }
+            query.toXContent(builder, params);
+        this.id = id;
+    public TermsLookup routing(String routing) {
+            builder.field("routing", routing);
+    }
+import org.opensearch.index.mapper.MapperService;
+        if (in.getVersion().before(Version.V_2_0_0)) {
+import org.opensearch.index.query.QueryBuilder;
+ * Unless required by applicable law or agreed to in writing,
+        return this;
+        }
+ * specific language governing permissions and limitations
+ * software distributed under the License is distributed on an
                 "[" + TermsQueryBuilder.NAME + "] query lookup element requires specifying either the id or the query."
+    public void setQuery(QueryBuilder query) {
+import java.io.IOException;
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+            return true;
+    private static final ConstructingObjectParser<TermsLookup, Void> PARSER = new ConstructingObjectParser<>("terms_lookup", args -> {
             );
+ * GitHub history for details.
+        TermsLookup other = (TermsLookup) obj;
+    public TermsLookup(StreamInput in) throws IOException {
+    }
+        if (obj == null || getClass() != obj.getClass()) {
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the
+    }
+            out.writeBoolean(store);
+    @Override
+    /**
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.core.xcontent.XContentParser;
+        }, new ParseField("query")); // Optional
+        if (index == null) {
+import static org.opensearch.core.xcontent.ConstructingObjectParser.optionalConstructorArg;
+        }
+    private String id;
+                return AbstractQueryBuilder.parseInnerQueryBuilder(parser); // Parse query if provided
+ * the Apache License, Version 2.0 (the "License"); you may
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] path cannot be null or empty for TermsLookup");
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
+    }
+    private final String index;
+        PARSER.declareBoolean(TermsLookup::store, new ParseField("store")); // Optional
+        }
+    public boolean store() {
+        // Validation: Either id or query must be present, but not both
+        String id = (String) args[1]; // Optional id or query but not both
+import org.opensearch.core.xcontent.ToXContentFragment;
+        builder.field("index", index);
+        }
+import org.opensearch.core.xcontent.XContentBuilder;
+        if (routing != null) {
+ * this file be licensed under the Apache-2.0 license or a
+            throw new IllegalArgumentException(
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
+                throw new RuntimeException("Error parsing inner query builder", e);
+            );
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public TermsLookup(String index, String id, String path) {
+    }
+    }
+import org.opensearch.index.query.TermsQueryBuilder;
+import org.opensearch.core.common.io.stream.Writeable;
+    }
+ *
+    public void writeTo(StreamOutput out) throws IOException {
+        if (id != null) {
+/*
+        this.query = query;
+ * compatible open source license.
+    }
+    private boolean store;
+    });
+/**
+        return query;
+}
+        if (path == null) {
+ * Licensed to Elasticsearch under one or more contributor
+ */
+            return false;
+        this(index, id, path, null);
+        }
+    public int hashCode() {
+import java.util.Objects;
+     */
+        }
+    public QueryBuilder query() {
+    private QueryBuilder query;
+        }
+        PARSER.declareString(optionalConstructorArg(), new ParseField("id")); // Optional
+        this.index = index;
+    @Override
+ * @opensearch.internal
+        if (this.query != null && id != null) {
+        path = in.readString();
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        return path;
+ */
+public class TermsLookup implements Writeable, ToXContentFragment {
+    @Override
         }
         if (id != null && query != null) {
-            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
+ * under the License.
+import org.opensearch.core.ParseField;
+        out.writeString(path);
+    public TermsLookup query(QueryBuilder query) {
+            in.readOptionalString();
+ */
+        if (out.getVersion().before(Version.V_2_0_0)) {
+    public String id() {
+ *
+ *
+        this.store = store;
+            builder.field("store", true);
+            && Objects.equals(store, other.store)
+ *
         }
-        return new TermsLookup(index, id, path, query);
-    });
-    static {
-        PARSER.declareString(constructorArg(), new ParseField("index")); // Required
-        PARSER.declareString(optionalConstructorArg(), new ParseField("id")); // Optional
-        PARSER.declareString(constructorArg(), new ParseField("path")); // Required
-        PARSER.declareObject(optionalConstructorArg(), (parser, context) -> {
-            try {
-                return AbstractQueryBuilder.parseInnerQueryBuilder(parser); // Parse query if provided
-            } catch (IOException e) {
-                throw new RuntimeException("Error parsing inner query builder", e);
-            }
-        }, new ParseField("query")); // Optional
-        PARSER.declareString(TermsLookup::routing, new ParseField("routing")); // Optional
-        PARSER.declareBoolean(TermsLookup::store, new ParseField("store")); // Optional
+ * license agreements. See the NOTICE file distributed with
+        if (this.id != null && query != null) {
     }
-
-    public static TermsLookup parseTermsLookup(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, null);
     }
-
+        if (store) {
+        out.writeOptionalString(routing);
+/*
+        }
+        this.query = query;
     @Override
-    public String toString() {
+    }
+        return id;
+ * SPDX-License-Identifier: Apache-2.0
+        return Objects.equals(index, other.index)
+            out.writeOptionalString(MapperService.SINGLE_MAPPING_NAME);
+        if (query != null) {
+    }
+        return this;
+        return routing;
+        out.writeString(id);
+            && Objects.equals(id, other.id)
+        PARSER.declareString(TermsLookup::routing, new ParseField("routing")); // Optional
+        }
+    private final String path;
+package org.opensearch.indices;
+        if (out.getVersion().onOrAfter(Version.V_3_2_0)) {
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
+    }
+     * Read from a stream.
+ * ownership. Elasticsearch licenses this file to you under
+        PARSER.declareObject(optionalConstructorArg(), (parser, context) -> {
+            throw new IllegalArgumentException("[" + TermsQueryBuilder.NAME + "] query lookup element cannot specify both id and query.");
+import org.opensearch.core.common.io.stream.StreamInput;
+        return builder;
+        routing = in.readOptionalString();
+            builder.field("id", id);
+ */
         return index + "/" + id + "/" + path;
     }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field("index", index);
-        if (id != null) {
-            builder.field("id", id);
-        }
-        builder.field("path", path);
-        if (routing != null) {
-            builder.field("routing", routing);
-        }
-        if (query != null) {
-            builder.field("query");
-            query.toXContent(builder, params);
-        }
-        if (store) {
-            builder.field("store", true);
-        }
-        return builder;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(index, id, path, routing, store, query);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
         if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        TermsLookup other = (TermsLookup) obj;
-        return Objects.equals(index, other.index)
-            && Objects.equals(id, other.id)
-            && Objects.equals(path, other.path)
-            && Objects.equals(routing, other.routing)
-            && Objects.equals(store, other.store)
-            && Objects.equals(query, other.query);
-    }
-}

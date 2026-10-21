@@ -1,260 +1,237 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
+        assertSearchResponse(response);
+ */
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+            .startObject("foo-bar")
+        ensureGreen("idx");
+        // would have _field_names indexed while the current type might not which might
+            .startObject("foo-alias")
+    public ExistsIT(Settings staticSettings) {
+            .field("type", "alias")
+                throw e;
+            assertHitCount(response, expectedCount);
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+        indexRequests.add(client().prepareIndex("idx").setSource("foo", 43));
+        final long numDocs = sources.length;
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
 package org.opensearch.search.query;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.opensearch.action.explain.ExplainResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.SearchHit;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.util.ArrayList;
-import java.util.Arrays;
+                        .get();
+        assertSearchResponse(resp);
+    public void testExists() throws Exception {
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+    }
+        expected.put("foo-bar", 2);
+            // empty doc
+        indexRandom(true, false, indexRequests);
+        List<IndexRequestBuilder> reqs = new ArrayList<>();
+        XContentBuilder mapping = XContentBuilder.builder(JsonXContent.jsonXContent)
+        createIndex("test");
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+        expected.put("f*", 1);
+            .startObject("foo")
+        }
+            .startObject("properties")
+                }
+        indexRandom(true, false, reqs);
+            .endObject()
+        Map<String, Object> barObject = new HashMap<>();
+/*
+        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
+        assertHitCount(response, 2);
+                    final String id = searchHit.getId();
+        final Map<String, Object>[] sources = new Map[] {
+                    count,
+            .endObject()
+        expected.put("foo*", 2);
+        }
+                    final ExplainResponse explanation = client().prepareExplain(index, id)
+import static java.util.Collections.emptyMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
-
-public class ExistsIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-
-    public ExistsIT(Settings staticSettings) {
-        super(staticSettings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
+import org.opensearch.common.xcontent.XContentFactory;
     // TODO: move this to a unit test somewhere...
-    public void testEmptyIndex() throws Exception {
-        createIndex("test");
-        SearchResponse resp = client().prepareSearch("test").setQuery(QueryBuilders.existsQuery("foo")).get();
-        assertSearchResponse(resp);
-        resp = client().prepareSearch("test").setQuery(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery("foo"))).get();
-        assertSearchResponse(resp);
+            .endObject();
+        expected.put("foo.bar", 2);
+            .endObject()
+            .startObject("foo")
+            .field("type", "alias")
+                    final String index = searchHit.getIndex();
+            .endObject()
+import org.opensearch.common.settings.Settings;
+        assertSearchResponse(allDocs);
+        barObject.put("foo", "bar");
+            .field("type", "object")
+            .startObject("properties")
+            .field("type", "object")
+            .startObject("foo")
+            final String fieldName = entry.getKey();
+            .endObject();
+        indexRandom(true, false, indexRequests);
+            // simple property
+        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
+            SearchResponse response = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery(fieldName)).get();
+        SearchResponse response = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery("foo-alias")).get();
+            .startObject("bar")
+import java.util.LinkedHashMap;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .endObject()
+            .endObject()
+        // confuse the exists/missing parser at query time
+            .field("type", "text")
+                        id,
+            // object fields
+            }
+            assertSearchResponse(response);
+            .endObject()
+            .field("type", "text")
+ * software distributed under the License is distributed on an
+            .endObject()
+            .endObject()
+        ensureGreen("idx");
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+ * compatible open source license.
+ * this work for additional information regarding copyright
+            .field("type", "double")
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
+            emptyMap() };
+            } catch (AssertionError e) {
+        expected.put("bar.bar", 1);
+                        explanation.getExplanation()
+            .endObject()
+        assertHitCount(allDocs, numDocs);
+            // exists
+            final int count = entry.getValue();
+ */
+        barObject.put("bar", singletonMap("bar", "foo"));
+                    String.format(Locale.ROOT, "exists(%s, %d) mapping: %s response: %s", fieldName, count, mapping.toString(), resp),
+            .endObject()
+            String fieldName = entry.getKey();
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.action.search.SearchResponse;
+        List<IndexRequestBuilder> indexRequests = new ArrayList<>();
     }
-
-    public void testExists() throws Exception {
-        XContentBuilder mapping = XContentBuilder.builder(JsonXContent.jsonXContent)
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "text")
-            .endObject()
-            .startObject("bar")
-            .field("type", "object")
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "text")
-            .endObject()
-            .startObject("bar")
-            .field("type", "object")
+ */
+        assertSearchResponse(resp);
+import static java.util.Collections.singletonMap;
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+        expected.put("*bar", 3);
+        for (Map<String, Object> source : sources) {
+        expected.put("foobar", 0);
+        indexRequests.add(client().prepareIndex("idx").setSource("foo", 3));
+        SearchResponse allDocs = client().prepareSearch("idx").setSize(sources.length).get();
+ * this file be licensed under the Apache-2.0 license or a
+ * ownership. Elasticsearch licenses this file to you under
+    }
             .startObject("properties")
             .startObject("bar")
-            .field("type", "text")
-            .endObject()
-            .endObject()
-            .endObject()
+import org.opensearch.action.explain.ExplainResponse;
             .startObject("baz")
             .field("type", "long")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject();
-
-        assertAcked(client().admin().indices().prepareCreate("idx").setMapping(mapping));
-        Map<String, Object> barObject = new HashMap<>();
-        barObject.put("foo", "bar");
-        barObject.put("bar", singletonMap("bar", "foo"));
+ * Licensed to Elasticsearch under one or more contributor
+        return Arrays.asList(
+        for (Map.Entry<String, Integer> entry : expected.entrySet()) {
         @SuppressWarnings("unchecked")
-        final Map<String, Object>[] sources = new Map[] {
-            // simple property
-            singletonMap("foo", "bar"),
-            // object fields
-            singletonMap("bar", barObject),
+import org.opensearch.core.xcontent.XContentBuilder;
+            .startObject("properties")
+ * SPDX-License-Identifier: Apache-2.0
+            .startObject("properties")
+        super(staticSettings);
+import java.util.Arrays;
+            .startObject("bar")
             singletonMap("bar", singletonMap("baz", 42)),
-            // empty doc
-            emptyMap() };
-        List<IndexRequestBuilder> reqs = new ArrayList<>();
-        for (Map<String, Object> source : sources) {
-            reqs.add(client().prepareIndex("idx").setSource(source));
-        }
+            .endObject()
+            .field("type", "long")
+            .endObject()
+    public static Collection<Object[]> parameters() {
+import java.util.Map;
+            .startObject("bar")
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
         // We do NOT index dummy documents, otherwise the type for these dummy documents
-        // would have _field_names indexed while the current type might not which might
-        // confuse the exists/missing parser at query time
-        indexRandom(true, false, reqs);
-
+            .endObject();
+ * license agreements. See the NOTICE file distributed with
+            .startObject()
+import java.util.HashMap;
+ * You may obtain a copy of the License at
+ * specific language governing permissions and limitations
+            .startObject("foo")
+import org.opensearch.common.xcontent.json.JsonXContent;
+        List<IndexRequestBuilder> indexRequests = new ArrayList<>();
+            .field("type", "long")
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertSearchResponse;
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+ * under the License.
         final Map<String, Integer> expected = new LinkedHashMap<>();
-        expected.put("foo", 1);
-        expected.put("f*", 1);
-        expected.put("bar", 2);
-        expected.put("bar.*", 2);
-        expected.put("bar.foo", 1);
-        expected.put("bar.bar", 1);
-        expected.put("bar.bar.bar", 1);
-        expected.put("foobar", 0);
-
-        final long numDocs = sources.length;
-        SearchResponse allDocs = client().prepareSearch("idx").setSize(sources.length).get();
-        assertSearchResponse(allDocs);
-        assertHitCount(allDocs, numDocs);
-        for (Map.Entry<String, Integer> entry : expected.entrySet()) {
-            final String fieldName = entry.getKey();
-            final int count = entry.getValue();
-            // exists
-            SearchResponse resp = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery(fieldName)).get();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import java.util.ArrayList;
+ * KIND, either express or implied.  See the License for the
             assertSearchResponse(resp);
-            try {
-                assertEquals(
-                    String.format(Locale.ROOT, "exists(%s, %d) mapping: %s response: %s", fieldName, count, mapping.toString(), resp),
-                    count,
-                    resp.getHits().getTotalHits().value()
-                );
-            } catch (AssertionError e) {
-                for (SearchHit searchHit : allDocs.getHits()) {
-                    final String index = searchHit.getIndex();
-                    final String id = searchHit.getId();
-                    final ExplainResponse explanation = client().prepareExplain(index, id)
-                        .setQuery(QueryBuilders.existsQuery(fieldName))
-                        .get();
-                    logger.info(
-                        "Explanation for [{}] / [{}] / [{}]: [{}]",
-                        fieldName,
-                        id,
-                        searchHit.getSourceAsString(),
-                        explanation.getExplanation()
                     );
-                }
-                throw e;
-            }
-        }
-    }
-
-    public void testFieldAlias() throws Exception {
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("bar")
-            .field("type", "long")
-            .endObject()
-            .startObject("foo")
-            .field("type", "object")
-            .startObject("properties")
-            .startObject("bar")
-            .field("type", "double")
-            .endObject()
-            .endObject()
-            .endObject()
-            .startObject("foo-bar")
-            .field("type", "alias")
-            .field("path", "foo.bar")
-            .endObject()
-            .endObject()
-            .endObject();
-        assertAcked(prepareCreate("idx").setMapping(mapping));
-        ensureGreen("idx");
-
-        List<IndexRequestBuilder> indexRequests = new ArrayList<>();
-        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
-        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
-        indexRequests.add(client().prepareIndex("idx").setSource("bar", 3));
         indexRequests.add(client().prepareIndex("idx").setSource("foo", singletonMap("bar", 2.718)));
+    }
+                        "Explanation for [{}] / [{}] / [{}]: [{}]",
+            .endObject()
+ * Unless required by applicable law or agreed to in writing,
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
         indexRequests.add(client().prepareIndex("idx").setSource("foo", singletonMap("bar", 6.283)));
-        indexRandom(true, false, indexRequests);
-
-        Map<String, Integer> expected = new LinkedHashMap<>();
-        expected.put("foo.bar", 2);
-        expected.put("foo-bar", 2);
-        expected.put("foo*", 2);
-        expected.put("*bar", 3);
-
-        for (Map.Entry<String, Integer> entry : expected.entrySet()) {
-            String fieldName = entry.getKey();
-            int expectedCount = entry.getValue();
-
-            SearchResponse response = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery(fieldName)).get();
-            assertSearchResponse(response);
-            assertHitCount(response, expectedCount);
-        }
-    }
-
-    public void testFieldAliasWithNoDocValues() throws Exception {
-        XContentBuilder mapping = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("properties")
-            .startObject("foo")
-            .field("type", "long")
-            .field("doc_values", false)
-            .endObject()
-            .startObject("foo-alias")
-            .field("type", "alias")
             .field("path", "foo")
-            .endObject()
-            .endObject()
-            .endObject();
-        assertAcked(prepareCreate("idx").setMapping(mapping));
-        ensureGreen("idx");
-
-        List<IndexRequestBuilder> indexRequests = new ArrayList<>();
-        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
-        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));
-        indexRequests.add(client().prepareIndex("idx").setSource("foo", 3));
-        indexRequests.add(client().prepareIndex("idx").setSource("foo", 43));
-        indexRandom(true, false, indexRequests);
-
-        SearchResponse response = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery("foo-alias")).get();
-        assertSearchResponse(response);
-        assertHitCount(response, 2);
+            .field("type", "object")
+                );
+            singletonMap("foo", "bar"),
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+ *
+            .field("doc_values", false)
+                for (SearchHit searchHit : allDocs.getHits()) {
     }
+                    resp.getHits().getTotalHits().value()
+        expected.put("bar.bar.bar", 1);
+    public void testFieldAliasWithNoDocValues() throws Exception {
+            .startObject()
 }
+                        fieldName,
+        expected.put("bar.*", 2);
+    @ParametersFactory
+        expected.put("bar.foo", 1);
+                assertEquals(
+                    logger.info(
+import org.opensearch.search.SearchHit;
+import org.opensearch.action.index.IndexRequestBuilder;
+            .endObject()
+            int expectedCount = entry.getValue();
+            .field("type", "text")
+        indexRequests.add(client().prepareIndex("idx").setSource("bar", 3));
+            reqs.add(client().prepareIndex("idx").setSource(source));
+        assertAcked(client().admin().indices().prepareCreate("idx").setMapping(mapping));
+            .endObject()
+            try {
+        assertAcked(prepareCreate("idx").setMapping(mapping));
+/*
+        Map<String, Integer> expected = new LinkedHashMap<>();
+/*
+        }
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .endObject()
+        SearchResponse resp = client().prepareSearch("test").setQuery(QueryBuilders.existsQuery("foo")).get();
+        for (Map.Entry<String, Integer> entry : expected.entrySet()) {
+            SearchResponse resp = client().prepareSearch("idx").setQuery(QueryBuilders.existsQuery(fieldName)).get();
+ * GitHub history for details.
+        assertAcked(prepareCreate("idx").setMapping(mapping));
+        expected.put("bar", 2);
+            .endObject()
+        resp = client().prepareSearch("test").setQuery(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery("foo"))).get();
+        );
+            .startObject()
+            .startObject("bar")
+        expected.put("foo", 1);
+                        .setQuery(QueryBuilders.existsQuery(fieldName))
+    public void testEmptyIndex() throws Exception {
+            .startObject("properties")
+public class ExistsIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+    public void testFieldAlias() throws Exception {
+            .field("path", "foo.bar")
+                        searchHit.getSourceAsString(),
+            singletonMap("bar", barObject),
+ * not use this file except in compliance with the License.
+        indexRequests.add(client().prepareIndex("idx").setSource(emptyMap()));

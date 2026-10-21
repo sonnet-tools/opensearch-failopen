@@ -1,338 +1,302 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action;
-
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.UnicodeUtil;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lucene.uid.Versions;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.VersionType;
-
-import java.io.IOException;
-import java.util.Locale;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
-import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
-
-/**
- * Generic interface to group ActionRequest, which perform writes to a single document
- * Action requests implementing this can be part of {@link org.opensearch.action.bulk.BulkRequest}
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public interface DocWriteRequest<T> extends IndicesRequest, DocRequest, Accountable {
-
-    // Flag set for disallowing index auto creation for an individual write request.
-    String REQUIRE_ALIAS = "require_alias";
-
-    /**
-     * Set the index for this request
-     * @return the Request
-     */
+     * @return validationException
     T index(String index);
-
-    /**
-     * Get the options for this request
-     * @return the indices options
+    long ifPrimaryTerm();
+     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+/**
      */
-    @Override
-    IndicesOptions indicesOptions();
-
+         * Index the source. If there an existing document with the id, it will
     /**
-     * Set the routing for this request
-     * @return the Request
-     */
-    T routing(String routing);
-
+     * If the document last modification was assigned a different term a
+import static org.opensearch.action.ValidateActions.addValidationError;
     /**
-     * Get the routing for this request
+            validationException = addValidationError(
      * @return the Routing
-     */
-    String routing();
-
+     * Get the requested document operation type of the request
+                out.writeByte((byte) 2);
+            );
+                "ifSeqNo is unassigned, but primary term is [" + request.ifPrimaryTerm() + "]",
+public interface DocWriteRequest<T> extends IndicesRequest, DocRequest, Accountable {
+     *
+        /**
     /**
-     * Get the document version for this request
-     * @return the document version
+                    return opType;
+            validationException = addValidationError(
+     * Set the routing for this request
+ * SPDX-License-Identifier: Apache-2.0
+     * Validates whether the doc id length is under the limit.
+     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+     * @param shardId shard id of the request. {@code null} when reading as part of a {@link org.opensearch.action.bulk.BulkRequest}
+        }
+import org.apache.lucene.util.Accountable;
+ *
+                validationException
+ * KIND, either express or implied.  See the License for the
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            }
+        final long version = request.version();
+ * under the License.
+    /**
+    static ActionRequestValidationException validateSeqNoBasedCASParams(
+        }
+         * be replaced.
+     *                that does not have a unique shard id
+                );
+import org.opensearch.core.common.io.stream.StreamInput;
+            }
+    }
+                    return CREATE;
+                updateRequest.writeThin(out);
+            validationException = addValidationError(
+    /**
+     *
+     * @return the document version type
+                "internal versioning can not be used for optimistic concurrency control. "
+            this.lowercase = this.toString().toLowerCase(Locale.ROOT);
      */
     long version();
-
-    /**
+}
+    }
+    boolean isRequireAlias();
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
+                    return DELETE;
+                    validationException
+        /** Updates a document */
+            );
      * Sets the version, which will perform the operation only if a matching
-     * version exists and no changes happened on the doc since then.
-     */
-    T version(long version);
-
+                "illegal version value [" + version + "] for version type [" + versionType.name() + "]",
+     * Set the index for this request
+     * @return the Request
+     * primary term. Must be used in combination with {@link #setIfSeqNo(long)}
+            }
+            }
+                indexRequest.writeTo(out);
+            case UpdateRequest updateRequest -> {
+        }
+        } else {
+     * @opensearch.api
+    ) {
+ * specific language governing permissions and limitations
+                return addValidationError(
+ * this file be licensed under the Apache-2.0 license or a
+    /** write a document write (index/delete/update) request*/
+    long ifSeqNo();
+                validationException
+        if (request.ifPrimaryTerm() != UNASSIGNED_PRIMARY_TERM && request.ifSeqNo() == UNASSIGNED_SEQ_NO) {
+     * @param id DocId to verify
     /**
-     * Get the document version type for this request
-     * @return the document version type
+ * Licensed to Elasticsearch under one or more contributor
+     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+ *
+                case 3:
+        } else if (type == 2) {
+     * Get the routing for this request
+                deleteRequest.writeTo(out);
+        public static OpType fromString(String sOpType) {
+                out.writeByte((byte) 1);
+        if (versionType == VersionType.INTERNAL && version != Versions.MATCH_ANY && version != Versions.MATCH_DELETED) {
+    T setIfPrimaryTerm(long term);
+ * @opensearch.api
+                out.writeByte((byte) 0);
+            validationException = addValidationError("ifSeqNo is set, but primary term is [0]", validationException);
      */
-    VersionType versionType();
-
+    /**
+ *
+                out.writeByte((byte) 0);
     /**
      * Sets the versioning type. Defaults to {@link VersionType#INTERNAL}.
-     */
-    T versionType(VersionType versionType);
-
-    /**
-     * only perform this request if the document was last modification was assigned the given
-     * sequence number. Must be used in combination with {@link #setIfPrimaryTerm(long)}
-     *
+        OpType(int op) {
+    }
+        switch (request) {
+/*
+ */
      * If the document last modification was assigned a different sequence number a
-     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
      */
-    T setIfSeqNo(long seqNo);
-
-    /**
-     * only performs this request if the document was last modification was assigned the given
-     * primary term. Must be used in combination with {@link #setIfSeqNo(long)}
-     *
-     * If the document last modification was assigned a different term a
-     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+        if (id != null) {
+        if (versionType.validateVersionForWrites(version) == false) {
+ *
+        DELETE(3);
+import org.opensearch.action.delete.DeleteRequest;
+        }
+ * The OpenSearch Contributors require contributions made to
+            case DeleteRequest deleteRequest -> {
+        }
+        byte type = in.readByte();
+        /**
+        ActionRequestValidationException validationException
+        public static OpType fromId(byte id) {
+        return docWriteRequest;
+     * @return the Request
+            case DeleteRequest deleteRequest -> {
+import org.opensearch.index.VersionType;
+ */
+ * ownership. Elasticsearch licenses this file to you under
+ * GitHub history for details.
+            }
      */
-    T setIfPrimaryTerm(long term);
-
-    /**
-     * If set, only perform this request if the document was last modification was assigned this sequence number.
-     * If the document last modification was assigned a different sequence number a
-     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
-     */
-    long ifSeqNo();
-
-    /**
+        return validationException;
+        public byte getId() {
+        return validationException;
+            docWriteRequest = new DeleteRequest(shardId, in);
+        UPDATE(2),
+    static ActionRequestValidationException validateDocIdLength(String id, ActionRequestValidationException validationException) {
+import org.opensearch.common.Nullable;
+    static void writeDocumentRequestThin(StreamOutput out, DocWriteRequest<?> request) throws IOException {
      * If set, only perform this request if the document was last modification was assigned this primary term.
-     * <p>
-     * If the document last modification was assigned a different term a
-     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+                indexRequest.writeThin(out);
+    static DocWriteRequest<?> readDocumentRequest(@Nullable ShardId shardId, StreamInput in) throws IOException {
+            docWriteRequest = new UpdateRequest(shardId, in);
      */
-    long ifPrimaryTerm();
-
+            case IndexRequest indexRequest -> {
+        }
+         */
+    // Flag set for disallowing index auto creation for an individual write request.
+            if (docIdLength > 512) {
+         */
+                case 2:
     /**
-     * Get the requested document operation type of the request
-     * @return the operation type {@link OpType}
-     */
+    T version(long version);
+            throw new IllegalStateException("invalid request type [" + type + " ]");
+     * version exists and no changes happened on the doc since then.
+                if (opType.getLowercase().equals(lowerCase)) {
+        }
+import org.opensearch.core.common.io.stream.StreamOutput;
+                    return UPDATE;
+    /**
+                    + "Please use `if_seq_no` and `if_primary_term` instead",
+ * Generic interface to group ActionRequest, which perform writes to a single document
+     * If the document last modification was assigned a different term a
     OpType opType();
-
+            }
+ * compatible open source license.
+     *
+ */
+     * <p>
+        }
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.action.index.IndexRequest;
+        if (type == 0) {
+     */
+    /** write a document write (index/delete/update) request without shard id*/
+    }
+    T routing(String routing);
+                validationException
+    IndicesOptions indicesOptions();
+import org.apache.lucene.util.UnicodeUtil;
+     * @return the document version
+     */
+        public String getLowercase() {
+            case UpdateRequest updateRequest -> {
+import org.opensearch.action.support.IndicesOptions;
+        }
+        }
+    enum OpType {
+     */
+     * Read a document write (index/delete/update) request
+import org.opensearch.common.annotation.PublicApi;
+        DocWriteRequest request,
+import static org.opensearch.index.seqno.SequenceNumbers.UNASSIGNED_PRIMARY_TERM;
+     */
+     */
+import java.io.IOException;
+                    return INDEX;
+import org.opensearch.action.update.UpdateRequest;
+            int docIdLength = UnicodeUtil.calcUTF16toUTF8Length(id, 0, id.length());
+     *
+            docWriteRequest = new IndexRequest(shardId, in);
+import org.opensearch.core.index.shard.ShardId;
+    /**
+        } else if (type == 1) {
+            for (OpType opType : OpType.values()) {
+     */
+     */
+     * @return the indices options
+        if (request.ifSeqNo() != UNASSIGNED_SEQ_NO && (versionType != VersionType.INTERNAL || version != Versions.MATCH_ANY)) {
+     * @return boolean flag, when true specifically requires an alias
+import org.opensearch.common.lucene.uid.Versions;
+    @Override
+         * Creates the resource. Simply adds it to the index, if there is an existing
+     * only performs this request if the document was last modification was assigned the given
+     */
+                default:
+                out.writeByte((byte) 1);
+        private final String lowercase;
+    /**
+            throw new IllegalArgumentException("Unknown opType: [" + sOpType + "]");
+        CREATE(1),
+    /**
+                case 0:
+import java.util.Locale;
+     * Get the document version for this request
+            return op;
+        if (request.ifPrimaryTerm() == UNASSIGNED_PRIMARY_TERM && request.ifSeqNo() != UNASSIGNED_SEQ_NO) {
+        INDEX(0),
+     * {@link org.opensearch.index.engine.VersionConflictEngineException} will be thrown.
+    String routing();
+        }
+@PublicApi(since = "1.0.0")
+     * sequence number. Must be used in combination with {@link #setIfPrimaryTerm(long)}
+ */
+         * document with the id, then it won't be removed.
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+/*
+package org.opensearch.action;
+            }
+            switch (id) {
+    }
+    /**
+    VersionType versionType();
+        }
+    /**
+ * Action requests implementing this can be part of {@link org.opensearch.action.bulk.BulkRequest}
+    T setIfSeqNo(long seqNo);
+/*
+            case IndexRequest indexRequest -> {
+                    throw new IllegalArgumentException("Unknown opType: [" + id + "]");
+                updateRequest.writeTo(out);
+            return lowercase;
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+     */
+     * @return the operation type {@link OpType}
+            String lowerCase = sOpType.toLowerCase(Locale.ROOT);
+        }
+        switch (request) {
+     */
+        private final byte op;
+            );
+            }
+            }
+ * You may obtain a copy of the License at
+     * @param validationException containing all the validation errors.
+     * only perform this request if the document was last modification was assigned the given
+    static void writeDocumentRequest(StreamOutput out, DocWriteRequest<?> request) throws IOException {
+     * Get the document version type for this request
+            default -> throw new IllegalStateException("invalid request [" + request.getClass().getSimpleName() + " ]");
     /**
      * Should this request override specifically require the destination to be an alias?
-     * @return boolean flag, when true specifically requires an alias
-     */
-    boolean isRequireAlias();
-
-    /**
-     * Requested operation type to perform on the document
-     *
-     * @opensearch.api
-     */
+                out.writeByte((byte) 2);
     @PublicApi(since = "1.0.0")
-    enum OpType {
-        /**
-         * Index the source. If there an existing document with the id, it will
-         * be replaced.
-         */
-        INDEX(0),
-        /**
-         * Creates the resource. Simply adds it to the index, if there is an existing
-         * document with the id, then it won't be removed.
-         */
-        CREATE(1),
-        /** Updates a document */
-        UPDATE(2),
-        /** Deletes a document */
-        DELETE(3);
-
-        private final byte op;
-        private final String lowercase;
-
-        OpType(int op) {
-            this.op = (byte) op;
-            this.lowercase = this.toString().toLowerCase(Locale.ROOT);
-        }
-
-        public byte getId() {
-            return op;
-        }
-
-        public String getLowercase() {
-            return lowercase;
-        }
-
-        public static OpType fromId(byte id) {
-            switch (id) {
-                case 0:
-                    return INDEX;
-                case 1:
-                    return CREATE;
-                case 2:
-                    return UPDATE;
-                case 3:
-                    return DELETE;
-                default:
-                    throw new IllegalArgumentException("Unknown opType: [" + id + "]");
-            }
-        }
-
-        public static OpType fromString(String sOpType) {
-            String lowerCase = sOpType.toLowerCase(Locale.ROOT);
-            for (OpType opType : OpType.values()) {
-                if (opType.getLowercase().equals(lowerCase)) {
-                    return opType;
-                }
-            }
-            throw new IllegalArgumentException("Unknown opType: [" + sOpType + "]");
-        }
-    }
-
-    /**
-     * Read a document write (index/delete/update) request
-     *
-     * @param shardId shard id of the request. {@code null} when reading as part of a {@link org.opensearch.action.bulk.BulkRequest}
-     *                that does not have a unique shard id
      */
-    static DocWriteRequest<?> readDocumentRequest(@Nullable ShardId shardId, StreamInput in) throws IOException {
-        byte type = in.readByte();
-        DocWriteRequest<?> docWriteRequest;
-        if (type == 0) {
-            docWriteRequest = new IndexRequest(shardId, in);
-        } else if (type == 1) {
-            docWriteRequest = new DeleteRequest(shardId, in);
-        } else if (type == 2) {
-            docWriteRequest = new UpdateRequest(shardId, in);
-        } else {
-            throw new IllegalStateException("invalid request type [" + type + " ]");
-        }
-        return docWriteRequest;
-    }
-
-    /**
-     * Validates whether the doc id length is under the limit.
-     * @param id DocId to verify
-     * @param validationException containing all the validation errors.
-     * @return validationException
-     */
-    static ActionRequestValidationException validateDocIdLength(String id, ActionRequestValidationException validationException) {
-        if (id != null) {
-            int docIdLength = UnicodeUtil.calcUTF16toUTF8Length(id, 0, id.length());
-            if (docIdLength > 512) {
-                return addValidationError(
-                    "id [" + id + "] is too long, must be no longer than 512 bytes but was: " + docIdLength,
-                    validationException
-                );
-            }
-        }
-        return validationException;
-    }
-
-    /** write a document write (index/delete/update) request*/
-    static void writeDocumentRequest(StreamOutput out, DocWriteRequest<?> request) throws IOException {
-        switch (request) {
-            case IndexRequest indexRequest -> {
-                out.writeByte((byte) 0);
-                indexRequest.writeTo(out);
-            }
-            case DeleteRequest deleteRequest -> {
-                out.writeByte((byte) 1);
-                deleteRequest.writeTo(out);
-            }
-            case UpdateRequest updateRequest -> {
-                out.writeByte((byte) 2);
-                updateRequest.writeTo(out);
-            }
-            default -> throw new IllegalStateException("invalid request [" + request.getClass().getSimpleName() + " ]");
-        }
-    }
-
-    /** write a document write (index/delete/update) request without shard id*/
-    static void writeDocumentRequestThin(StreamOutput out, DocWriteRequest<?> request) throws IOException {
-        switch (request) {
-            case IndexRequest indexRequest -> {
-                out.writeByte((byte) 0);
-                indexRequest.writeThin(out);
-            }
-            case DeleteRequest deleteRequest -> {
-                out.writeByte((byte) 1);
-                deleteRequest.writeThin(out);
-            }
-            case UpdateRequest updateRequest -> {
-                out.writeByte((byte) 2);
-                updateRequest.writeThin(out);
-            }
-            default -> throw new IllegalStateException("invalid request [" + request.getClass().getSimpleName() + " ]");
-        }
-    }
-
-    static ActionRequestValidationException validateSeqNoBasedCASParams(
-        DocWriteRequest request,
-        ActionRequestValidationException validationException
-    ) {
-        final long version = request.version();
-        final VersionType versionType = request.versionType();
-        if (versionType.validateVersionForWrites(version) == false) {
-            validationException = addValidationError(
-                "illegal version value [" + version + "] for version type [" + versionType.name() + "]",
-                validationException
-            );
-        }
-
-        if (versionType == VersionType.INTERNAL && version != Versions.MATCH_ANY && version != Versions.MATCH_DELETED) {
-            validationException = addValidationError(
-                "internal versioning can not be used for optimistic concurrency control. "
-                    + "Please use `if_seq_no` and `if_primary_term` instead",
-                validationException
-            );
-        }
-
-        if (request.ifSeqNo() != UNASSIGNED_SEQ_NO && (versionType != VersionType.INTERNAL || version != Versions.MATCH_ANY)) {
+ * software distributed under the License is distributed on an
             validationException = addValidationError("compare and write operations can not use versioning", validationException);
-        }
-        if (request.ifPrimaryTerm() == UNASSIGNED_PRIMARY_TERM && request.ifSeqNo() != UNASSIGNED_SEQ_NO) {
-            validationException = addValidationError("ifSeqNo is set, but primary term is [0]", validationException);
-        }
-        if (request.ifPrimaryTerm() != UNASSIGNED_PRIMARY_TERM && request.ifSeqNo() == UNASSIGNED_SEQ_NO) {
-            validationException = addValidationError(
-                "ifSeqNo is unassigned, but primary term is [" + request.ifPrimaryTerm() + "]",
-                validationException
-            );
-        }
-
-        return validationException;
-    }
-}
+            default -> throw new IllegalStateException("invalid request [" + request.getClass().getSimpleName() + " ]");
+                }
+     * Get the options for this request
+                    "id [" + id + "] is too long, must be no longer than 512 bytes but was: " + docIdLength,
+    T versionType(VersionType versionType);
+                case 1:
+        DocWriteRequest<?> docWriteRequest;
+    /**
+ * Modifications Copyright OpenSearch Contributors. See
+    String REQUIRE_ALIAS = "require_alias";
+     * Requested operation type to perform on the document
+     * If set, only perform this request if the document was last modification was assigned this sequence number.
+                deleteRequest.writeThin(out);
+     * If the document last modification was assigned a different sequence number a
+        /** Deletes a document */
+ * this work for additional information regarding copyright
+            this.op = (byte) op;
+        final VersionType versionType = request.versionType();

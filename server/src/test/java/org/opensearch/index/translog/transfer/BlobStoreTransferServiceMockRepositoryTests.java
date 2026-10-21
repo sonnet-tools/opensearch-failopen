@@ -1,190 +1,164 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.translog.transfer;
-
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.blobstore.stream.write.WriteContext;
-import org.opensearch.common.blobstore.stream.write.WritePriority;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.mockito.Mockito;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class BlobStoreTransferServiceMockRepositoryTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-
-    private BlobStore blobStore;
-
-    @Override
-    public void setUp() throws Exception {
+        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
+        assertTrue(exceptionRef.get() instanceof FileTransferException);
         super.setUp();
-        blobStore = mock(BlobStore.class);
+        }, listener, WritePriority.HIGH, null);
+import org.mockito.Mockito;
+        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
+            @Override
+ * The OpenSearch Contributors require contributions made to
+        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
+ *
+        }, latch), WritePriority.HIGH, null);
+        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+import java.util.concurrent.atomic.AtomicBoolean;
         threadPool = new TestThreadPool(getClass().getName());
-    }
-
-    public void testUploadBlobs() throws Exception {
-        Path testFile = createTempFile();
-        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
-        FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
-            testFile,
-            randomNonNegativeLong(),
-            0L
+        AtomicReference<FileSnapshot.TransferFileSnapshot> fileSnapshotRef = new AtomicReference<>();
+            }
         );
-
-        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
         Mockito.doAnswer(invocation -> {
+        );
+import static org.mockito.Mockito.mock;
+            @Override
+        assertEquals(transferFileSnapshot.getPrimaryTerm(), fileSnapshotRef.get().getPrimaryTerm());
+import java.util.concurrent.TimeUnit;
+        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+                fileSnapshotRef.set(fileSnapshot);
+            public void onFailure(Exception e) {
+            }
+    }
+            public void onFailure(Exception e) {
+        FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
+        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
+import java.nio.file.StandardOpenOption;
+            completionListener.onFailure(new Exception("Test exception"));
+import org.opensearch.core.action.ActionListener;
             ActionListener<Void> completionListener = invocation.getArgument(1);
             completionListener.onResponse(null);
-            return null;
-        }).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
-
-        TransferService transferService = new BlobStoreTransferService(blobStore, threadPool);
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
-        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-        AtomicReference<FileSnapshot.TransferFileSnapshot> fileSnapshotRef = new AtomicReference<>();
-        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
-            {
-                put(transferFileSnapshot.getPrimaryTerm(), new BlobPath().add("sample_path"));
             }
-        }, new LatchedActionListener<>(new ActionListener<>() {
-            @Override
-            public void onResponse(FileSnapshot.TransferFileSnapshot fileSnapshot) {
-                onResponseCalled.set(true);
-                fileSnapshotRef.set(fileSnapshot);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                exceptionRef.set(e);
-            }
-        }, latch), WritePriority.HIGH, null);
-
-        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
-        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-        assertTrue(onResponseCalled.get());
-        assertEquals(transferFileSnapshot.getPrimaryTerm(), fileSnapshotRef.get().getPrimaryTerm());
-        assertEquals(transferFileSnapshot.getName(), fileSnapshotRef.get().getName());
-        assertNull(exceptionRef.get());
-    }
-
-    public void testUploadBlobsIOException() throws Exception {
-        Path testFile = createTempFile();
-        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
-        FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
-            testFile,
-            randomNonNegativeLong(),
             0L
-        );
-
-        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
-        doThrow(new IOException()).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
-
-        TransferService transferService = new BlobStoreTransferService(blobStore, threadPool);
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
-        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
-            {
-                put(transferFileSnapshot.getPrimaryTerm(), new BlobPath().add("sample_path"));
-            }
-        }, new LatchedActionListener<>(new ActionListener<>() {
-            @Override
-            public void onResponse(FileSnapshot.TransferFileSnapshot fileSnapshot) {
-                onResponseCalled.set(true);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                exceptionRef.set(e);
-            }
-        }, latch), WritePriority.HIGH, null);
-
-        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
-        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-        assertFalse(onResponseCalled.get());
-        assertTrue(exceptionRef.get() instanceof FileTransferException);
-    }
-
-    public void testUploadBlobsUploadFutureCompletedExceptionally() throws Exception {
-        Path testFile = createTempFile();
-        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
         FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
-            testFile,
-            randomNonNegativeLong(),
-            0L
-        );
-
-        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
         Mockito.doAnswer(invocation -> {
-            ActionListener<Void> completionListener = invocation.getArgument(1);
-            completionListener.onFailure(new Exception("Test exception"));
-            return null;
-        }).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-
-        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
-
+        Path testFile = createTempFile();
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.common.blobstore.BlobPath;
         TransferService transferService = new BlobStoreTransferService(blobStore, threadPool);
-        CountDownLatch latch = new CountDownLatch(1);
-        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
+    private BlobStore blobStore;
+        }, latch);
+                onResponseCalled.set(true);
+import java.util.concurrent.atomic.AtomicReference;
+import static org.mockito.Mockito.when;
         AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-        LatchedActionListener<FileSnapshot.TransferFileSnapshot> listener = new LatchedActionListener<>(new ActionListener<>() {
+            }
+        );
+            ActionListener<Void> completionListener = invocation.getArgument(1);
+    }
+        super.tearDown();
+            return null;
+        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
+                exceptionRef.set(e);
+import static org.mockito.Mockito.verify;
+    private ThreadPool threadPool;
+        Path testFile = createTempFile();
+ * compatible open source license.
+        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+import java.util.HashMap;
+            }
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
+        TransferService transferService = new BlobStoreTransferService(blobStore, threadPool);
+import static org.mockito.Mockito.doThrow;
             @Override
             public void onResponse(FileSnapshot.TransferFileSnapshot fileSnapshot) {
-                onResponseCalled.set(true);
-            }
-
-            @Override
-            public void onFailure(Exception e) {
-                exceptionRef.set(e);
-            }
-        }, latch);
-        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
             {
+ */
+    public void testUploadBlobs() throws Exception {
+        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
+        assertTrue(onResponseCalled.get());
+import org.opensearch.threadpool.TestThreadPool;
+        when(blobStore.blobContainer(any(BlobPath.class))).thenReturn(blobContainer);
+                exceptionRef.set(e);
                 put(transferFileSnapshot.getPrimaryTerm(), new BlobPath().add("sample_path"));
+import java.nio.file.Path;
+import java.nio.file.Files;
+        }, new LatchedActionListener<>(new ActionListener<>() {
+        CountDownLatch latch = new CountDownLatch(1);
+            0L
+import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.common.blobstore.stream.write.WriteContext;
+            testFile,
+            public void onResponse(FileSnapshot.TransferFileSnapshot fileSnapshot) {
+        LatchedActionListener<FileSnapshot.TransferFileSnapshot> listener = new LatchedActionListener<>(new ActionListener<>() {
             }
-        }, listener, WritePriority.HIGH, null);
-
-        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
-        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
-        assertFalse(onResponseCalled.get());
+    }
+        }).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+        }, latch), WritePriority.HIGH, null);
+                exceptionRef.set(e);
+    public void setUp() throws Exception {
+        TransferService transferService = new BlobStoreTransferService(blobStore, threadPool);
         assertTrue(exceptionRef.get() instanceof FileTransferException);
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        super.tearDown();
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-    }
+        }, new LatchedActionListener<>(new ActionListener<>() {
+        assertNull(exceptionRef.get());
+            testFile,
+import java.util.concurrent.CountDownLatch;
+            }
+            {
 }
+        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
+import org.opensearch.common.blobstore.BlobStore;
+    public void tearDown() throws Exception {
+        AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+    @Override
+        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
+        assertEquals(transferFileSnapshot.getName(), fileSnapshotRef.get().getName());
+            randomNonNegativeLong(),
+import java.io.IOException;
+        assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
+            randomNonNegativeLong(),
+import static org.mockito.ArgumentMatchers.any;
+            @Override
+        doThrow(new IOException()).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+            public void onResponse(FileSnapshot.TransferFileSnapshot fileSnapshot) {
+        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
+        Files.write(testFile, randomByteArrayOfLength(128), StandardOpenOption.APPEND);
+        Path testFile = createTempFile();
+import org.opensearch.action.LatchedActionListener;
+            0L
+        FileSnapshot.TransferFileSnapshot transferFileSnapshot = new FileSnapshot.TransferFileSnapshot(
+package org.opensearch.index.translog.transfer;
+    public void testUploadBlobsUploadFutureCompletedExceptionally() throws Exception {
+        assertFalse(onResponseCalled.get());
+        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
+        assertFalse(onResponseCalled.get());
+            public void onFailure(Exception e) {
+    @Override
+            }
+        verify(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+        }).when(blobContainer).asyncBlobUpload(any(WriteContext.class), any());
+        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
+                put(transferFileSnapshot.getPrimaryTerm(), new BlobPath().add("sample_path"));
+import java.util.Collections;
+ * SPDX-License-Identifier: Apache-2.0
+            @Override
+            }
+        AtomicBoolean onResponseCalled = new AtomicBoolean(false);
+import org.opensearch.common.blobstore.AsyncMultiStreamBlobContainer;
+        CountDownLatch latch = new CountDownLatch(1);
+            testFile,
+    }
+import org.opensearch.common.blobstore.stream.write.WritePriority;
+                onResponseCalled.set(true);
+            randomNonNegativeLong(),
+                onResponseCalled.set(true);
+            {
+        blobStore = mock(BlobStore.class);
+            return null;
+public class BlobStoreTransferServiceMockRepositoryTests extends OpenSearchTestCase {
+                put(transferFileSnapshot.getPrimaryTerm(), new BlobPath().add("sample_path"));
+            @Override
+        transferService.uploadBlobs(Collections.singleton(transferFileSnapshot), new HashMap<>() {
+    public void testUploadBlobsIOException() throws Exception {
+        AsyncMultiStreamBlobContainer blobContainer = mock(AsyncMultiStreamBlobContainer.class);
+/*

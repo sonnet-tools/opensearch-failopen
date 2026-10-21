@@ -1,1258 +1,1029 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.store;
-
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.index.store.checksum.GenericCRC32ChecksumHandler;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.zip.CRC32;
-
-import static org.mockito.Mockito.mock;
-
-public class DataFormatAwareStoreDirectoryTests extends OpenSearchTestCase {
-
-    private Path tempDir;
-    private Path shardDataPath;
-    private Path indexPath;
-    private FSDirectory fsDirectory;
-    private ShardPath shardPath;
-    private DataFormatAwareStoreDirectory dataFormatAwareStoreDirectory;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        // Create directory structure: tempDir/<indexUUID>/<shardId>/index/
-        tempDir = createTempDir();
-        String indexUUID = "test-index-uuid";
-        int shardId = 0;
-        shardDataPath = tempDir.resolve(indexUUID).resolve(Integer.toString(shardId));
-        indexPath = shardDataPath.resolve(ShardPath.INDEX_FOLDER_NAME);
-        Files.createDirectories(indexPath);
-
-        fsDirectory = FSDirectory.open(indexPath);
-        ShardId sid = new ShardId(new Index("test-index", indexUUID), shardId);
-        shardPath = new ShardPath(false, shardDataPath, shardDataPath, sid);
-
-        dataFormatAwareStoreDirectory = new DataFormatAwareStoreDirectory(
-            fsDirectory,
-            shardPath,
-            Map.of("parquet", new GenericCRC32ChecksumHandler())
-        );
     }
-
-    @After
-    public void tearDown() throws Exception {
-        if (dataFormatAwareStoreDirectory != null) {
-            dataFormatAwareStoreDirectory.close();
+        }
+            // Empty active set => every entry should be evicted.
+        }
+        // Access using serialized FileMetadata "parquet/data.parquet"
+    }
+    }
+    public void testPathIsolation_sameFilenameInDifferentFormats() throws IOException {
+        assertEquals("parquet", dataFormatAwareStoreDirectory.getDataFormat("parquet/data.parquet"));
+    }
+                expected.getValue(),
+    public void testGetDataFormat_lucene() {
+    }
+            expected.update(buf);
+    }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+        }
+        }
+        dataFormatAwareStoreDirectory.registerDownloadedChecksums(Map.of());
+    // ═══════════════════════════════════════════════════════════════
+        }
+    // ═══════════════════════════════════════════════════════════════
+            }
+        FileMetadata fm = new FileMetadata("parquet", "nonexistent.parquet");
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+    // sync with non-Lucene and multiple files
+        }
+    public void testPathMapping_segmentsFile_storedInIndexDir() throws IOException {
+        indexPath = shardDataPath.resolve(ShardPath.INDEX_FOLDER_NAME);
+        }
+            assertArrayEquals(data, readData);
+    }
+        dataFormatAwareStoreDirectory.registerDownloadedChecksums(null);
+        String fileName = "_upload_cksum_lucene.si";
+    }
+            // Fallback scan kicks in since nothing was registered.
+    }
+    // ═══════════════════════════════════════════════════════════════
+    }
         }
         super.tearDown();
-    }
-
+            in.readBytes(readData, 0, readData.length);
     // ═══════════════════════════════════════════════════════════════
-    // toFileMetadata / toFileIdentifier
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testToFileMetadata_luceneFile() {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("_0.si");
-        assertEquals("lucene", fm.dataFormat());
-        assertEquals("_0.si", fm.file());
+            out.writeString("arrow");
     }
-
-    public void testToFileMetadata_prefixedFile() {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("parquet/data.parquet");
-        assertEquals("parquet", fm.dataFormat());
-        assertEquals("data.parquet", fm.file());
-    }
-
-    public void testToFileMetadata_arrowFile() {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("arrow/data.arrow");
-        assertEquals("arrow", fm.dataFormat());
-        assertEquals("data.arrow", fm.file());
-    }
-
-    public void testToFileIdentifier_lucene() {
-        FileMetadata fm = new FileMetadata("lucene", "_0.si");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("_0.si", identifier);
-    }
-
-    public void testToFileIdentifier_metadata() {
-        // "metadata" is treated as a default/index format, so no prefix is added
-        FileMetadata fm = new FileMetadata("metadata", "meta_file.txt");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("meta_file.txt", identifier);
-    }
-
-    public void testToFileIdentifier_nonLucene() {
-        FileMetadata fm = new FileMetadata("parquet", "data.parquet");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("parquet/data.parquet", identifier);
-    }
-
-    public void testToFileIdentifier_arrow() {
-        FileMetadata fm = new FileMetadata("arrow", "data.arrow");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("arrow/data.arrow", identifier);
-    }
-
-    public void testRoundtrip_toFileMetadata_toFileIdentifier_lucene() {
-        String original = "_0.cfe";
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(original);
-        String result = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals(original, result);
-    }
-
-    public void testRoundtrip_toFileMetadata_toFileIdentifier_nonLucene() {
-        String original = "parquet/data.parquet";
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(original);
-        String result = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals(original, result);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // getDataFormat
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testGetDataFormat_lucene() {
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfe"));
-    }
-
-    public void testGetDataFormat_nonLucene() {
-        assertEquals("arrow", dataFormatAwareStoreDirectory.getDataFormat("arrow/data.arrow"));
-    }
-
-    public void testGetDataFormat_parquet() {
-        assertEquals("parquet", dataFormatAwareStoreDirectory.getDataFormat("parquet/data.parquet"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // createOutput / openInput - Lucene files
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCreateOutputAndOpenInput_lucene() throws IOException {
-        String fileName = "_0_test.si";
-        byte[] testData = "hello world lucene".getBytes(StandardCharsets.UTF_8);
-
+    public void testOpenInput_withSerializedFileMetadata() throws IOException {
+    // Checksum idempotency
+ * The OpenSearch Contributors require contributions made to
+            assertEquals(expected.getValue(), parquetStrategy.computeChecksum(dfasd, "parquet/h.parquet"));
+    // Empty file checksum
+        byte[] data = "parquet content to preserve".getBytes(StandardCharsets.UTF_8);
         try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeBytes(testData, testData.length);
-        }
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileName, IOContext.DEFAULT)) {
-            byte[] readData = new byte[testData.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(testData, readData);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // createOutput / openInput - Non-Lucene files
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCreateOutputAndOpenInput_nonLucene() throws IOException {
-        String fileIdentifier = "parquet/data.parquet";
-        byte[] testData = "hello world parquet".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(testData, testData.length);
-        }
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileIdentifier, IOContext.DEFAULT)) {
-            byte[] readData = new byte[testData.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(testData, readData);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
+    public void testAfterSyncToRemoteWithRemoteSyncAwareDelegate() {
+        // already computes CRC32 over the full file, so transfer checksum == metadata checksum.
     // fileLength
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testFileLength_lucene() throws IOException {
-        String fileName = "_test_len.si";
-        byte[] data = "some content for length test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(fileName));
+                Map.of("parquet", parquetStrategy)
+    // --- isDefaultFormat edge cases (should not add prefix) ---
+            assertArrayEquals(data, readData);
+            // computeChecksum must return the registered value, not a scan of "ignored".
+            out.writeString("parquet data");
     }
-
-    public void testFileLength_fileMetadata() throws IOException {
-        String fileIdentifier = "parquet/len_test.parquet";
-        byte[] data = "parquet length test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        FileMetadata fm = new FileMetadata("parquet", "len_test.parquet");
-        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(fm.serialize()));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // deleteFile
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testDeleteFile_string() throws IOException {
-        String fileName = "_del_test.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeString("to be deleted");
-        }
-        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
-
-        dataFormatAwareStoreDirectory.deleteFile(fileName);
-        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
-    }
-
-    public void testDeleteFile_fileMetadata() throws IOException {
-        String fileIdentifier = "parquet/del_test.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeString("to be deleted");
-        }
-        String serialized = new FileMetadata("parquet", "del_test.parquet").serialize();
-        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(serialized));
-
-        FileMetadata fm = new FileMetadata("parquet", "del_test.parquet");
-        dataFormatAwareStoreDirectory.deleteFile(fm.serialize());
-        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(serialized));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // listAll / listFileMetadata
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testListAll_empty() throws IOException {
-        // A fresh directory should list no segment files
-        String[] files = dataFormatAwareStoreDirectory.listAll();
-        assertNotNull(files);
-    }
-
-    public void testListAll_withFiles() throws IOException {
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
+        String fileIdentifier = "parquet/upload_cksum.parquet";
             out.writeString("data");
         }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
-            out.writeString("parquet data");
-        }
-
-        String[] files = dataFormatAwareStoreDirectory.listAll();
-        List<String> fileList = Arrays.asList(files);
-        assertTrue(fileList.contains("_0.si"));
-        assertTrue(fileList.contains("parquet/data.parquet"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Checksum - Lucene file (CodecUtil path)
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateChecksum_luceneFile() throws IOException {
-        String fileName = "_cksum.si";
-        // Write a file with Lucene CodecUtil header/footer so CodecUtil.retrieveChecksum works
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            CodecUtil.writeHeader(out, "TestCodec", 1);
-            out.writeString("some segment data for checksum");
-            CodecUtil.writeFooter(out);
-        }
-
-        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileName);
-        // Verify it's a valid non-zero checksum (CodecUtil stores checksum in footer)
-        assertTrue("Checksum should be a valid value", checksum != 0);
-
-        // Verify we get the same checksum via string overload with serialized name
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(fileName);
-        assertEquals(checksum, dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Checksum - Non-Lucene file (CRC32 path)
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateChecksum_nonLuceneFile() throws IOException {
-        String fileIdentifier = "parquet/cksum.parquet";
-        byte[] data = "parquet content for checksum".getBytes(StandardCharsets.UTF_8);
-
         try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
+        // Non-lucene formats
+        assertTrue("Should resolve serialized lucene name", length > 0);
         }
-
-        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-
-        // Compute expected CRC32 manually
-        CRC32 crc32 = new CRC32();
-        crc32.update(data);
-        assertEquals("CRC32 checksum should match", crc32.getValue(), checksum);
+        // Verify content is different (not overwritten)
+    public void testCalculateTransferChecksum_lucene_matchesFullFileCRC32() throws IOException {
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // calculateUploadChecksum
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateUploadChecksum() throws IOException {
-        String fileIdentifier = "parquet/upload_cksum.parquet";
-        byte[] data = "upload checksum test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        FileMetadata fm = new FileMetadata("parquet", "upload_cksum.parquet");
-        String uploadChecksum = dataFormatAwareStoreDirectory.calculateUploadChecksum(fm.serialize());
-        assertNotNull(uploadChecksum);
-        // Should be the string representation of the long checksum
-        long parsedChecksum = Long.parseLong(uploadChecksum);
-        assertEquals(dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()), parsedChecksum);
     }
-
+        byte[] data = "parquet length test".getBytes(StandardCharsets.UTF_8);
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileIdentifier, IOContext.DEFAULT)) {
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
     // ═══════════════════════════════════════════════════════════════
-    // rename
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testRename_sameFormat() throws IOException {
-        String fileName = "_rename_src.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeString("rename test data");
         }
-
-        dataFormatAwareStoreDirectory.rename(fileName, "_rename_dest.si");
-        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
-        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains("_rename_dest.si"));
-    }
-
-    public void testRename_fileMetadata_sameFormat() throws IOException {
-        String fileIdentifier = "parquet/rename_src.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeString("rename test data parquet");
-        }
-
-        FileMetadata src = new FileMetadata("parquet", "rename_src.parquet");
-        FileMetadata dest = new FileMetadata("parquet", "rename_dest.parquet");
-        dataFormatAwareStoreDirectory.rename(src.serialize(), dest.serialize());
-
-        String srcSerialized = new FileMetadata("parquet", "rename_src.parquet").serialize();
-        String destSerialized = new FileMetadata("parquet", "rename_dest.parquet").serialize();
-        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(srcSerialized));
+            out.writeString("metadata content");
+        // Prefixed filenames → format name
+        super.setUp();
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+import java.util.Map;
+        String roundtripped = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        FileMetadata fm = new FileMetadata("parquet", "_0_1.parquet");
+    public void testListAll_returnsCorrectIdentifiers() throws IOException {
         assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(destSerialized));
+    // ═══════════════════════════════════════════════════════════════
+    public void testEndToEnd_writeViaFileMetadata_readViaString_lucene() throws IOException {
+        byte[] data = "e2e parquet test".getBytes(StandardCharsets.UTF_8);
+        byte[] parquetData = "parquet version".getBytes(StandardCharsets.UTF_8);
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // sync
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testSync() throws IOException {
-        String fileName = "_sync_test.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeString("sync test data");
+        dataFormatAwareStoreDirectory = new DataFormatAwareStoreDirectory(
+            out.writeString("to be deleted");
+            assertEquals(
         }
-
-        // sync should not throw
-        dataFormatAwareStoreDirectory.sync(Set.of(fileName));
+        String original = "_0.cfe";
+        FileMetadata src = new FileMetadata("parquet", "rename_content.parquet");
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
+        }
+        // Metadata checksum (for replication) == CodecUtil.retrieveChecksum() which covers
+        assertEquals("segments_1", identifier); // no prefix
+                Map.of("parquet", parquetStrategy)
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+            dfasd.evictStaleChecksums(List.of("parquet/a.parquet", "parquet/c.parquet"));
+        // Lucene files should appear as plain names (no prefix)
+        // Lucene
     }
-
+    // ═══════════════════════════════════════════════════════════════
+        assertTrue("Leaf should be FSDirectory", delegate instanceof FSDirectory);
+        // Create directory structure: tempDir/<indexUUID>/<shardId>/index/
+            expected.update(new byte[] { 9, 9 });
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+    // ═══════════════════════════════════════════════════════════════
+        String fileName = "_del_test.si";
+        // Should not throw with multiple files
+        String indexUUID = "test-index-uuid";
+                Map.of("parquet", parquetStrategy)
+        String fileIdentifier = "parquet/empty.parquet";
+        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains("_rename_dest.si"));
+        assertEquals(parquetData.length, dataFormatAwareStoreDirectory.fileLength("parquet/data.file"));
+        String[] files = dataFormatAwareStoreDirectory.listAll();
+        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(serialized));
+        long metadataChecksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+        assertEquals(arrowData.length, dataFormatAwareStoreDirectory.fileLength("arrow/data.file"));
+        String serialized = new FileMetadata("parquet", "data.parquet").serialize();
+        FileMetadata fm = new FileMetadata("parquet", "fm_test.parquet");
+        }
+        ) {
+    // ═══════════════════════════════════════════════════════════════
+            out.writeBytes(data, data.length);
+        assertEquals("_0.si", identifier);
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileName, IOContext.DEFAULT)) {
+            fsDirectory,
+        // bytes [0, length-8). Transfer checksum (for S3) == CRC32 of full file. They must
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+        }
+            out.writeString("parquet data");
+    // ═══════════════════════════════════════════════════════════════
+        assertEquals(dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()), parsedChecksum);
+        FileMetadata fm = new FileMetadata("parquet", "delimited_test.parquet");
+        assertEquals("arrow", dataFormatAwareStoreDirectory.getDataFormat("arrow/data.arrow"));
+    // Multiple formats in listAll
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+        }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+    // ═══════════════════════════════════════════════════════════════
+        assertTrue(Files.exists(indexPath.resolve("data.file")));
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+    // --- Custom format: "custom/" prefix, stored in <shard>/custom/ ---
+                shardPath,
+        }
+            dfasd.registerDownloadedChecksum("parquet/b.parquet", "20");
+    public void testRegisterDownloadedChecksum_skippedForNonCachingStrategy() throws IOException {
+    }
+        FileMetadata fm = new FileMetadata("parquet", "e2e_data.parquet");
+    // ═══════════════════════════════════════════════════════════════
+    public void testSync() throws IOException {
+        int shardId = 0;
+            assertEquals(10L, parquetStrategy.computeChecksum(dfasd, "parquet/a.parquet"));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(serialized));
+        String fileName = "_rename_src.si";
+                FSDirectory.open(indexPath.resolveSibling("rdc2-idx")),
+        }
+        assertEquals("parquet", fm.dataFormat());
+            assertEquals(expected.getValue(), parquetStrategy.computeChecksum(dfasd, "parquet/b.parquet"));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    }
+            in.readBytes(buf, 0, (int) length);
+import java.util.List;
+        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("LUCENE", "file.si")));
+    }
+        assertEquals("custom/my.file", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("custom", "my.file")));
+        assertTrue("Should contain arrow file", fileList.contains("arrow/data.arrow"));
+        );
+            CodecUtil.writeFooter(out);
+        dataFormatAwareStoreDirectory.sync(Set.of(fileName));
+        assertFalse("Lucene file should NOT have lucene/ prefix", fileList.contains("lucene/_0.si"));
+            in.readBytes(readData, 0, readData.length);
+            in.readBytes(readData, 0, readData.length);
+        assertTrue(fileList.contains("_0.si"));
+        assertNotNull(files);
+    }
+        String original = "parquet/data.parquet";
+    public void testRegisterDownloadedChecksum_routesToFormatStrategy() throws IOException {
+        }
+            )
+    // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+        // empty string → no prefix
+        List<String> fileList = Arrays.asList(files);
+        }
+        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileIdentifier);
+            CRC32 expected = new CRC32();
+    public void testGetDataFormat_comprehensive() {
+        // Write "data.file" in three different formats
+            out.writeString("transfer checksum lucene data");
+    public void testToFileIdentifier_metadata() {
+        ) {
+    private Path indexPath;
+    }
+        }
+        verifyRoundtrip("arrow/data.arrow", "arrow", "data.arrow");
+            out.writeString("lucene");
+        assertEquals("arrow", dataFormatAwareStoreDirectory.getDataFormat("arrow/data.arrow"));
+            out.writeString("parquet");
+    public void testResolveFileName_luceneSerialized() throws IOException {
+import org.opensearch.index.store.checksum.GenericCRC32ChecksumHandler;
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(src, IOContext.DEFAULT)) {
+        );
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        // Access using serialized FileMetadata "metadata/metadata__1__2__3"
+    public void testCalculateChecksum_idempotent_nonLucene() throws IOException {
+        // null → no prefix
+        List<String> fileList = Arrays.asList(files);
+        assertTrue(Files.exists(shardDataPath.resolve("arrow").resolve("data.file")));
+        // Compute expected CRC32 manually
+import org.apache.lucene.store.IOContext;
+        }
+        // No exception = pass. The inner SubdirectoryAwareDirectory is not RemoteSyncListener.
+            CodecUtil.writeHeader(out, "DivergenceTest", 1);
+            in.readBytes(readData, 0, readData.length);
+    // ═══════════════════════════════════════════════════════════════
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    public void testToFileIdentifier_defaultFormats_noPrefix() {
+        String result = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+            out.writeBytes(luceneData, luceneData.length);
+        String fileIdentifier = "parquet/cksum.parquet";
+                out.writeBytes("ignored".getBytes(StandardCharsets.UTF_8), 7);
+            // Downloaded (generation 0).
+            metadataChecksum,
+        // We need a Directory that is also RemoteSyncListener — use the abstract helper
+        assertEquals("meta.dat", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("METADATA", "meta.dat")));
+    public void testToFileMetadata_luceneFile() {
+            dfasd.registerDownloadedChecksum("parquet/g.parquet", "100");
+    public void testFileLength_fileMetadata() throws IOException {
+        assertEquals("_0.si", identifier);
+        byte[] data = "some content for length test".getBytes(StandardCharsets.UTF_8);
+import java.util.zip.CRC32;
+            }
+    }
+    }
+        String fileName = "_test_len.si";
+            out.writeString("custom data");
+        assertFalse("Parquet file should NOT be in index dir", Files.exists(indexPath.resolve("_0_1.parquet")));
+        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
+        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
+            byte[] readData = new byte[testData.length];
+        CRC32 expected = new CRC32();
+        dataFormatAwareStoreDirectory.registerDownloadedChecksum(fileIdentifier, "999");
+        ) {
+        assertEquals("parquet", fm.dataFormat());
+            shardPath,
     public void testGetShardPath() {
-        assertNotNull(dataFormatAwareStoreDirectory.getShardPath());
+            dfasd.registerDownloadedChecksum(null, "1");
+        if (dataFormatAwareStoreDirectory != null) {
+        }
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+    }
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+    // toFileMetadata / toFileIdentifier
+        FileMetadata fm = new FileMetadata("metadata", "metadata__1__5__abc");
+        }
+    // ═══════════════════════════════════════════════════════════════
+    public void testEndToEnd_writeViaFileMetadata_readViaString_parquet() throws IOException {
+    // ═══════════════════════════════════════════════════════════════
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("data.file", IOContext.DEFAULT)) {
+ */
+    public void testRegisterDownloadedChecksums_bulkInsert() throws IOException {
+            try (IndexOutput out = dfasd.createOutput("parquet/h.parquet", IOContext.DEFAULT)) {
+        // Write using plain name (metadata is a default format)
+            CodecUtil.writeFooter(out);
+            assertArrayEquals(testData, readData);
+        String fileIdentifier = "parquet/data.parquet";
+        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(fileName));
+        FileMetadata dest = new FileMetadata("parquet", "rename_dest.parquet");
+    // ═══════════════════════════════════════════════════════════════
+    }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("metadata__1__2__3", IOContext.DEFAULT)) {
+    }
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+    public void testAfterSyncToRemoteWithNonRemoteSyncAwareDelegate() {
+        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize());
+        // Write using plain name
+    // ═══════════════════════════════════════════════════════════════
+                }
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("_e2e_lucene.si", IOContext.DEFAULT)) {
+            out.writeBytes(data, data.length);
+        byte[] data = "upload checksum test".getBytes(StandardCharsets.UTF_8);
+    }
+    public void testToFileMetadata_nestedPath() {
+            out.writeBytes(data, data.length);
+        try (
+        }
+    // ═══════════════════════════════════════════════════════════════
+        CRC32 crc32 = new CRC32();
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
+        String uploadChecksum = dataFormatAwareStoreDirectory.calculateUploadChecksum(fm.serialize());
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
+            byte[] readData = new byte[data.length];
+            dataFormatAwareStoreDirectory.close();
+        String fileName = "_sync_test.si";
+                FSDirectory.open(indexPath.resolveSibling("rdc1-idx")),
+        }
+        // The delegate should be the SubdirectoryAwareDirectory directly, not wrapped again
+        FileMetadata dest = new FileMetadata("parquet", "rename_content_dest.parquet");
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfe"));
+        dataFormatAwareStoreDirectory.rename(src.serialize(), dest.serialize());
+    // rename
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.si"));
+        FileMetadata fm = new FileMetadata("custom", "myfile.dat");
+        dataFormatAwareStoreDirectory.deleteFile(fm.serialize());
+        long checksumFromString = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.file", IOContext.DEFAULT)) {
+            dfasd.registerDownloadedChecksum("parquet/h.parquet", null);
+        String fileName = "_cksum.si";
+        }
+import org.junit.After;
+                "cache cleared; computeChecksum must fall back to scan",
+    // ═══════════════════════════════════════════════════════════════
+        verifyRoundtrip("_0.cfs", "lucene", "_0.cfs");
+            byte[] readData = new byte[data.length];
+import org.opensearch.core.index.shard.ShardId;
+        byte[] data = "e2e lucene test".getBytes(StandardCharsets.UTF_8);
+    }
+        assertTrue("Should contain lucene file", fileList.contains("_0.si"));
+            // a and c remain cached at their registered values.
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+            out.writeBytes(data, data.length);
+        assertEquals("parquet/data.parquet", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("parquet", "data.parquet")));
+        FileMetadata fm = new FileMetadata("lucene", "_e2e_lucene.si");
         assertEquals(shardPath, dataFormatAwareStoreDirectory.getShardPath());
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // FileMetadata convenience: getChecksumOfLocalFile
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testGetChecksumOfLocalFile() throws IOException {
-        String fileIdentifier = "parquet/local_cksum.parquet";
-        byte[] data = "local checksum test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        FileMetadata fm = new FileMetadata("parquet", "local_cksum.parquet");
-        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize());
-        assertTrue(checksum != 0);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // resolveFileName with FileMetadata.DELIMITER in name
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testOpenInput_withSerializedFileMetadata() throws IOException {
-        // Write a file using plain identifier
-        String fileIdentifier = "parquet/delimited_test.parquet";
-        byte[] data = "delimited test data".getBytes(StandardCharsets.UTF_8);
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        // Now access it using a serialized FileMetadata string (with "/" delimiter)
-        FileMetadata fm = new FileMetadata("parquet", "delimited_test.parquet");
-        String serialized = fm.serialize(); // "parquet/delimited_test.parquet"
-
-        // The resolveFileName method should handle the delimiter and resolve correctly
-        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
-        assertEquals(data.length, length);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // FileMetadata-based openInput / createOutput
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCreateOutputAndOpenInput_fileMetadata_lucene() throws IOException {
-        FileMetadata fm = new FileMetadata("lucene", "_fm_test.si");
-        byte[] testData = "file metadata lucene test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
-            out.writeBytes(testData, testData.length);
-        }
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
-            byte[] readData = new byte[testData.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(testData, readData);
-        }
-    }
-
-    public void testCreateOutputAndOpenInput_fileMetadata_parquet() throws IOException {
-        FileMetadata fm = new FileMetadata("parquet", "fm_test.parquet");
-        byte[] testData = "file metadata parquet test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
-            out.writeBytes(testData, testData.length);
-        }
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
-            byte[] readData = new byte[testData.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(testData, readData);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Checksum idempotency
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateChecksum_idempotent_nonLucene() throws IOException {
         String fileIdentifier = "parquet/idempotent.parquet";
-        byte[] data = "idempotent checksum data".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        long checksum1 = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-        long checksum2 = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-        assertEquals("Checksum should be the same on repeated calls", checksum1, checksum2);
-    }
-
-    public void testCalculateChecksum_stringAndFileMetadataConsistent() throws IOException {
-        String fileIdentifier = "parquet/consistency.parquet";
-        byte[] data = "consistency checksum".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        long checksumFromString = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-        assertEquals(checksumFromString, dataFormatAwareStoreDirectory.calculateChecksum("parquet/consistency.parquet"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Data integrity after rename
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testRename_preservesContent_lucene() throws IOException {
-        String srcFile = "_rename_content.si";
-        byte[] data = "content to preserve after rename".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(srcFile, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        dataFormatAwareStoreDirectory.rename(srcFile, "_rename_content_dest.si");
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("_rename_content_dest.si", IOContext.DEFAULT)) {
-            byte[] readData = new byte[data.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(data, readData);
-        }
-    }
-
-    public void testRename_preservesContent_nonLucene() throws IOException {
-        FileMetadata src = new FileMetadata("parquet", "rename_content.parquet");
-        FileMetadata dest = new FileMetadata("parquet", "rename_content_dest.parquet");
-        byte[] data = "parquet content to preserve".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(src, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        dataFormatAwareStoreDirectory.rename(src.serialize(), dest.serialize());
-
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(dest.serialize(), IOContext.DEFAULT)) {
-            byte[] readData = new byte[data.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(data, readData);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Multiple formats in listAll
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testListAll_multipleFormats() throws IOException {
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
-            out.writeString("lucene");
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
-            out.writeString("parquet");
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("arrow/data.arrow", IOContext.DEFAULT)) {
-            out.writeString("arrow");
-        }
-
-        String[] files = dataFormatAwareStoreDirectory.listAll();
-        List<String> fileList = Arrays.asList(files);
-        assertTrue("Should contain lucene file", fileList.contains("_0.si"));
-        assertTrue("Should contain parquet file", fileList.contains("parquet/data.parquet"));
-        assertTrue("Should contain arrow file", fileList.contains("arrow/data.arrow"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // sync with non-Lucene and multiple files
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testSync_nonLuceneFile() throws IOException {
-        String fileIdentifier = "parquet/sync_test.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeString("sync test parquet");
-        }
-
-        // Should not throw
-        dataFormatAwareStoreDirectory.sync(Set.of(fileIdentifier));
-    }
-
-    public void testSync_multipleFiles() throws IOException {
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_sync1.si", IOContext.DEFAULT)) {
-            out.writeString("sync1");
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/sync2.parquet", IOContext.DEFAULT)) {
-            out.writeString("sync2");
-        }
-
-        // Should not throw with multiple files
-        dataFormatAwareStoreDirectory.sync(Set.of("_sync1.si", "parquet/sync2.parquet"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // deleteFile with non-existent file
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testDeleteFile_nonExistent_throws() {
-        expectThrows(IOException.class, () -> dataFormatAwareStoreDirectory.deleteFile("_nonexistent.si"));
-    }
-
-    public void testDeleteFile_fileMetadata_nonExistent_throws() {
-        FileMetadata fm = new FileMetadata("parquet", "nonexistent.parquet");
-        expectThrows(IOException.class, () -> dataFormatAwareStoreDirectory.deleteFile(fm.serialize()));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // toFileMetadata edge cases
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testToFileMetadata_nestedPath() {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("custom/nested_file.data");
-        assertEquals("custom", fm.dataFormat());
-        assertEquals("nested_file.data", fm.file());
-    }
-
-    public void testToFileIdentifier_nullFormatTreatedAsDefault() {
-        FileMetadata fm = new FileMetadata(null, "_0.si");
-        // null format should be treated as default (no prefix)
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("_0.si", identifier);
-    }
-
-    public void testToFileIdentifier_emptyFormatTreatedAsDefault() {
-        FileMetadata fm = new FileMetadata("", "_0.si");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("_0.si", identifier);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // fileLength with serialized FileMetadata string
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testFileLength_withSerializedString_lucene() throws IOException {
-        String fileName = "_len_serial.si";
-        byte[] data = "serialized length test".getBytes(StandardCharsets.UTF_8);
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        // Access via serialized form
-        String serialized = new FileMetadata("lucene", fileName).serialize();
-        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(serialized));
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // Empty file checksum
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateChecksum_emptyNonLuceneFile() throws IOException {
-        String fileIdentifier = "parquet/empty.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            // Write nothing - empty file
-        }
-
-        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-
-        CRC32 crc32 = new CRC32();
-        // CRC32 of empty data
-        assertEquals("CRC32 of empty file should match", crc32.getValue(), checksum);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // calculateUploadChecksum for lucene file
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateUploadChecksum_lucene() throws IOException {
-        String fileName = "_upload_cksum_lucene.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            CodecUtil.writeHeader(out, "UploadTest", 1);
-            out.writeString("upload checksum lucene data");
-            CodecUtil.writeFooter(out);
-        }
-
-        FileMetadata fm = new FileMetadata("lucene", fileName);
-        String uploadChecksum = dataFormatAwareStoreDirectory.calculateUploadChecksum(fm.serialize());
-        assertNotNull(uploadChecksum);
-        long parsedChecksum = Long.parseLong(uploadChecksum);
-        assertEquals(dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()), parsedChecksum);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // calculateTransferChecksum: full-file CRC32 for S3 transfer validation
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testCalculateTransferChecksum_lucene_matchesFullFileCRC32() throws IOException {
-        String fileName = "_transfer_cksum.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            CodecUtil.writeHeader(out, "TransferTest", 1);
-            out.writeString("transfer checksum lucene data");
-            CodecUtil.writeFooter(out);
-        }
-
-        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileName);
-
-        // Verify it equals CRC32 of the entire file bytes (what S3 computes server-side).
-        CRC32 expected = new CRC32();
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileName, IOContext.READONCE)) {
-            long length = in.length();
-            byte[] buf = new byte[(int) length];
-            in.readBytes(buf, 0, (int) length);
-            expected.update(buf);
-        }
-        assertEquals("Transfer checksum must equal CRC32 of full file bytes", expected.getValue(), transferChecksum);
-    }
-
-    public void testCalculateTransferChecksum_lucene_differsFromMetadataChecksum() throws IOException {
-        // Metadata checksum (for replication) == CodecUtil.retrieveChecksum() which covers
-        // bytes [0, length-8). Transfer checksum (for S3) == CRC32 of full file. They must
-        // be different values for a typical Lucene file so the two paths never alias.
-        String fileName = "_transfer_vs_metadata.si";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
-            CodecUtil.writeHeader(out, "DivergenceTest", 1);
-            out.writeString("some payload that produces a non-zero checksum");
-            CodecUtil.writeFooter(out);
-        }
-
-        long metadataChecksum = dataFormatAwareStoreDirectory.calculateChecksum(fileName);
-        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileName);
-
-        assertNotEquals("Metadata checksum and transfer checksum must not coincide for Lucene files", metadataChecksum, transferChecksum);
-    }
-
-    public void testCalculateTransferChecksum_nonLucene_delegatesToStrategy() throws IOException {
-        // For non-Lucene formats (e.g., parquet via GenericCRC32ChecksumHandler), the strategy
-        // already computes CRC32 over the full file, so transfer checksum == metadata checksum.
-        String fileIdentifier = "parquet/transfer_cksum.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes("parquet payload bytes".getBytes(StandardCharsets.UTF_8), 21);
-        }
-
-        long metadataChecksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
-        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileIdentifier);
-
-        assertEquals(
-            "For non-Lucene formats the transfer checksum equals the metadata checksum (full-file CRC32)",
-            metadataChecksum,
-            transferChecksum
-        );
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // FileMetadata → "/" identifier → SubdirectoryAwareDirectory
-    // Path mapping & storage location tests
-    // ═══════════════════════════════════════════════════════════════
-
-    // --- Lucene files: no prefix, stored in <shard>/index/ ---
-
-    public void testPathMapping_luceneFile_storedInIndexDir() throws IOException {
-        // Lucene files (no slash) should be stored in <shard>/index/<filename>
-        FileMetadata fm = new FileMetadata("lucene", "_0.cfs");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("_0.cfs", identifier); // no prefix
-        assertFalse("Lucene identifier should not contain '/'", identifier.contains("/"));
-
-        // Write and verify it's accessible
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("lucene data");
-        }
-        // Verify physical file exists in index directory
-        assertTrue(Files.exists(indexPath.resolve("_0.cfs")));
-    }
-
-    public void testPathMapping_segmentsFile_storedInIndexDir() throws IOException {
-        // segments_N files should be treated as lucene format (default)
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("segments_1");
-        assertEquals("lucene", fm.dataFormat());
-        assertEquals("segments_1", fm.file());
-
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("segments_1", identifier); // no prefix
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("segments data");
-        }
-        assertTrue("segments file should be in index dir", Files.exists(indexPath.resolve("segments_1")));
-    }
-
-    public void testPathMapping_segmentInfoFile_storedInIndexDir() throws IOException {
-        // _0.si (segment info) is a lucene file
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("_0.si");
-        assertEquals("lucene", fm.dataFormat());
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("_0.si", identifier);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("si data");
-        }
-        assertTrue(Files.exists(indexPath.resolve("_0.si")));
-    }
-
-    // --- Metadata files: treated as default format, stored in <shard>/index/ ---
-
-    public void testPathMapping_metadataFormat_storedInIndexDir() throws IOException {
-        // "metadata" is in INDEX_DIRECTORY_FORMATS, so no prefix is added
-        FileMetadata fm = new FileMetadata("metadata", "metadata__1__5__abc");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("metadata__1__5__abc", identifier); // no prefix
-        assertFalse("Metadata identifier should not contain '/'", identifier.contains("/"));
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("metadata content");
-        }
-        assertTrue("Metadata file should be in index dir", Files.exists(indexPath.resolve("metadata__1__5__abc")));
-    }
-
-    public void testPathMapping_metadataFormat_getDataFormat() {
-        // A plain metadata filename (no slash) starting with "metadata" is treated as metadata format
-        assertEquals("metadata", dataFormatAwareStoreDirectory.getDataFormat("metadata__1__2__3"));
-    }
-
-    // --- Parquet files: "parquet/" prefix, stored in <shard>/parquet/ ---
-
-    public void testPathMapping_parquetFile_storedInSubdir() throws IOException {
-        FileMetadata fm = new FileMetadata("parquet", "_0_1.parquet");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("parquet/_0_1.parquet", identifier);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("parquet data");
-        }
-        assertTrue("Parquet file should be in parquet subdir", Files.exists(shardDataPath.resolve("parquet").resolve("_0_1.parquet")));
-        assertFalse("Parquet file should NOT be in index dir", Files.exists(indexPath.resolve("_0_1.parquet")));
-    }
-
-    public void testPathMapping_parquetFile_fromIdentifier() {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("parquet/_0_1.parquet");
-        assertEquals("parquet", fm.dataFormat());
-        assertEquals("_0_1.parquet", fm.file());
-    }
-
-    // --- Arrow files: "arrow/" prefix, stored in <shard>/arrow/ ---
-
-    public void testPathMapping_arrowFile_storedInSubdir() throws IOException {
-        FileMetadata fm = new FileMetadata("arrow", "data.arrow");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("arrow/data.arrow", identifier);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("arrow data");
-        }
-        assertTrue("Arrow file should be in arrow subdir", Files.exists(shardDataPath.resolve("arrow").resolve("data.arrow")));
-        assertFalse("Arrow file should NOT be in index dir", Files.exists(indexPath.resolve("data.arrow")));
-    }
-
-    // --- Custom format: "custom/" prefix, stored in <shard>/custom/ ---
-
-    public void testPathMapping_customFormat_storedInSubdir() throws IOException {
-        FileMetadata fm = new FileMetadata("custom", "myfile.dat");
-        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("custom/myfile.dat", identifier);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
-            out.writeString("custom data");
-        }
-        assertTrue("Custom file should be in custom subdir", Files.exists(shardDataPath.resolve("custom").resolve("myfile.dat")));
-    }
-
-    // --- resolveFileName: serialized FileMetadata (with /) → native "/" identifier ---
-
-    public void testResolveFileName_luceneSerialized() throws IOException {
-        // Write using plain name
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
-            out.writeString("lucene data");
-        }
-
-        // Access using serialized FileMetadata — lucene serializes to plain name
-        String serialized = new FileMetadata("lucene", "_0.si").serialize();
-        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
-        assertTrue("Should resolve serialized lucene name", length > 0);
-    }
-
-    public void testResolveFileName_parquetSerialized() throws IOException {
-        // Write using "/" identifier
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
-            out.writeString("parquet data");
-        }
-
-        // Access using serialized FileMetadata "parquet/data.parquet"
-        String serialized = new FileMetadata("parquet", "data.parquet").serialize();
-        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
-        assertTrue("Should resolve serialized parquet name", length > 0);
-    }
-
-    public void testResolveFileName_metadataSerialized() throws IOException {
-        // Write using plain name (metadata is a default format)
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("metadata__1__2__3", IOContext.DEFAULT)) {
-            out.writeString("metadata content");
-        }
-
-        // Access using serialized FileMetadata "metadata/metadata__1__2__3"
-        String serialized = new FileMetadata("metadata", "metadata__1__2__3").serialize();
-        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
-        assertTrue("Should resolve serialized metadata name", length > 0);
-    }
-
-    // --- End-to-end: Write via FileMetadata, read via string identifier and vice versa ---
-
-    public void testEndToEnd_writeViaFileMetadata_readViaString_lucene() throws IOException {
-        FileMetadata fm = new FileMetadata("lucene", "_e2e_lucene.si");
-        byte[] data = "e2e lucene test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        // Read using string identifier (no prefix for lucene)
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("_e2e_lucene.si", IOContext.DEFAULT)) {
-            byte[] readData = new byte[data.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(data, readData);
-        }
-    }
-
-    public void testEndToEnd_writeViaFileMetadata_readViaString_parquet() throws IOException {
-        FileMetadata fm = new FileMetadata("parquet", "e2e_data.parquet");
-        byte[] data = "e2e parquet test".getBytes(StandardCharsets.UTF_8);
-
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
-            out.writeBytes(data, data.length);
-        }
-
-        // Read using "/" string identifier
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("parquet/e2e_data.parquet", IOContext.DEFAULT)) {
-            byte[] readData = new byte[data.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(data, readData);
-        }
-    }
-
-    public void testEndToEnd_writeViaString_readViaFileMetadata_parquet() throws IOException {
-        byte[] data = "reverse e2e".getBytes(StandardCharsets.UTF_8);
-
+    public void testRename_fileMetadata_sameFormat() throws IOException {
+            dfasd.registerDownloadedChecksum("parquet/a.parquet", "10");
         try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/rev_e2e.parquet", IOContext.DEFAULT)) {
+            assertEquals(11L, parquetStrategy.computeChecksum(dfasd, "parquet/i.parquet"));
+        byte[] arrowData = "arrow version".getBytes(StandardCharsets.UTF_8);
+    }
+        // be a silent no-op: subsequent computeChecksum must scan the file, not return 999.
+        expected.update(payload);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
+    // --- Comprehensive toFileMetadata + toFileIdentifier round-trip for all formats ---
+        // sync should not throw
+        // unwrap goes all the way to the leaf — should be FSDirectory
+        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+    // FileMetadata-based openInput / createOutput
+    }
+    public void testCalculateTransferChecksum_lucene_differsFromMetadataChecksum() throws IOException {
+ *
+            byte[] readData = new byte[data.length];
+            )
+    // ═══════════════════════════════════════════════════════════════
+        FileMetadata fm = new FileMetadata("", "_0.si");
+        }
+        }
+        assertTrue(Files.exists(shardDataPath.resolve("parquet").resolve("data.file")));
+            assertEquals(100L, parquetStrategy.computeChecksum(dfasd, "parquet/g.parquet"));
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(fileName);
+import java.util.Set;
+        FileMetadata fm = new FileMetadata("lucene", "_0.cfs");
+            try (IndexOutput out = dfasd.createOutput("parquet/j.parquet", IOContext.DEFAULT)) {
+    }
+    }
+        dataFormatAwareStoreDirectory.rename(fileName, "_rename_dest.si");
+    // ═══════════════════════════════════════════════════════════════
+            out.writeString("lucene data");
+        String fileIdentifier = "parquet/del_test.parquet";
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_sync1.si", IOContext.DEFAULT)) {
+    // --- resolveFileName: serialized FileMetadata (with /) → native "/" identifier ---
+    public void testCalculateChecksum_emptyNonLuceneFile() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+        assertTrue("Should contain parquet file", fileList.contains("parquet/data.parquet"));
+    public void testSync_nonLuceneFile() throws IOException {
+        DataFormatAwareStoreDirectory dir = DataFormatAwareStoreDirectory.withDirectoryDelegate(syncAwareDir, shardPath, Map.of());
+        }
+    public void testDeleteFile_nonExistent_throws() {
+    public void testFileLength_lucene() throws IOException {
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("parquet/e2e_data.parquet", IOContext.DEFAULT)) {
+        // A plain metadata filename (no slash) starting with "metadata" is treated as metadata format
             out.writeBytes(data, data.length);
         }
-
-        // Read via FileMetadata
-        FileMetadata fm = new FileMetadata("parquet", "rev_e2e.parquet");
-        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
-            byte[] readData = new byte[data.length];
-            in.readBytes(readData, 0, readData.length);
-            assertArrayEquals(data, readData);
-        }
-    }
-
-    // --- Physical path isolation: files of different formats don't collide ---
-
-    public void testPathIsolation_sameFilenameInDifferentFormats() throws IOException {
-        byte[] luceneData = "lucene version".getBytes(StandardCharsets.UTF_8);
-        byte[] parquetData = "parquet version".getBytes(StandardCharsets.UTF_8);
-        byte[] arrowData = "arrow version".getBytes(StandardCharsets.UTF_8);
-
-        // Write "data.file" in three different formats
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("data.file", IOContext.DEFAULT)) {
-            out.writeBytes(luceneData, luceneData.length);
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.file", IOContext.DEFAULT)) {
-            out.writeBytes(parquetData, parquetData.length);
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("arrow/data.file", IOContext.DEFAULT)) {
-            out.writeBytes(arrowData, arrowData.length);
-        }
-
-        // Verify different physical locations
-        assertTrue(Files.exists(indexPath.resolve("data.file")));
-        assertTrue(Files.exists(shardDataPath.resolve("parquet").resolve("data.file")));
-        assertTrue(Files.exists(shardDataPath.resolve("arrow").resolve("data.file")));
-
-        // Verify content is different (not overwritten)
-        assertEquals(luceneData.length, dataFormatAwareStoreDirectory.fileLength("data.file"));
-        assertEquals(parquetData.length, dataFormatAwareStoreDirectory.fileLength("parquet/data.file"));
-        assertEquals(arrowData.length, dataFormatAwareStoreDirectory.fileLength("arrow/data.file"));
-    }
-
-    // --- Comprehensive toFileMetadata + toFileIdentifier round-trip for all formats ---
-
-    public void testRoundtrip_allFormats() {
-        // Lucene
-        verifyRoundtrip("_0.cfs", "lucene", "_0.cfs");
-        verifyRoundtrip("_0.si", "lucene", "_0.si");
-        verifyRoundtrip("segments_1", "lucene", "segments_1");
-
-        // Non-lucene formats
-        verifyRoundtrip("parquet/_0_1.parquet", "parquet", "_0_1.parquet");
-        verifyRoundtrip("arrow/data.arrow", "arrow", "data.arrow");
-        verifyRoundtrip("custom/myfile.dat", "custom", "myfile.dat");
-    }
-
-    private void verifyRoundtrip(String identifier, String expectedFormat, String expectedFile) {
-        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(identifier);
-        assertEquals("Format for " + identifier, expectedFormat, fm.dataFormat());
-        assertEquals("File for " + identifier, expectedFile, fm.file());
-
-        String roundtripped = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
-        assertEquals("Roundtrip for " + identifier, identifier, roundtripped);
-    }
-
-    // --- isDefaultFormat edge cases (should not add prefix) ---
-
-    public void testToFileIdentifier_defaultFormats_noPrefix() {
-        // "lucene" → no prefix
-        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("lucene", "file.si")));
-        // "LUCENE" (case-insensitive) → no prefix
-        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("LUCENE", "file.si")));
-        // "metadata" → no prefix
-        assertEquals("meta.dat", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("metadata", "meta.dat")));
-        // "METADATA" (case-insensitive) → no prefix
-        assertEquals("meta.dat", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("METADATA", "meta.dat")));
-        // null → no prefix
-        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata(null, "file.si")));
-        // empty string → no prefix
-        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("", "file.si")));
-    }
-
-    public void testToFileIdentifier_nonDefaultFormats_addPrefix() {
-        // Non-default formats always get "format/" prefix
-        assertEquals("parquet/data.parquet", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("parquet", "data.parquet")));
-        assertEquals("arrow/data.arrow", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("arrow", "data.arrow")));
-        assertEquals("orc/data.orc", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("orc", "data.orc")));
-        assertEquals("custom/my.file", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("custom", "my.file")));
-    }
-
-    // --- listAll includes files from all formats with correct identifiers ---
-
-    public void testListAll_returnsCorrectIdentifiers() throws IOException {
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
-            out.writeString("lucene");
-        }
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
-            out.writeString("parquet");
-        }
-
-        String[] files = dataFormatAwareStoreDirectory.listAll();
-        List<String> fileList = Arrays.asList(files);
-
-        // Lucene files should appear as plain names (no prefix)
-        assertTrue("Lucene file listed as plain name", fileList.contains("_0.si"));
-        assertFalse("Lucene file should NOT have lucene/ prefix", fileList.contains("lucene/_0.si"));
-
-        // Non-lucene files should appear with serialized "format/file" form
+            dfasd.registerDownloadedChecksums(Map.of("parquet/i.parquet", "11", "parquet/j.parquet", "22"));
+     */
+            out.writeBytes(testData, testData.length);
+        // be different values for a typical Lucene file so the two paths never alias.
         assertTrue("Parquet file listed with serialized form", fileList.contains("parquet/data.parquet"));
     }
-
-    // --- getDataFormat comprehensive ---
-
-    public void testGetDataFormat_comprehensive() {
-        // Plain filenames → "lucene"
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.si"));
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfs"));
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfe"));
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("segments_1"));
-        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("write.lock"));
-
-        // Prefixed filenames → format name
-        assertEquals("parquet", dataFormatAwareStoreDirectory.getDataFormat("parquet/data.parquet"));
-        assertEquals("arrow", dataFormatAwareStoreDirectory.getDataFormat("arrow/data.arrow"));
-        assertEquals("orc", dataFormatAwareStoreDirectory.getDataFormat("orc/data.orc"));
-        assertEquals("custom", dataFormatAwareStoreDirectory.getDataFormat("custom/myfile.dat"));
     }
-
-    public void testAfterSyncToRemoteWithNonRemoteSyncAwareDelegate() {
-        // Default constructor wraps delegate in SubdirectoryAwareDirectory which does NOT
-        // implement RemoteSyncListener → afterSyncToRemote should be a no-op
-        dataFormatAwareStoreDirectory.afterSyncToRemote("_0.cfe");
-        // No exception = pass. The inner SubdirectoryAwareDirectory is not RemoteSyncListener.
-    }
-
-    public void testAfterSyncToRemoteWithRemoteSyncAwareDelegate() {
-        // We need a Directory that is also RemoteSyncListener — use the abstract helper
-        RemoteSyncListenerMockDirectory syncAwareDir = mock(RemoteSyncListenerMockDirectory.class);
-
-        DataFormatAwareStoreDirectory dir = DataFormatAwareStoreDirectory.withDirectoryDelegate(syncAwareDir, shardPath, Map.of());
-        dir.afterSyncToRemote("_0.cfe");
-        org.mockito.Mockito.verify(syncAwareDir).afterSyncToRemote("_0.cfe");
-    }
-
-    public void testDirectDelegateConstructorDoesNotDoubleWrap() throws IOException {
-        // withDirectDelegate should use the delegate as-is
-        SubdirectoryAwareDirectory subdirAware = new SubdirectoryAwareDirectory(fsDirectory, shardPath);
-        DataFormatAwareStoreDirectory dir = DataFormatAwareStoreDirectory.withDirectoryDelegate(subdirAware, shardPath, Map.of());
-
-        // The delegate should be the SubdirectoryAwareDirectory directly, not wrapped again
-        org.apache.lucene.store.Directory delegate = org.apache.lucene.store.FilterDirectory.unwrap(dir);
-        // unwrap goes all the way to the leaf — should be FSDirectory
-        assertTrue("Leaf should be FSDirectory", delegate instanceof FSDirectory);
-        dir.close();
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // registerDownloadedChecksum / registerDownloadedChecksums
-    // ═══════════════════════════════════════════════════════════════
-
-    public void testRegisterDownloadedChecksum_routesToFormatStrategy() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("rdc1-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            // Write a file so computeChecksum has something to read if the cache misses.
-            try (IndexOutput out = dfasd.createOutput("parquet/f.parquet", IOContext.DEFAULT)) {
-                out.writeBytes("ignored".getBytes(StandardCharsets.UTF_8), 7);
-            }
-
-            dfasd.registerDownloadedChecksum("parquet/f.parquet", "42");
-
-            // computeChecksum must return the registered value, not a scan of "ignored".
-            assertEquals(42L, parquetStrategy.computeChecksum(dfasd, "parquet/f.parquet"));
+    public void testResolveFileName_parquetSerialized() throws IOException {
+            out.writeBytes(data, data.length);
+        byte[] data = "consistency checksum".getBytes(StandardCharsets.UTF_8);
+        verifyRoundtrip("_0.si", "lucene", "_0.si");
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
         }
-    }
-
-    public void testRegisterDownloadedChecksum_writeRegistrationOverwrites() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("rdc2-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            try (IndexOutput out = dfasd.createOutput("parquet/g.parquet", IOContext.DEFAULT)) {
-                out.writeBytes("x".getBytes(StandardCharsets.UTF_8), 1);
-            }
-
-            // Downloaded (generation 0).
-            dfasd.registerDownloadedChecksum("parquet/g.parquet", "100");
-            assertEquals(100L, parquetStrategy.computeChecksum(dfasd, "parquet/g.parquet"));
-
-            // Write path registers a different value with a real generation; it must win.
-            parquetStrategy.registerChecksum("parquet/g.parquet", 200L, 3L);
-            assertEquals(200L, parquetStrategy.computeChecksum(dfasd, "parquet/g.parquet"));
-        }
-    }
-
-    public void testRegisterDownloadedChecksum_malformedChecksumIgnored() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("rdc3-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            try (IndexOutput out = dfasd.createOutput("parquet/h.parquet", IOContext.DEFAULT)) {
+        byte[] data = "parquet content for checksum".getBytes(StandardCharsets.UTF_8);
+            out.writeBytes(data, data.length);
                 out.writeBytes("abc".getBytes(StandardCharsets.UTF_8), 3);
-            }
-
-            // Non-numeric checksum strings are a silent no-op.
-            dfasd.registerDownloadedChecksum("parquet/h.parquet", "not-a-number");
-            dfasd.registerDownloadedChecksum(null, "1");
-            dfasd.registerDownloadedChecksum("parquet/h.parquet", null);
-
-            // Fallback scan kicks in since nothing was registered.
-            CRC32 expected = new CRC32();
-            expected.update("abc".getBytes(StandardCharsets.UTF_8));
-            assertEquals(expected.getValue(), parquetStrategy.computeChecksum(dfasd, "parquet/h.parquet"));
         }
-    }
-
-    public void testRegisterDownloadedChecksums_bulkInsert() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("rdc4-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            try (IndexOutput out = dfasd.createOutput("parquet/i.parquet", IOContext.DEFAULT)) {
-                out.writeBytes("i".getBytes(StandardCharsets.UTF_8), 1);
-            }
-            try (IndexOutput out = dfasd.createOutput("parquet/j.parquet", IOContext.DEFAULT)) {
-                out.writeBytes("j".getBytes(StandardCharsets.UTF_8), 1);
-            }
-
-            dfasd.registerDownloadedChecksums(Map.of("parquet/i.parquet", "11", "parquet/j.parquet", "22"));
-
-            assertEquals(11L, parquetStrategy.computeChecksum(dfasd, "parquet/i.parquet"));
-            assertEquals(22L, parquetStrategy.computeChecksum(dfasd, "parquet/j.parquet"));
+        expectThrows(IOException.class, () -> dataFormatAwareStoreDirectory.deleteFile("_nonexistent.si"));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+    @Before
         }
-    }
-
-    public void testRegisterDownloadedChecksums_nullOrEmptyMapIsNoOp() {
-        dataFormatAwareStoreDirectory.registerDownloadedChecksums(null);
-        dataFormatAwareStoreDirectory.registerDownloadedChecksums(Map.of());
-        // Simply asserting no exception is thrown.
-    }
-
-    public void testRegisterDownloadedChecksum_skippedForNonCachingStrategy() throws IOException {
-        // parquet is registered with GenericCRC32ChecksumHandler (no caching). Register should
-        // be a silent no-op: subsequent computeChecksum must scan the file, not return 999.
-        byte[] payload = "abc".getBytes(StandardCharsets.UTF_8);
-        String fileIdentifier = "parquet/non_caching.parquet";
-        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
-            out.writeBytes(payload, payload.length);
-        }
-
-        dataFormatAwareStoreDirectory.registerDownloadedChecksum(fileIdentifier, "999");
-
-        CRC32 expected = new CRC32();
-        expected.update(payload);
-        assertEquals(
-            "Generic (non-caching) strategy must ignore registerDownloadedChecksum",
-            expected.getValue(),
-            dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier)
-        );
-    }
-
-    public void testRegisterDownloadedChecksum_skippedForUnknownFormat() {
-        // "arrow" has no strategy registered; call must be a silent no-op.
-        dataFormatAwareStoreDirectory.registerDownloadedChecksum("arrow/anything.arrow", "123");
-        // No exception, nothing to assert on directory state.
-    }
-
-    public void testEvictStaleChecksums_retainsOnlyActiveFiles() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("evict-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            // Seed three parquet checksums.
-            dfasd.registerDownloadedChecksum("parquet/a.parquet", "10");
-            dfasd.registerDownloadedChecksum("parquet/b.parquet", "20");
-            dfasd.registerDownloadedChecksum("parquet/c.parquet", "30");
-
-            // Active snapshot references only {a, c} — b was merged away.
-            dfasd.evictStaleChecksums(List.of("parquet/a.parquet", "parquet/c.parquet"));
-
-            // Sanity-write files so computeChecksum can fall back if cache misses.
-            for (String f : List.of("parquet/a.parquet", "parquet/b.parquet", "parquet/c.parquet")) {
-                try (IndexOutput out = dfasd.createOutput(f, IOContext.DEFAULT)) {
-                    out.writeBytes(new byte[] { 1, 2, 3 }, 3);
-                }
-            }
-
-            // a and c remain cached at their registered values.
-            assertEquals(10L, parquetStrategy.computeChecksum(dfasd, "parquet/a.parquet"));
-            assertEquals(30L, parquetStrategy.computeChecksum(dfasd, "parquet/c.parquet"));
-
-            // b was evicted — computeChecksum falls back to scanning the file (CRC32 of {1,2,3}).
-            CRC32 expected = new CRC32();
-            expected.update(new byte[] { 1, 2, 3 });
-            assertEquals(expected.getValue(), parquetStrategy.computeChecksum(dfasd, "parquet/b.parquet"));
-        }
-    }
-
-    public void testEvictStaleChecksums_emptyActiveSetClearsAll() throws IOException {
-        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
-        try (
-            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
-                FSDirectory.open(indexPath.resolveSibling("evict-empty-idx")),
-                shardPath,
-                Map.of("parquet", parquetStrategy)
-            )
-        ) {
-            dfasd.registerDownloadedChecksum("parquet/only.parquet", "42");
-            // Empty active set => every entry should be evicted.
-            dfasd.evictStaleChecksums(List.of());
-
-            try (IndexOutput out = dfasd.createOutput("parquet/only.parquet", IOContext.DEFAULT)) {
-                out.writeBytes(new byte[] { 9, 9 }, 2);
-            }
-            CRC32 expected = new CRC32();
-            expected.update(new byte[] { 9, 9 });
-            assertEquals(
-                "cache cleared; computeChecksum must fall back to scan",
-                expected.getValue(),
+        assertTrue(Files.exists(indexPath.resolve("_0.si")));
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("custom/nested_file.data");
                 parquetStrategy.computeChecksum(dfasd, "parquet/only.parquet")
-            );
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+    // calculateUploadChecksum
+        assertEquals("orc/data.orc", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("orc", "data.orc")));
+            assertArrayEquals(testData, readData);
+        // Default constructor wraps delegate in SubdirectoryAwareDirectory which does NOT
+        byte[] data = "delimited test data".getBytes(StandardCharsets.UTF_8);
+        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(srcSerialized));
         }
+        assertEquals("_0.si", identifier);
+            byte[] readData = new byte[testData.length];
     }
-
+            try (IndexOutput out = dfasd.createOutput("parquet/g.parquet", IOContext.DEFAULT)) {
+            )
+            out.writeBytes("parquet payload bytes".getBytes(StandardCharsets.UTF_8), 21);
+        shardDataPath = tempDir.resolve(indexUUID).resolve(Integer.toString(shardId));
+        try (
+        assertTrue("Custom file should be in custom subdir", Files.exists(shardDataPath.resolve("custom").resolve("myfile.dat")));
+    // ═══════════════════════════════════════════════════════════════
+            }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
+        String serialized = fm.serialize(); // "parquet/delimited_test.parquet"
+            out.writeString("segments data");
+        assertTrue("segments file should be in index dir", Files.exists(indexPath.resolve("segments_1")));
+import org.apache.lucene.store.FSDirectory;
+        assertEquals(data.length, length);
+        assertEquals("parquet/data.parquet", identifier);
+    // --- End-to-end: Write via FileMetadata, read via string identifier and vice versa ---
+        assertEquals("metadata", dataFormatAwareStoreDirectory.getDataFormat("metadata__1__2__3"));
+        PrecomputedChecksumStrategy parquetStrategy = new PrecomputedChecksumStrategy();
+import org.opensearch.core.index.Index;
+    public void testToFileIdentifier_nonLucene() {
+        // "LUCENE" (case-insensitive) → no prefix
+        // "metadata" → no prefix
+    // fileLength with serialized FileMetadata string
+            in.readBytes(readData, 0, readData.length);
+    // deleteFile with non-existent file
+        // Now access it using a serialized FileMetadata string (with "/" delimiter)
+    }
+    }
+    }
+        // No exception, nothing to assert on directory state.
+    public void testCreateOutputAndOpenInput_lucene() throws IOException {
+            out.writeBytes(data, data.length);
+        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+    }
+            out.writeString("parquet");
+    // resolveFileName with FileMetadata.DELIMITER in name
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("parquet/_0_1.parquet");
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/sync2.parquet", IOContext.DEFAULT)) {
+/*
+        assertEquals(dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()), parsedChecksum);
+            assertArrayEquals(data, readData);
+    @After
+        RemoteSyncListenerMockDirectory syncAwareDir = mock(RemoteSyncListenerMockDirectory.class);
+        }
+            out.writeString("some payload that produces a non-zero checksum");
+    public void testPathMapping_metadataFormat_getDataFormat() {
+        dataFormatAwareStoreDirectory.rename(src.serialize(), dest.serialize());
+    public void testRegisterDownloadedChecksum_skippedForUnknownFormat() {
+            "For non-Lucene formats the transfer checksum equals the metadata checksum (full-file CRC32)",
+        assertEquals("arrow/data.arrow", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("arrow", "data.arrow")));
+            "Generic (non-caching) strategy must ignore registerDownloadedChecksum",
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        }
+        String fileIdentifier = "parquet/sync_test.parquet";
+                FSDirectory.open(indexPath.resolveSibling("evict-idx")),
+            assertArrayEquals(testData, readData);
+            assertEquals(30L, parquetStrategy.computeChecksum(dfasd, "parquet/c.parquet"));
+            CodecUtil.writeFooter(out);
+        assertEquals(original, result);
+                try (IndexOutput out = dfasd.createOutput(f, IOContext.DEFAULT)) {
+                shardPath,
+                Map.of("parquet", parquetStrategy)
+    }
+    }
+    }
+        }
+        expectThrows(IOException.class, () -> dataFormatAwareStoreDirectory.deleteFile(fm.serialize()));
+    // ═══════════════════════════════════════════════════════════════
+    public void testToFileIdentifier_nonDefaultFormats_addPrefix() {
+    // FileMetadata convenience: getChecksumOfLocalFile
+        byte[] data = "reverse e2e".getBytes(StandardCharsets.UTF_8);
+                shardPath,
+    // ═══════════════════════════════════════════════════════════════
+        List<String> fileList = Arrays.asList(files);
+    public void testRegisterDownloadedChecksum_malformedChecksumIgnored() throws IOException {
+            out.writeBytes(data, data.length);
+        org.mockito.Mockito.verify(syncAwareDir).afterSyncToRemote("_0.cfe");
+    public void testToFileIdentifier_lucene() {
+        // segments_N files should be treated as lucene format (default)
+import static org.mockito.Mockito.mock;
+        assertEquals("custom", fm.dataFormat());
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("segments_1");
+            out.writeString("sync test data");
+        // withDirectDelegate should use the delegate as-is
+    public void testRename_preservesContent_nonLucene() throws IOException {
+            out.writeBytes(data, data.length);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
+            CodecUtil.writeFooter(out);
+            }
+        assertEquals(original, result);
+        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileName);
+        }
+            }
+    // ═══════════════════════════════════════════════════════════════
+        assertEquals("_0_1.parquet", fm.file());
+        CRC32 crc32 = new CRC32();
+    public void testRegisterDownloadedChecksums_nullOrEmptyMapIsNoOp() {
+import org.apache.lucene.codecs.CodecUtil;
+    // getDataFormat
+            assertEquals(22L, parquetStrategy.computeChecksum(dfasd, "parquet/j.parquet"));
+        long transferChecksum = dataFormatAwareStoreDirectory.calculateTransferChecksum(fileName);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+        }
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("segments_1"));
+        ) {
+        }
+    // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     /**
      * Helper interface for mocking a Directory that also implements RemoteSyncListener.
-     */
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
+    public void testToFileIdentifier_arrow() {
+import org.apache.lucene.store.IndexOutput;
+        String serialized = new FileMetadata("lucene", fileName).serialize();
+    private void verifyRoundtrip(String identifier, String expectedFormat, String expectedFile) {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("arrow/data.arrow", IOContext.DEFAULT)) {
+    // toFileMetadata edge cases
+            for (String f : List.of("parquet/a.parquet", "parquet/b.parquet", "parquet/c.parquet")) {
+            byte[] buf = new byte[(int) length];
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
+            assertArrayEquals(data, readData);
+        }
+        assertTrue("Should resolve serialized parquet name", length > 0);
+        assertEquals("lucene", fm.dataFormat());
+    // ═══════════════════════════════════════════════════════════════
+        assertTrue("Arrow file should be in arrow subdir", Files.exists(shardDataPath.resolve("arrow").resolve("data.arrow")));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
+    // ═══════════════════════════════════════════════════════════════
+            try (IndexOutput out = dfasd.createOutput("parquet/i.parquet", IOContext.DEFAULT)) {
+    // --- Parquet files: "parquet/" prefix, stored in <shard>/parquet/ ---
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
+        String serialized = new FileMetadata("metadata", "metadata__1__2__3").serialize();
+    private FSDirectory fsDirectory;
+    }
+    }
+    }
+        assertTrue("Lucene file listed as plain name", fileList.contains("_0.si"));
+    // ═══════════════════════════════════════════════════════════════
+        // null format should be treated as default (no prefix)
+    public void tearDown() throws Exception {
+        );
+        assertEquals("orc", dataFormatAwareStoreDirectory.getDataFormat("orc/data.orc"));
+    public void testRoundtrip_toFileMetadata_toFileIdentifier_lucene() {
+        assertTrue(Files.exists(indexPath.resolve("_0.cfs")));
+    // createOutput / openInput - Lucene files
+import java.nio.file.Path;
+            byte[] readData = new byte[data.length];
+        }
+        byte[] data = "local checksum test".getBytes(StandardCharsets.UTF_8);
+    }
+        }
+            );
+        assertEquals("parquet/_0_1.parquet", identifier);
+    }
+                shardPath,
+    // Path mapping & storage location tests
+    }
+        String[] files = dataFormatAwareStoreDirectory.listAll();
+        FileMetadata fm = new FileMetadata("arrow", "data.arrow");
+        assertEquals("metadata__1__5__abc", identifier); // no prefix
+                Map.of("parquet", parquetStrategy)
+        assertEquals("arrow/data.arrow", identifier);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    }
+            out.writeBytes(data, data.length);
+            assertArrayEquals(testData, readData);
+        String fileIdentifier = "parquet/non_caching.parquet";
+import org.opensearch.test.OpenSearchTestCase;
+        String serialized = new FileMetadata("parquet", "del_test.parquet").serialize();
+    }
+        String fileIdentifier = "parquet/delimited_test.parquet";
+        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(serialized));
+        String serialized = new FileMetadata("lucene", "_0.si").serialize();
+        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("", "file.si")));
+    // deleteFile
+        byte[] testData = "file metadata lucene test".getBytes(StandardCharsets.UTF_8);
+    public void testEvictStaleChecksums_retainsOnlyActiveFiles() throws IOException {
+    public void testResolveFileName_metadataSerialized() throws IOException {
+        }
+    }
+    // ═══════════════════════════════════════════════════════════════
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("arrow/data.arrow");
+    public void testListAll_empty() throws IOException {
+        tempDir = createTempDir();
+        FileMetadata fm = new FileMetadata("parquet", "data.parquet");
+        String fileName = "_0_test.si";
+            // Non-numeric checksum strings are a silent no-op.
+        byte[] data = "content to preserve after rename".getBytes(StandardCharsets.UTF_8);
+    }
+        ShardId sid = new ShardId(new Index("test-index", indexUUID), shardId);
+    }
+        assertEquals("arrow/data.arrow", identifier);
+        dataFormatAwareStoreDirectory.deleteFile(fileName);
+            out.writeBytes(arrowData, arrowData.length);
+import java.util.Arrays;
+    public void testRename_preservesContent_lucene() throws IOException {
+    // Data integrity after rename
+        FileMetadata fm = new FileMetadata("parquet", "local_cksum.parquet");
+            out.writeBytes(data, data.length);
+    // ═══════════════════════════════════════════════════════════════
+        // CRC32 of empty data
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("_0.si");
+        }
+        crc32.update(data);
+            // Sanity-write files so computeChecksum can fall back if cache misses.
+        FileMetadata fm = new FileMetadata("parquet", "del_test.parquet");
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    // ═══════════════════════════════════════════════════════════════
+        assertEquals(checksumFromString, dataFormatAwareStoreDirectory.calculateChecksum("parquet/consistency.parquet"));
+        verifyRoundtrip("parquet/_0_1.parquet", "parquet", "_0_1.parquet");
+        long checksum2 = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+        assertEquals("custom/myfile.dat", identifier);
+import org.opensearch.index.shard.ShardPath;
+    // Checksum - Lucene file (CodecUtil path)
+        }
+        assertEquals("data.parquet", fm.file());
+public class DataFormatAwareStoreDirectoryTests extends OpenSearchTestCase {
+        String fileIdentifier = "parquet/len_test.parquet";
+        String uploadChecksum = dataFormatAwareStoreDirectory.calculateUploadChecksum(fm.serialize());
+import java.io.IOException;
+        // Read using "/" string identifier
+            dfasd.registerDownloadedChecksum("parquet/h.parquet", "not-a-number");
+    // ═══════════════════════════════════════════════════════════════
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+    // calculateUploadChecksum for lucene file
+    }
+                FSDirectory.open(indexPath.resolveSibling("evict-empty-idx")),
     abstract static class RemoteSyncListenerMockDirectory extends org.apache.lucene.store.Directory implements RemoteSyncListener {}
+            out.writeString("rename test data");
+        assertTrue(fileList.contains("parquet/data.parquet"));
+        }
+        // Non-lucene files should appear with serialized "format/file" form
+        }
+    public void testFileLength_withSerializedString_lucene() throws IOException {
+        assertEquals("Format for " + identifier, expectedFormat, fm.dataFormat());
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput("_rename_content_dest.si", IOContext.DEFAULT)) {
+        }
+    // ═══════════════════════════════════════════════════════════════
+    // --- Metadata files: treated as default format, stored in <shard>/index/ ---
+            try (IndexOutput out = dfasd.createOutput("parquet/f.parquet", IOContext.DEFAULT)) {
+        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata(null, "file.si")));
+    // ═══════════════════════════════════════════════════════════════
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+    }
+                out.writeBytes("x".getBytes(StandardCharsets.UTF_8), 1);
+        FileMetadata fm = new FileMetadata("lucene", fileName);
+            // Seed three parquet checksums.
+            CodecUtil.writeHeader(out, "TestCodec", 1);
+        try (
+    }
+            out.writeString("upload checksum lucene data");
+        }
+            in.readBytes(readData, 0, readData.length);
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+        FileMetadata fm = new FileMetadata("arrow", "data.arrow");
+    }
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(dest.serialize(), IOContext.DEFAULT)) {
+    }
+            in.readBytes(readData, 0, readData.length);
+    private DataFormatAwareStoreDirectory dataFormatAwareStoreDirectory;
+    // ═══════════════════════════════════════════════════════════════
+    }
+    public void testRoundtrip_toFileMetadata_toFileIdentifier_nonLucene() {
+    }
+            transferChecksum
+            )
+        }
+        String fileIdentifier = "parquet/consistency.parquet";
+    }
+                shardPath,
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+                out.writeBytes(new byte[] { 9, 9 }, 2);
+        dataFormatAwareStoreDirectory.rename(srcFile, "_rename_content_dest.si");
+        // implement RemoteSyncListener → afterSyncToRemote should be a no-op
+        // Non-default formats always get "format/" prefix
+            Map.of("parquet", new GenericCRC32ChecksumHandler())
+            byte[] readData = new byte[testData.length];
+    // FileMetadata → "/" identifier → SubdirectoryAwareDirectory
+            in.readBytes(readData, 0, readData.length);
+        try (
+        FileMetadata fm = new FileMetadata(null, "_0.si");
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(identifier);
+        DataFormatAwareStoreDirectory dir = DataFormatAwareStoreDirectory.withDirectoryDelegate(subdirAware, shardPath, Map.of());
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    public void testCalculateChecksum_stringAndFileMetadataConsistent() throws IOException {
+    public void testCalculateUploadChecksum_lucene() throws IOException {
+        byte[] luceneData = "lucene version".getBytes(StandardCharsets.UTF_8);
+        org.apache.lucene.store.Directory delegate = org.apache.lucene.store.FilterDirectory.unwrap(dir);
+    public void testPathMapping_parquetFile_fromIdentifier() {
+            }
+        // A fresh directory should list no segment files
+        fsDirectory = FSDirectory.open(indexPath);
+    public void testCreateOutputAndOpenInput_fileMetadata_lucene() throws IOException {
+                FSDirectory.open(indexPath.resolveSibling("rdc3-idx")),
+            // Write a file so computeChecksum has something to read if the cache misses.
+    // --- Arrow files: "arrow/" prefix, stored in <shard>/arrow/ ---
+            CRC32 expected = new CRC32();
+    public void testGetDataFormat_parquet() {
+        shardPath = new ShardPath(false, shardDataPath, shardDataPath, sid);
+        byte[] testData = "hello world lucene".getBytes(StandardCharsets.UTF_8);
+        assertTrue(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
+    }
+        assertEquals("custom", dataFormatAwareStoreDirectory.getDataFormat("custom/myfile.dat"));
+            dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier)
+    public void testPathMapping_metadataFormat_storedInIndexDir() throws IOException {
+        assertTrue("Checksum should be a valid value", checksum != 0);
+        assertEquals(
+    }
+    }
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+            try (IndexOutput out = dfasd.createOutput("parquet/only.parquet", IOContext.DEFAULT)) {
+        assertNotNull(uploadChecksum);
+            out.writeBytes(testData, testData.length);
+            dfasd.registerDownloadedChecksum("parquet/only.parquet", "42");
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(original);
+            byte[] readData = new byte[data.length];
+        FileMetadata fm = new FileMetadata("lucene", "_0.si");
+        long checksum1 = dataFormatAwareStoreDirectory.calculateChecksum(fileIdentifier);
+            // Write nothing - empty file
+            assertEquals(200L, parquetStrategy.computeChecksum(dfasd, "parquet/g.parquet"));
+        // Should be the string representation of the long checksum
+        assertEquals("arrow", fm.dataFormat());
+        dataFormatAwareStoreDirectory.afterSyncToRemote("_0.cfe");
+        assertTrue("Should resolve serialized metadata name", length > 0);
+    // ═══════════════════════════════════════════════════════════════
+    }
+            CRC32 expected = new CRC32();
+    public void testCreateOutputAndOpenInput_nonLucene() throws IOException {
+                out.writeBytes("i".getBytes(StandardCharsets.UTF_8), 1);
+    // ═══════════════════════════════════════════════════════════════
+        FileMetadata fm = new FileMetadata("parquet", "upload_cksum.parquet");
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        String fileName = "_transfer_vs_metadata.si";
+    public void setUp() throws Exception {
+        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
+            out.writeString("sync2");
+    }
+    }
+            CodecUtil.writeHeader(out, "UploadTest", 1);
+        }
+    // ═══════════════════════════════════════════════════════════════
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+        String destSerialized = new FileMetadata("parquet", "rename_dest.parquet").serialize();
+        dataFormatAwareStoreDirectory.sync(Set.of(fileIdentifier));
+    public void testDeleteFile_string() throws IOException {
+            out.writeBytes(testData, testData.length);
+    }
+            out.writeString("lucene");
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+    public void testToFileIdentifier_nullFormatTreatedAsDefault() {
+        assertEquals(checksum, dataFormatAwareStoreDirectory.calculateChecksum(fm.serialize()));
+        // Verify it equals CRC32 of the entire file bytes (what S3 computes server-side).
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+            long length = in.length();
+                shardPath,
+        String fileName = "_transfer_cksum.si";
+    }
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+            in.readBytes(readData, 0, readData.length);
+        }
+                FSDirectory.open(indexPath.resolveSibling("rdc4-idx")),
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(srcFile, IOContext.DEFAULT)) {
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+            out.writeString("some segment data for checksum");
+            out.writeString("lucene data");
+        verifyRoundtrip("segments_1", "lucene", "segments_1");
+        // Write a file using plain identifier
+            expected.update(new byte[] { 1, 2, 3 });
+    }
+    // sync
+        assertEquals("data.arrow", fm.file());
+    public void testEndToEnd_writeViaString_readViaFileMetadata_parquet() throws IOException {
+            out.writeString("sync1");
+    // ═══════════════════════════════════════════════════════════════
+    public void testRoundtrip_allFormats() {
+    public void testEvictStaleChecksums_emptyActiveSetClearsAll() throws IOException {
+        long length = dataFormatAwareStoreDirectory.fileLength(serialized);
+            // Active snapshot references only {a, c} — b was merged away.
+        assertFalse("Metadata identifier should not contain '/'", identifier.contains("/"));
+import java.nio.charset.StandardCharsets;
+                out.writeBytes("j".getBytes(StandardCharsets.UTF_8), 1);
+    public void testToFileMetadata_arrowFile() {
+import org.junit.Before;
+ * SPDX-License-Identifier: Apache-2.0
+        assertEquals("CRC32 checksum should match", crc32.getValue(), checksum);
+        assertNotEquals("Metadata checksum and transfer checksum must not coincide for Lucene files", metadataChecksum, transferChecksum);
+    }
+            assertArrayEquals(data, readData);
+        // The resolveFileName method should handle the delimiter and resolve correctly
+        }
+        assertEquals("Transfer checksum must equal CRC32 of full file bytes", expected.getValue(), transferChecksum);
+    public void testCalculateChecksum_luceneFile() throws IOException {
+            assertEquals(42L, parquetStrategy.computeChecksum(dfasd, "parquet/f.parquet"));
+        // Should not throw
+            dfasd.evictStaleChecksums(List.of());
+        long parsedChecksum = Long.parseLong(uploadChecksum);
+        assertEquals("meta_file.txt", identifier);
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("parquet/data.parquet");
+        SubdirectoryAwareDirectory subdirAware = new SubdirectoryAwareDirectory(fsDirectory, shardPath);
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fileName, IOContext.READONCE)) {
+        FileMetadata fm = new FileMetadata("parquet", "rev_e2e.parquet");
+        // _0.si (segment info) is a lucene file
+        byte[] testData = "hello world parquet".getBytes(StandardCharsets.UTF_8);
+import java.nio.file.Files;
+        // "metadata" is treated as a default/index format, so no prefix is added
+        String[] files = dataFormatAwareStoreDirectory.listAll();
+            out.writeString("rename test data parquet");
+    public void testRegisterDownloadedChecksum_writeRegistrationOverwrites() throws IOException {
+        assertTrue("Parquet file should be in parquet subdir", Files.exists(shardDataPath.resolve("parquet").resolve("_0_1.parquet")));
+package org.opensearch.index.store;
+        String result = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+        dataFormatAwareStoreDirectory.registerDownloadedChecksum("arrow/anything.arrow", "123");
+        FileMetadata fm = new FileMetadata("metadata", "meta_file.txt");
+    // listAll / listFileMetadata
+    // --- Lucene files: no prefix, stored in <shard>/index/ ---
+        }
+        assertTrue(checksum != 0);
+        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
+    public void testRename_sameFormat() throws IOException {
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata(original);
+        try (
 }
+    public void testPathMapping_luceneFile_storedInIndexDir() throws IOException {
+        }
+        }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fm, IOContext.DEFAULT)) {
+        byte[] data = "serialized length test".getBytes(StandardCharsets.UTF_8);
+    private ShardPath shardPath;
+        // Write using "/" identifier
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+        FileMetadata fm = new FileMetadata("parquet", "len_test.parquet");
+        // Access via serialized form
+        // "METADATA" (case-insensitive) → no prefix
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("_0.si", IOContext.DEFAULT)) {
+            out.writeBytes(testData, testData.length);
+    }
+            // Write path registers a different value with a real generation; it must win.
+        }
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    // --- getDataFormat comprehensive ---
+    }
+                Map.of("parquet", parquetStrategy)
+        String srcSerialized = new FileMetadata("parquet", "rename_src.parquet").serialize();
+ * compatible open source license.
+        }
+    // ═══════════════════════════════════════════════════════════════
+            byte[] readData = new byte[testData.length];
+        assertEquals("parquet", dataFormatAwareStoreDirectory.getDataFormat("parquet/data.parquet"));
+        // Verify we get the same checksum via string overload with serialized name
+        assertEquals("CRC32 of empty file should match", crc32.getValue(), checksum);
+        assertFalse("Arrow file should NOT be in index dir", Files.exists(indexPath.resolve("data.arrow")));
+    // ═══════════════════════════════════════════════════════════════
+        assertEquals("Roundtrip for " + identifier, identifier, roundtripped);
+        String fileIdentifier = "parquet/transfer_cksum.parquet";
+    public void testGetDataFormat_nonLucene() {
+        assertFalse("Lucene identifier should not contain '/'", identifier.contains("/"));
+        // "lucene" → no prefix
+        ) {
+        // Verify it's a valid non-zero checksum (CodecUtil stores checksum in footer)
+        assertEquals(data.length, dataFormatAwareStoreDirectory.fileLength(fm.serialize()));
+        // Simply asserting no exception is thrown.
+        dir.afterSyncToRemote("_0.cfe");
+        dir.close();
+            CodecUtil.writeHeader(out, "TransferTest", 1);
+            }
+        // Access using serialized FileMetadata — lucene serializes to plain name
+    // ═══════════════════════════════════════════════════════════════
+    }
+    // ═══════════════════════════════════════════════════════════════
+    public void testPathMapping_arrowFile_storedInSubdir() throws IOException {
+        // Read via FileMetadata
+    // calculateTransferChecksum: full-file CRC32 for S3 transfer validation
+    public void testToFileIdentifier_emptyFormatTreatedAsDefault() {
+        String fileIdentifier = "parquet/rename_src.parquet";
+import org.apache.lucene.store.IndexInput;
+        }
+        }
+        }
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("parquet/data.parquet", IOContext.DEFAULT)) {
+    public void testGetChecksumOfLocalFile() throws IOException {
+    public void testSync_multipleFiles() throws IOException {
+        assertEquals("lucene", fm.dataFormat());
+            expected.update("abc".getBytes(StandardCharsets.UTF_8));
+    public void testDeleteFile_fileMetadata() throws IOException {
+        FileMetadata fm = new FileMetadata("lucene", "_fm_test.si");
+            out.writeBytes(data, data.length);
+    // ═══════════════════════════════════════════════════════════════
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfe"));
+    public void testPathMapping_parquetFile_storedInSubdir() throws IOException {
+    }
+        assertEquals("_0.cfs", identifier); // no prefix
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    }
+    private Path tempDir;
+        assertEquals("_0.si", identifier);
+        String fileIdentifier = "parquet/local_cksum.parquet";
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+        long parsedChecksum = Long.parseLong(uploadChecksum);
+        String[] files = dataFormatAwareStoreDirectory.listAll();
+        String fileName = "_len_serial.si";
+        assertEquals("lucene", fm.dataFormat());
+    // --- Physical path isolation: files of different formats don't collide ---
+        // "metadata" is in INDEX_DIRECTORY_FORMATS, so no prefix is added
+        assertEquals("nested_file.data", fm.file());
+        // Lucene files (no slash) should be stored in <shard>/index/<filename>
+        // Write and verify it's accessible
+        assertEquals("meta.dat", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("metadata", "meta.dat")));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileIdentifier, IOContext.DEFAULT)) {
+    // ═══════════════════════════════════════════════════════════════
+            )
+    }
+    // ═══════════════════════════════════════════════════════════════
+    public void testPathMapping_segmentInfoFile_storedInIndexDir() throws IOException {
+        // Verify different physical locations
+        ) {
+    }
+        assertNotNull(uploadChecksum);
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+    public void testDirectDelegateConstructorDoesNotDoubleWrap() throws IOException {
+    // ═══════════════════════════════════════════════════════════════
+            out.writeString("arrow data");
+        assertEquals("file.si", DataFormatAwareStoreDirectory.toFileIdentifier(new FileMetadata("lucene", "file.si")));
+    public void testCalculateTransferChecksum_nonLucene_delegatesToStrategy() throws IOException {
+    public void testListAll_multipleFormats() throws IOException {
+        String srcFile = "_rename_content.si";
+        FileMetadata fm = DataFormatAwareStoreDirectory.toFileMetadata("_0.si");
+            out.writeBytes(parquetData, parquetData.length);
+    // ═══════════════════════════════════════════════════════════════
+        // "arrow" has no strategy registered; call must be a silent no-op.
+            DataFormatAwareStoreDirectory dfasd = new DataFormatAwareStoreDirectory(
+            dfasd.registerDownloadedChecksum("parquet/c.parquet", "30");
+    // Checksum - Non-Lucene file (CRC32 path)
+    public void testPathMapping_customFormat_storedInSubdir() throws IOException {
+        CRC32 expected = new CRC32();
+        // Verify physical file exists in index directory
+        byte[] testData = "file metadata parquet test".getBytes(StandardCharsets.UTF_8);
+        try (
+        }
+        long metadataChecksum = dataFormatAwareStoreDirectory.calculateChecksum(fileName);
+        long checksum = dataFormatAwareStoreDirectory.calculateChecksum(fileName);
+        }
+        assertEquals("segments_1", fm.file());
+    }
+    public void testCalculateUploadChecksum() throws IOException {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+        assertEquals("Checksum should be the same on repeated calls", checksum1, checksum2);
+            out.writeString("sync test parquet");
+    private Path shardDataPath;
+    public void testCalculateChecksum_nonLuceneFile() throws IOException {
+            out.writeBytes(payload, payload.length);
+        assertTrue("Metadata file should be in index dir", Files.exists(indexPath.resolve("metadata__1__5__abc")));
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput(identifier, IOContext.DEFAULT)) {
+        assertEquals("File for " + identifier, expectedFile, fm.file());
+    public void testDeleteFile_fileMetadata_nonExistent_throws() {
+                    out.writeBytes(new byte[] { 1, 2, 3 }, 3);
+    }
+            out.writeString("si data");
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("_0.cfs"));
+    public void testToFileMetadata_prefixedFile() {
+        byte[] payload = "abc".getBytes(StandardCharsets.UTF_8);
+            dfasd.registerDownloadedChecksum("parquet/f.parquet", "42");
+    // createOutput / openInput - Non-Lucene files
+        }
+        // For non-Lucene formats (e.g., parquet via GenericCRC32ChecksumHandler), the strategy
+        // Read using string identifier (no prefix for lucene)
+        dataFormatAwareStoreDirectory.sync(Set.of("_sync1.si", "parquet/sync2.parquet"));
+        }
+            out.writeBytes(data, data.length);
+        }
+    // registerDownloadedChecksum / registerDownloadedChecksums
+    // --- listAll includes files from all formats with correct identifiers ---
+        }
+    public void testCreateOutputAndOpenInput_fileMetadata_parquet() throws IOException {
+            out.writeString("parquet data");
+    }
+    public void testListAll_withFiles() throws IOException {
+            out.writeString("metadata content");
+            // b was evicted — computeChecksum falls back to scanning the file (CRC32 of {1,2,3}).
+        assertEquals(luceneData.length, dataFormatAwareStoreDirectory.fileLength("data.file"));
+            )
+    }
+        String identifier = DataFormatAwareStoreDirectory.toFileIdentifier(fm);
+            expected.getValue(),
+        }
+        assertEquals("_0.si", fm.file());
+        Files.createDirectories(indexPath);
+        verifyRoundtrip("custom/myfile.dat", "custom", "myfile.dat");
+        assertEquals("lucene", dataFormatAwareStoreDirectory.getDataFormat("write.lock"));
+        try (IndexInput in = dataFormatAwareStoreDirectory.openInput(fm.serialize(), IOContext.DEFAULT)) {
+        try (IndexOutput out = dataFormatAwareStoreDirectory.createOutput("arrow/data.file", IOContext.DEFAULT)) {
+            parquetStrategy.registerChecksum("parquet/g.parquet", 200L, 3L);
+        assertEquals(
+        // Plain filenames → "lucene"
+        assertFalse(Arrays.asList(dataFormatAwareStoreDirectory.listAll()).contains(fileName));
+        byte[] data = "idempotent checksum data".getBytes(StandardCharsets.UTF_8);
+        // parquet is registered with GenericCRC32ChecksumHandler (no caching). Register should
+        FileMetadata src = new FileMetadata("parquet", "rename_src.parquet");
+        // Write a file with Lucene CodecUtil header/footer so CodecUtil.retrieveChecksum works
+    }
+    }
+    // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+        assertNotNull(dataFormatAwareStoreDirectory.getShardPath());
+            out.writeString("to be deleted");

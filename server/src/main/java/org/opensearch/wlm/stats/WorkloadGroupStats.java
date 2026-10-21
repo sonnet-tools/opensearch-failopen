@@ -1,342 +1,298 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.wlm.stats;
-
-import org.opensearch.Version;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.wlm.ResourceType;
-import org.opensearch.wlm.stats.WorkloadGroupState.ResourceTypeState;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * {
- *     "workloadGroupID": {
- *          "completions": 1233234234,
- *          "rejections": 12,
- *          "failures": 97,
- *          "total_cancellations": 474,
- *          "CPU": { "current_usage": 49.6, "cancellation": 432, "rejections": 8 },
- *          "MEMORY": { "current_usage": 39.6, "cancellation": 42, "rejections": 4 }
- *     },
- *     ...
- *     ...
- * }
- */
-public class WorkloadGroupStats implements ToXContentObject, Writeable {
-    private final Map<String, WorkloadGroupStatsHolder> stats;
-
-    public WorkloadGroupStats(Map<String, WorkloadGroupStatsHolder> stats) {
-        this.stats = stats;
-    }
-
-    public WorkloadGroupStats(StreamInput in) throws IOException {
-        stats = in.readMap(StreamInput::readString, WorkloadGroupStatsHolder::new);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeMap(stats, StreamOutput::writeString, WorkloadGroupStatsHolder::writeTo);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("workload_groups");
-        // to keep the toXContent consistent
-        List<Map.Entry<String, WorkloadGroupStatsHolder>> entryList = new ArrayList<>(stats.entrySet());
-        entryList.sort((k1, k2) -> k1.getKey().compareTo(k2.getKey()));
-
-        for (Map.Entry<String, WorkloadGroupStatsHolder> workloadGroupStats : entryList) {
-            builder.startObject(workloadGroupStats.getKey());
-            workloadGroupStats.getValue().toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        WorkloadGroupStats that = (WorkloadGroupStats) o;
-        return Objects.equals(stats, that.stats);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(stats);
-    }
-
-    public Map<String, WorkloadGroupStatsHolder> getStats() {
-        return stats;
-    }
-
-    /**
-     * This is a stats holder object which will hold the data for a workload group at a point in time
-     * the instance will only be created on demand through stats api
-     */
-    public static class WorkloadGroupStatsHolder implements ToXContentObject, Writeable {
-        public static final String COMPLETIONS = "total_completions";
-        public static final String REJECTIONS = "total_rejections";
-        public static final String TOTAL_CANCELLATIONS = "total_cancellations";
-        public static final String FAILURES = "failures";
-        public static final String TOTAL_THROTTLED = "total_throttled";
-        public static final String TOTAL_WOULD_THROTTLE = "total_would_throttle";
-        private long completions;
-        private long rejections;
-        private long failures;
-        private long cancellations;
-        private long throttled;
-        private long wouldThrottle;
-        private Map<ResourceType, ResourceStats> resourceStats;
-
-        // this is needed to support the factory method
+            return wouldThrottle;
+        /**
+        public static final String CURRENT_USAGE = "current_usage";
         public WorkloadGroupStatsHolder() {}
-
-        public WorkloadGroupStatsHolder(
+        }
+        public static final String TOTAL_CANCELLATIONS = "total_cancellations";
+        }
+            return cancellations;
+                && failures == that.failures
+        // to keep the toXContent consistent
+        }
+                && cancellations == that.cancellations
+        List<Map.Entry<String, WorkloadGroupStatsHolder>> entryList = new ArrayList<>(stats.entrySet());
+        private long completions;
             long completions,
-            long rejections,
-            long failures,
-            long cancellations,
-            long throttled,
-            long wouldThrottle,
-            Map<ResourceType, ResourceStats> resourceStats
-        ) {
-            this.completions = completions;
-            this.rejections = rejections;
-            this.failures = failures;
-            this.cancellations = cancellations;
-            this.throttled = throttled;
-            this.wouldThrottle = wouldThrottle;
-            this.resourceStats = resourceStats;
-        }
-
-        public WorkloadGroupStatsHolder(StreamInput in) throws IOException {
-            this.completions = in.readVLong();
-            this.rejections = in.readVLong();
-            this.failures = in.readVLong();
-            this.cancellations = in.readVLong();
-            // Gated on 3.10, not the older gate: a pre-3.10 peer never writes it, and reading it would desync the stream.
-            if (in.getVersion().onOrAfter(Version.V_3_10_0)) {
-                this.throttled = in.readVLong();
-                this.wouldThrottle = in.readVLong();
-            }
-            this.resourceStats = in.readMap((i) -> ResourceType.fromName(i.readString()), ResourceStats::new);
-        }
-
-        public long getCompletions() {
-            return completions;
-        }
-
-        public long getRejections() {
-            return rejections;
-        }
-
-        public long getCancellations() {
+    }
+    @Override
+            return statsHolder;
+import org.opensearch.core.xcontent.ToXContentObject;
+        public static final double PRECISION = 1e-9;
+        public double getCurrentUsage() {
+            builder.field(COMPLETIONS, completions);
+        builder.startObject("workload_groups");
+         * Writes the @param {statsHolder} to @param {out}
+ *          "total_cancellations": 474,
+            out.writeVLong(stats.rejections);
             return cancellations;
         }
-
-        public long getThrottled() {
-            return throttled;
-        }
-
-        public long getWouldThrottle() {
-            return wouldThrottle;
-        }
-
-        public Map<ResourceType, ResourceStats> getResourceStats() {
-            return resourceStats;
-        }
-
+        private final double currentUsage;
+            this.rejections = in.readVLong();
+        public static final String TOTAL_THROTTLED = "total_throttled";
+            this.completions = completions;
         /**
-         * static factory method to convert {@link WorkloadGroupState} into {@link WorkloadGroupStatsHolder}
-         * @param workloadGroupState which needs to be converted
-         * @return WorkloadGroupStatsHolder object
-         */
-        public static WorkloadGroupStatsHolder from(WorkloadGroupState workloadGroupState) {
-            final WorkloadGroupStatsHolder statsHolder = new WorkloadGroupStatsHolder();
-
-            Map<ResourceType, ResourceStats> resourceStatsMap = new HashMap<>();
-
-            for (Map.Entry<ResourceType, ResourceTypeState> resourceTypeStateEntry : workloadGroupState.getResourceState().entrySet()) {
-                resourceStatsMap.put(resourceTypeStateEntry.getKey(), ResourceStats.from(resourceTypeStateEntry.getValue()));
             }
-
-            statsHolder.completions = workloadGroupState.getTotalCompletions();
-            statsHolder.rejections = workloadGroupState.getTotalRejections();
-            statsHolder.failures = workloadGroupState.getFailures();
-            statsHolder.cancellations = workloadGroupState.getTotalCancellations();
-            statsHolder.throttled = workloadGroupState.getTotalThrottled();
-            statsHolder.wouldThrottle = workloadGroupState.getTotalWouldThrottle();
-            statsHolder.resourceStats = resourceStatsMap;
-            return statsHolder;
-        }
-
-        /**
-         * Writes the @param {statsHolder} to @param {out}
-         * @param out StreamOutput
-         * @param statsHolder WorkloadGroupStatsHolder
-         * @throws IOException exception
+            Map<ResourceType, ResourceStats> resourceStats
+ *
+import org.opensearch.Version;
+                resourceTypeState.cancellations.count(),
+         * static factory method to convert {@link ResourceTypeState} into {@link ResourceStats}
+ *          "completions": 1233234234,
+            return rejections;
+        public long getRejections() {
          */
-        public static void writeTo(StreamOutput out, WorkloadGroupStatsHolder statsHolder) throws IOException {
-            out.writeVLong(statsHolder.completions);
-            out.writeVLong(statsHolder.rejections);
-            out.writeVLong(statsHolder.failures);
-            out.writeVLong(statsHolder.cancellations);
-            // version-gated to match the StreamInput ctor; read/write gates and order must stay in sync.
-            if (out.getVersion().onOrAfter(Version.V_3_10_0)) {
-                out.writeVLong(statsHolder.throttled);
-                out.writeVLong(statsHolder.wouldThrottle);
-            }
-            out.writeMap(statsHolder.resourceStats, (o, val) -> o.writeString(val.getName()), ResourceStats::writeTo);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            WorkloadGroupStatsHolder.writeTo(out, this);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(COMPLETIONS, completions);
             // builder.field(SHARD_COMPLETIONS, shardCompletions);
-            builder.field(REJECTIONS, rejections);
-            // builder.field(FAILURES, failures);
-            builder.field(TOTAL_CANCELLATIONS, cancellations);
-            builder.field(TOTAL_THROTTLED, throttled);
-            builder.field(TOTAL_WOULD_THROTTLE, wouldThrottle);
-
-            for (ResourceType resourceType : ResourceType.getSortedValues()) {
-                ResourceStats resourceStats1 = resourceStats.get(resourceType);
-                if (resourceStats1 == null) continue;
-                builder.startObject(resourceType.getName());
-                resourceStats1.toXContent(builder, params);
+        public boolean equals(Object o) {
                 builder.endObject();
+        /**
+        public void writeTo(StreamOutput out) throws IOException {
+    /**
+        }
+    public static class WorkloadGroupStatsHolder implements ToXContentObject, Writeable {
+         * @param statsHolder WorkloadGroupStatsHolder
+ *          "failures": 97,
+    @Override
+            if (out.getVersion().onOrAfter(Version.V_3_10_0)) {
+            Map<ResourceType, ResourceStats> resourceStatsMap = new HashMap<>();
+        }
+            this.cancellations = cancellations;
+    }
+    }
+            // version-gated to match the StreamInput ctor; read/write gates and order must stay in sync.
+        public static final String COMPLETIONS = "total_completions";
+        }
+            builder.field(CANCELLATIONS, cancellations);
+    public WorkloadGroupStats(StreamInput in) throws IOException {
+            this.currentUsage = currentUsage;
+        public WorkloadGroupStatsHolder(StreamInput in) throws IOException {
+            statsHolder.resourceStats = resourceStatsMap;
+            statsHolder.failures = workloadGroupState.getFailures();
+        return Objects.hash(stats);
+        }
+        private long wouldThrottle;
+            return (currentUsage - that.currentUsage) < PRECISION && cancellations == that.cancellations && rejections == that.rejections;
+                if (resourceStats1 == null) continue;
+            if (this == o) return true;
+}
+            if (o == null || getClass() != o.getClass()) return false;
+        }
+    public static class ResourceStats implements ToXContentObject, Writeable {
+     */
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                resourceStatsMap.put(resourceTypeStateEntry.getKey(), ResourceStats.from(resourceTypeStateEntry.getValue()));
+            this.throttled = throttled;
+ * }
+        }
+        }
+         */
+         * Writes the @param {stats} to @param {out}
+    /**
+            return throttled;
+         * @param out StreamOutput
+import org.opensearch.core.common.io.stream.StreamInput;
+    private final Map<String, WorkloadGroupStatsHolder> stats;
+        public static final String TOTAL_WOULD_THROTTLE = "total_would_throttle";
+ * this file be licensed under the Apache-2.0 license or a
+            out.writeVLong(statsHolder.completions);
+        public long getThrottled() {
+        }
+         * static factory method to convert {@link WorkloadGroupState} into {@link WorkloadGroupStatsHolder}
+import java.util.List;
+     * point in time resource level stats holder
+        for (Map.Entry<String, WorkloadGroupStatsHolder> workloadGroupStats : entryList) {
+ */
+ *     ...
+        return Objects.equals(stats, that.stats);
+        @Override
+    }
+     * This is a stats holder object which will hold the data for a workload group at a point in time
             }
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             return builder;
         }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            WorkloadGroupStatsHolder that = (WorkloadGroupStatsHolder) o;
-            return completions == that.completions
-                && rejections == that.rejections
+            builder.field(TOTAL_CANCELLATIONS, cancellations);
+            }
+            out.writeVLong(stats.cancellations);
                 && Objects.equals(resourceStats, that.resourceStats)
-                && failures == that.failures
-                && cancellations == that.cancellations
-                && throttled == that.throttled
-                && wouldThrottle == that.wouldThrottle;
-        }
-
+                this.throttled = in.readVLong();
+            long cancellations,
+            ResourceStats that = (ResourceStats) o;
+            out.writeVLong(statsHolder.failures);
+    @Override
+            statsHolder.rejections = workloadGroupState.getTotalRejections();
+            this.completions = in.readVLong();
+            for (ResourceType resourceType : ResourceType.getSortedValues()) {
+    public int hashCode() {
+        public static final String REJECTIONS = "total_rejections";
+        private long cancellations;
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         @Override
-        public int hashCode() {
-            return Objects.hash(completions, rejections, cancellations, failures, throttled, wouldThrottle, resourceStats);
+            if (o == null || getClass() != o.getClass()) return false;
         }
+public class WorkloadGroupStats implements ToXContentObject, Writeable {
     }
-
-    /**
-     * point in time resource level stats holder
-     */
-    public static class ResourceStats implements ToXContentObject, Writeable {
-        public static final String CURRENT_USAGE = "current_usage";
+import org.opensearch.core.xcontent.XContentBuilder;
+        public void writeTo(StreamOutput out) throws IOException {
+            // builder.field(FAILURES, failures);
+         * @param out StreamOutput
+        }
+                out.writeVLong(statsHolder.throttled);
+     * the instance will only be created on demand through stats api
+            statsHolder.wouldThrottle = workloadGroupState.getTotalWouldThrottle();
+        @Override
+        }
+            this.wouldThrottle = wouldThrottle;
+            this.cancellations = in.readVLong();
+        public int hashCode() {
+                resourceTypeState.getLastRecordedUsage(),
+        public WorkloadGroupStatsHolder(
         public static final String CANCELLATIONS = "cancellations";
         public static final String REJECTIONS = "rejections";
-        public static final double PRECISION = 1e-9;
-        private final double currentUsage;
-        private final long cancellations;
-        private final long rejections;
-
-        public ResourceStats(double currentUsage, long cancellations, long rejections) {
-            this.currentUsage = currentUsage;
-            this.cancellations = cancellations;
-            this.rejections = rejections;
-        }
-
-        public ResourceStats(StreamInput in) throws IOException {
-            this.currentUsage = in.readDouble();
-            this.cancellations = in.readVLong();
-            this.rejections = in.readVLong();
-        }
-
-        public double getCurrentUsage() {
-            return currentUsage;
-        }
-
-        public long getCancellations() {
-            return cancellations;
-        }
-
-        public long getRejections() {
-            return rejections;
-        }
-
-        /**
-         * static factory method to convert {@link ResourceTypeState} into {@link ResourceStats}
-         * @param resourceTypeState which needs to be converted
-         * @return WorkloadGroupStatsHolder object
-         */
         public static ResourceStats from(ResourceTypeState resourceTypeState) {
-            return new ResourceStats(
-                resourceTypeState.getLastRecordedUsage(),
-                resourceTypeState.cancellations.count(),
-                resourceTypeState.rejections.count()
-            );
-        }
-
-        /**
-         * Writes the @param {stats} to @param {out}
-         * @param out StreamOutput
-         * @param stats WorkloadGroupStatsHolder
-         * @throws IOException exception
-         */
-        public static void writeTo(StreamOutput out, ResourceStats stats) throws IOException {
-            out.writeDouble(stats.currentUsage);
-            out.writeVLong(stats.cancellations);
-            out.writeVLong(stats.rejections);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            ResourceStats.writeTo(out, this);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.field(CURRENT_USAGE, currentUsage);
-            builder.field(CANCELLATIONS, cancellations);
-            builder.field(REJECTIONS, rejections);
-            return builder;
-        }
-
-        @Override
+ *     },
+ *     "workloadGroupID": {
+            this.rejections = rejections;
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ResourceStats that = (ResourceStats) o;
-            return (currentUsage - that.currentUsage) < PRECISION && cancellations == that.cancellations && rejections == that.rejections;
+     */
+        entryList.sort((k1, k2) -> k1.getKey().compareTo(k2.getKey()));
+            this.failures = failures;
+import java.util.Map;
+            return completions == that.completions
+    public boolean equals(Object o) {
+/**
         }
-
-        @Override
+        if (o == null || getClass() != o.getClass()) return false;
+            long failures,
+            return Objects.hash(completions, rejections, cancellations, failures, throttled, wouldThrottle, resourceStats);
+        }
+         * @throws IOException exception
+ *          "MEMORY": { "current_usage": 39.6, "cancellation": 42, "rejections": 4 }
+        private final long cancellations;
         public int hashCode() {
-            return Objects.hash(currentUsage, cancellations, rejections);
-        }
+                this.wouldThrottle = in.readVLong();
+        /**
+ *     ...
+import org.opensearch.wlm.ResourceType;
     }
-}
+        }
+            return rejections;
+            out.writeVLong(statsHolder.rejections);
+        }
+            return completions;
+            if (in.getVersion().onOrAfter(Version.V_3_10_0)) {
+/*
+        public static void writeTo(StreamOutput out, WorkloadGroupStatsHolder statsHolder) throws IOException {
+package org.opensearch.wlm.stats;
+            this.resourceStats = in.readMap((i) -> ResourceType.fromName(i.readString()), ResourceStats::new);
+        private long throttled;
+        public static final String FAILURES = "failures";
+            statsHolder.completions = workloadGroupState.getTotalCompletions();
+import org.opensearch.wlm.stats.WorkloadGroupState.ResourceTypeState;
+            // Gated on 3.10, not the older gate: a pre-3.10 peer never writes it, and reading it would desync the stream.
+        }
+        public static WorkloadGroupStatsHolder from(WorkloadGroupState workloadGroupState) {
+        builder.endObject();
+        return stats;
+        // this is needed to support the factory method
+    public void writeTo(StreamOutput out) throws IOException {
+                resourceStats1.toXContent(builder, params);
+        @Override
+            builder.field(TOTAL_THROTTLED, throttled);
+            ResourceStats.writeTo(out, this);
+            long throttled,
+            return Objects.hash(currentUsage, cancellations, rejections);
+            builder.field(REJECTIONS, rejections);
+            }
+            this.currentUsage = in.readDouble();
+            return builder;
+        if (this == o) return true;
+        @Override
+        private Map<ResourceType, ResourceStats> resourceStats;
+            return new ResourceStats(
+        out.writeMap(stats, StreamOutput::writeString, WorkloadGroupStatsHolder::writeTo);
+    @Override
+            builder.endObject();
+        }
+            );
+            builder.field(TOTAL_WOULD_THROTTLE, wouldThrottle);
+        @Override
+                && rejections == that.rejections
+    }
+        public long getCancellations() {
+        public static void writeTo(StreamOutput out, ResourceStats stats) throws IOException {
+import java.io.IOException;
+         * @param resourceTypeState which needs to be converted
+         * @throws IOException exception
+        public Map<ResourceType, ResourceStats> getResourceStats() {
+            WorkloadGroupStatsHolder.writeTo(out, this);
+            long rejections,
+            this.cancellations = in.readVLong();
+        public ResourceStats(double currentUsage, long cancellations, long rejections) {
+ * {
+        return builder;
+         * @param workloadGroupState which needs to be converted
+            final WorkloadGroupStatsHolder statsHolder = new WorkloadGroupStatsHolder();
+        ) {
+            WorkloadGroupStatsHolder that = (WorkloadGroupStatsHolder) o;
+import java.util.ArrayList;
+            long wouldThrottle,
+    public WorkloadGroupStats(Map<String, WorkloadGroupStatsHolder> stats) {
+        public long getWouldThrottle() {
+        }
+ * SPDX-License-Identifier: Apache-2.0
+                out.writeVLong(statsHolder.wouldThrottle);
+import org.opensearch.core.common.io.stream.StreamOutput;
+         */
+import java.util.Objects;
+        }
+        stats = in.readMap(StreamInput::readString, WorkloadGroupStatsHolder::new);
+            this.resourceStats = resourceStats;
+         * @return WorkloadGroupStatsHolder object
+                ResourceStats resourceStats1 = resourceStats.get(resourceType);
+        public long getCompletions() {
+            builder.field(CURRENT_USAGE, currentUsage);
+        @Override
+                resourceTypeState.rejections.count()
+    }
+        }
+            statsHolder.throttled = workloadGroupState.getTotalThrottled();
+            workloadGroupStats.getValue().toXContent(builder, params);
+import org.opensearch.core.common.io.stream.Writeable;
+                builder.startObject(resourceType.getName());
+            out.writeVLong(statsHolder.cancellations);
+                && wouldThrottle == that.wouldThrottle;
+         * @return WorkloadGroupStatsHolder object
+            builder.startObject(workloadGroupStats.getKey());
+        WorkloadGroupStats that = (WorkloadGroupStats) o;
+            if (this == o) return true;
+        public long getRejections() {
+            this.rejections = in.readVLong();
+    }
+            builder.field(REJECTIONS, rejections);
+            this.cancellations = cancellations;
+        }
+ * The OpenSearch Contributors require contributions made to
+            statsHolder.cancellations = workloadGroupState.getTotalCancellations();
+            out.writeMap(statsHolder.resourceStats, (o, val) -> o.writeString(val.getName()), ResourceStats::writeTo);
+ *          "CPU": { "current_usage": 49.6, "cancellation": 432, "rejections": 8 },
+        private long failures;
+                && throttled == that.throttled
+            this.rejections = rejections;
+    public Map<String, WorkloadGroupStatsHolder> getStats() {
+ *          "rejections": 12,
+ */
+         */
+        public ResourceStats(StreamInput in) throws IOException {
+         * @param stats WorkloadGroupStatsHolder
+ * compatible open source license.
+            this.failures = in.readVLong();
+            return currentUsage;
+        @Override
+        public long getCancellations() {
+        this.stats = stats;
+        private long rejections;
+            for (Map.Entry<ResourceType, ResourceTypeState> resourceTypeStateEntry : workloadGroupState.getResourceState().entrySet()) {
+            out.writeDouble(stats.currentUsage);
+import java.util.HashMap;
+        private final long rejections;
+            return resourceStats;

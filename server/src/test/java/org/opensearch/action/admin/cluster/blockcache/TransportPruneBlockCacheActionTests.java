@@ -1,215 +1,188 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.action.admin.cluster.blockcache;
-
-import org.opensearch.Version;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.node.DiscoveryNodeRole;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.plugins.BlockCache;
-import org.opensearch.plugins.BlockCacheRegistry;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.Before;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class TransportPruneBlockCacheActionTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private ClusterService clusterService;
-    private CapturingTransport transport;
-    private TransportService transportService;
-    private ActionFilters actionFilters;
-    private BlockCacheRegistry registry;
-    private BlockCache blockCache;
-    private TransportPruneBlockCacheAction action;
-
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool("test");
-        transport = new CapturingTransport();
-        clusterService = createClusterService(threadPool);
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            null
-        );
-        transportService.start();
-        transportService.acceptIncomingRequests();
-
-        actionFilters = new ActionFilters(Collections.emptySet());
+            new FailedNodeException("warm-node-2", "simulated failure", new RuntimeException())
         blockCache = mock(BlockCache.class);
-        registry = mock(BlockCacheRegistry.class);
-        when(blockCache.clear()).thenReturn(true);
-        when(registry.all()).thenReturn(List.of(blockCache));
-
-        setupClusterWithWarmNodes();
-        action = new TransportPruneBlockCacheAction(threadPool, clusterService, transportService, actionFilters, registry);
-    }
-
     @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();
-        transport.close();
+            Collections.emptyMap(),
+    }
+    private ThreadPool threadPool;
+        transportService.acceptIncomingRequests();
         clusterService.close();
-    }
-
-    private void setupClusterWithWarmNodes() {
-        DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder();
-        DiscoveryNode warmNode1 = new DiscoveryNode(
-            "warm-node-1",
-            "warm-node-1",
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Set.of(DiscoveryNodeRole.WARM_ROLE),
-            Version.CURRENT
-        );
-        DiscoveryNode warmNode2 = new DiscoveryNode(
-            "warm-node-2",
-            "warm-node-2",
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Set.of(DiscoveryNodeRole.WARM_ROLE),
-            Version.CURRENT
-        );
-        DiscoveryNode dataNode = new DiscoveryNode(
-            "data-node-1",
-            "data-node-1",
-            buildNewFakeTransportAddress(),
-            Collections.emptyMap(),
-            Set.of(DiscoveryNodeRole.DATA_ROLE),
-            Version.CURRENT
-        );
+        assertEquals(1, response.getNodes().size());
+ */
+        action = new TransportPruneBlockCacheAction(threadPool, clusterService, transportService, actionFilters, registry);
         nodesBuilder.add(warmNode1).add(warmNode2).add(dataNode);
-        nodesBuilder.localNodeId(warmNode1.getId()).clusterManagerNodeId(warmNode1.getId());
+        super.setUp();
+public class TransportPruneBlockCacheActionTests extends OpenSearchTestCase {
+            Collections.emptySet(),
+        );
         setState(clusterService, ClusterState.builder(clusterService.getClusterName()).nodes(nodesBuilder).build());
+        TransportService nullTransportService = nullTransport.createTransportService(
+            nullTransport.close();
+        CapturingTransport nullTransport = new CapturingTransport();
+        DiscoveryNode warmNode1 = new DiscoveryNode(
+        PruneBlockCacheResponse response = action.newResponse(new PruneBlockCacheRequest(), responses, Collections.emptyList());
+            "data-node-1",
     }
-
-    public void testNodeOperation() {
-        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
-        NodePruneBlockCacheResponse response = action.nodeOperation(new TransportPruneBlockCacheAction.NodeRequest(request));
-
+        List<NodePruneBlockCacheResponse> responses = Arrays.asList(
+            Set.of(DiscoveryNodeRole.DATA_ROLE),
         assertTrue("cleared should be true", response.isCleared());
-        verify(blockCache).clear();
+        expectThrows(IllegalArgumentException.class, () -> action.resolveRequest(request, clusterService.state()));
+    public void testWarmNodeResolution() {
+            );
+import org.opensearch.plugins.BlockCacheRegistry;
+        transport = new CapturingTransport();
     }
-
-    public void testNodeOperationPartialFailure() {
-        BlockCache failingCache = mock(BlockCache.class);
+        setupClusterWithWarmNodes();
+        );
+        assertEquals(0, response.failures().size());
+            "warm-node-1",
+    private void setupClusterWithWarmNodes() {
+import java.util.Collections;
+            "warm-node-1",
+            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-2"), true)
+    }
+            null,
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.Version;
+    public void testNonWarmNodeTargetingThrows() {
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+            TransportPruneBlockCacheAction nullRegistryAction = new TransportPruneBlockCacheAction(
+        action.resolveRequest(request, clusterService.state());
+            Version.CURRENT
+import static org.mockito.Mockito.mock;
+    private ClusterService clusterService;
+        nullTransportService.start();
+            nullTransportService.close();
+    }
+import org.opensearch.action.FailedNodeException;
+    }
+        assertFalse("cleared should be false when any cache fails", response.isCleared());
+        verify(blockCache).clear();
+import org.opensearch.transport.TransportService;
+import org.opensearch.cluster.node.DiscoveryNode;
+            );
+    public void testNullRegistry() {
+import org.opensearch.test.transport.CapturingTransport;
+import org.opensearch.cluster.node.DiscoveryNodes;
+    public void setUp() throws Exception {
+import org.opensearch.threadpool.ThreadPool;
+            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-1"), true)
+    private BlockCacheRegistry registry;
+        nullTransportService.acceptIncomingRequests();
+        );
+        DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder();
+        PruneBlockCacheRequest request = new PruneBlockCacheRequest("warm-node-1");
+            threadPool,
         when(failingCache.clear()).thenReturn(false);
         when(registry.all()).thenReturn(List.of(blockCache, failingCache));
-
-        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
-        NodePruneBlockCacheResponse response = action.nodeOperation(new TransportPruneBlockCacheAction.NodeRequest(request));
-
-        assertFalse("cleared should be false when any cache fails", response.isCleared());
-    }
-
-    public void testNullRegistry() {
-        CapturingTransport nullTransport = new CapturingTransport();
-        TransportService nullTransportService = nullTransport.createTransportService(
-            clusterService.getSettings(),
+        PruneBlockCacheResponse response = action.newResponse(new PruneBlockCacheRequest(), responses, failures);
+            null
+            Set.of(DiscoveryNodeRole.WARM_ROLE),
+        assertEquals("warm-node-1", request.concreteNodes()[0].getId());
+    public void tearDown() throws Exception {
+        clusterService = createClusterService(threadPool);
+        transportService = transport.createTransportService(
+    private TransportService transportService;
+            NodePruneBlockCacheResponse response = nullRegistryAction.nodeOperation(
+        transportService.start();
+import static org.mockito.Mockito.when;
+import java.util.List;
+        registry = mock(BlockCacheRegistry.class);
+                actionFilters,
+        DiscoveryNode dataNode = new DiscoveryNode(
+                new TransportPruneBlockCacheAction.NodeRequest(request)
+                clusterService,
+    public void testSpecificNodeTargeting() {
+        } finally {
+    private CapturingTransport transport;
             threadPool,
+import org.opensearch.threadpool.TestThreadPool;
+import org.junit.Before;
+    @Before
+    }
+                threadPool,
+            Version.CURRENT
+        assertEquals(1, response.failures().size());
+        transport.close();
+import java.util.Set;
+import org.opensearch.plugins.BlockCache;
+        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
+        );
+            buildNewFakeTransportAddress(),
+        nodesBuilder.localNodeId(warmNode1.getId()).clusterManagerNodeId(warmNode1.getId());
             TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+    private BlockCache blockCache;
+        DiscoveryNode warmNode2 = new DiscoveryNode(
+        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
+    }
+            assertFalse("cleared should be false when registry is null", response.isCleared());
+}
+package org.opensearch.action.admin.cluster.blockcache;
+import java.util.Arrays;
+    public void testResponseAggregationWithFailure() {
+        );
+        );
+    }
+        NodePruneBlockCacheResponse response = action.nodeOperation(new TransportPruneBlockCacheAction.NodeRequest(request));
+        assertTrue(Arrays.stream(request.concreteNodes()).anyMatch(n -> "warm-node-2".equals(n.getId())));
+            PruneBlockCacheRequest request = new PruneBlockCacheRequest();
+    private ActionFilters actionFilters;
+                nullTransportService,
+import org.opensearch.cluster.ClusterState;
+ * compatible open source license.
+ * SPDX-License-Identifier: Apache-2.0
+ * this file be licensed under the Apache-2.0 license or a
             x -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
+        NodePruneBlockCacheResponse response = action.nodeOperation(new TransportPruneBlockCacheAction.NodeRequest(request));
+        threadPool.shutdown();
+    }
+            clusterService.getSettings(),
+        );
+            buildNewFakeTransportAddress(),
+/*
+            buildNewFakeTransportAddress(),
+        assertEquals(2, response.getNodes().size());
+    public void testResponseAggregation() {
             null
         );
-        nullTransportService.start();
-        nullTransportService.acceptIncomingRequests();
-
-        try {
-            TransportPruneBlockCacheAction nullRegistryAction = new TransportPruneBlockCacheAction(
-                threadPool,
-                clusterService,
-                nullTransportService,
-                actionFilters,
-                null
-            );
-            PruneBlockCacheRequest request = new PruneBlockCacheRequest();
-            NodePruneBlockCacheResponse response = nullRegistryAction.nodeOperation(
-                new TransportPruneBlockCacheAction.NodeRequest(request)
-            );
-            assertFalse("cleared should be false when registry is null", response.isCleared());
-        } finally {
-            nullTransportService.close();
-            nullTransport.close();
-        }
-    }
-
-    public void testWarmNodeResolution() {
-        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
-        action.resolveRequest(request, clusterService.state());
-
+    private TransportPruneBlockCacheAction action;
+import static org.opensearch.test.ClusterServiceUtils.setState;
+            x -> clusterService.localNode(),
+            Collections.emptySet(),
+        when(registry.all()).thenReturn(List.of(blockCache));
+        actionFilters = new ActionFilters(Collections.emptySet());
         assertEquals(2, request.concreteNodes().length);
-        assertTrue(Arrays.stream(request.concreteNodes()).anyMatch(n -> "warm-node-1".equals(n.getId())));
-        assertTrue(Arrays.stream(request.concreteNodes()).anyMatch(n -> "warm-node-2".equals(n.getId())));
-    }
-
-    public void testSpecificNodeTargeting() {
-        PruneBlockCacheRequest request = new PruneBlockCacheRequest("warm-node-1");
-        action.resolveRequest(request, clusterService.state());
-
-        assertEquals(1, request.concreteNodes().length);
-        assertEquals("warm-node-1", request.concreteNodes()[0].getId());
-    }
-
-    public void testNonWarmNodeTargetingThrows() {
         PruneBlockCacheRequest request = new PruneBlockCacheRequest("data-node-1");
-        expectThrows(IllegalArgumentException.class, () -> action.resolveRequest(request, clusterService.state()));
-    }
-
-    public void testResponseAggregation() {
-        List<NodePruneBlockCacheResponse> responses = Arrays.asList(
-            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-1"), true),
-            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-2"), true)
-        );
-        PruneBlockCacheResponse response = action.newResponse(new PruneBlockCacheRequest(), responses, Collections.emptyList());
-
-        assertEquals(2, response.getNodes().size());
-        assertEquals(0, response.failures().size());
-    }
-
-    public void testResponseAggregationWithFailure() {
+ * The OpenSearch Contributors require contributions made to
+            Set.of(DiscoveryNodeRole.WARM_ROLE),
+                null
+        threadPool = new TestThreadPool("test");
+            "warm-node-2",
+        action.resolveRequest(request, clusterService.state());
         List<NodePruneBlockCacheResponse> responses = Collections.singletonList(
-            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-1"), true)
-        );
-        List<FailedNodeException> failures = Collections.singletonList(
-            new FailedNodeException("warm-node-2", "simulated failure", new RuntimeException())
-        );
-        PruneBlockCacheResponse response = action.newResponse(new PruneBlockCacheRequest(), responses, failures);
-
-        assertEquals(1, response.getNodes().size());
-        assertEquals(1, response.failures().size());
+        when(blockCache.clear()).thenReturn(true);
+ *
     }
-}
+            clusterService.getSettings(),
+            "data-node-1",
+            new NodePruneBlockCacheResponse(clusterService.state().nodes().get("warm-node-1"), true),
+        assertTrue(Arrays.stream(request.concreteNodes()).anyMatch(n -> "warm-node-1".equals(n.getId())));
+import org.opensearch.action.support.ActionFilters;
+            "warm-node-2",
+        try {
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+        PruneBlockCacheRequest request = new PruneBlockCacheRequest();
+import org.junit.After;
+        super.tearDown();
+            Collections.emptyMap(),
+import org.opensearch.test.OpenSearchTestCase;
+    public void testNodeOperationPartialFailure() {
+        }
+        List<FailedNodeException> failures = Collections.singletonList(
+        BlockCache failingCache = mock(BlockCache.class);
+            Collections.emptyMap(),
+            null,
+import static org.mockito.Mockito.verify;
+            Version.CURRENT
+    public void testNodeOperation() {
+        assertEquals(1, request.concreteNodes().length);

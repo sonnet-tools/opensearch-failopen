@@ -1,1512 +1,1393 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.Rounding;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.FeatureFlags;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.compositeindex.CompositeIndexSettings;
-import org.opensearch.index.compositeindex.CompositeIndexValidator;
-import org.opensearch.index.compositeindex.datacube.DataCubeDateTimeUnit;
-import org.opensearch.index.compositeindex.datacube.DateDimension;
-import org.opensearch.index.compositeindex.datacube.Dimension;
-import org.opensearch.index.compositeindex.datacube.Metric;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
-import org.opensearch.index.compositeindex.datacube.NumericDimension;
-import org.opensearch.index.compositeindex.datacube.ReadDimension;
-import org.opensearch.index.compositeindex.datacube.UnsignedLongDimension;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeFieldConfiguration;
-import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
-import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitAdapter;
-import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.index.IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING;
-import static org.opensearch.index.compositeindex.CompositeIndexSettings.COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING;
-import static org.hamcrest.Matchers.containsString;
-import static com.carrotsearch.randomizedtesting.RandomizedTest.getRandom;
-
-/**
- * Tests for {@link StarTreeMapper}.
- */
-public class StarTreeMapperTests extends MapperTestCase {
-
-    @Override
-    protected Settings getIndexSettings() {
-        return Settings.builder()
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
-            .put(SETTINGS)
-            .build();
-    }
-
-    public void testValidStarTree() throws IOException {
-
-        MapperService mapperService = createMapperService(getExpandedMappingWithJustAvg("status", "size"));
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals(3, starTreeFieldType.getDimensions().size());
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.DAY_OF_MONTH),
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MONTH_OF_YEAR)
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getIntervals().get(i).shortName());
-            }
-            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(1) instanceof NumericDimension);
-
-            assertEquals("unsignedLongDimension", starTreeFieldType.getDimensions().get(2).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(2) instanceof UnsignedLongDimension);
-
-            assertEquals(2, starTreeFieldType.getMetrics().size());
-            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
-
-            // Assert COUNT and SUM gets added when AVG is defined
-            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.AVG, MetricStat.VALUE_COUNT, MetricStat.SUM);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(
-                new HashSet<>(Arrays.asList("@timestamp", "status")),
-                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
-            );
-        }
-    }
-
-    public void testCompositeIndexWithArraysInCompositeField() throws IOException {
-        DocumentMapper mapper = createDocumentMapper(getExpandedMappingWithJustAvg("status", "status"));
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> mapper.parse(source(b -> b.startArray("status").value(0).value(1).endArray()))
         );
-        assertEquals(
-            "object mapping for [_doc] with array for [status] cannot be accepted, as the field is also part of composite index mapping which does not accept arrays",
-            ex.getMessage()
+                b.field("type", "integer");
+            b.startObject("properties");
+            b.startObject("keyword1");
+            b.endArray();
         );
-        ParsedDocument doc = mapper.parse(source(b -> b.startArray("size").value(0).value(1).endArray()));
-        // 1 intPoint , 1 SNDV field for each value , so 4 in total
-        assertEquals(4, doc.rootDoc().getFields("size").length);
-    }
-
-    public void testValidValueForFlushTresholdSizeWithoutCompositeIndex() {
-        Settings settings = Settings.builder()
-            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "256mb")
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), false)
-            .build();
-
-        assertEquals(new ByteSizeValue(256, ByteSizeUnit.MB), INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.get(settings));
-    }
-
-    public void testValidValueForCompositeIndex() {
-        Settings settings = Settings.builder()
-            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "256mb")
-            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-            .put(COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "512mb")
-            .build();
-
-        assertEquals(new ByteSizeValue(256, ByteSizeUnit.MB), INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.get(settings));
-    }
-
-    public void testMetricsWithJustSum() throws IOException {
-        MapperService mapperService = createMapperService(getExpandedMappingWithJustSum("status", "size"));
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<Rounding.DateTimeUnit> expectedTimeUnits = Arrays.asList(
-                Rounding.DateTimeUnit.DAY_OF_MONTH,
-                Rounding.DateTimeUnit.MONTH_OF_YEAR
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(new DateTimeUnitAdapter(expectedTimeUnits.get(i)), dateDim.getIntervals().get(i));
-            }
-            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(1) instanceof NumericDimension);
-
-            assertEquals("unsignedLongDimension", starTreeFieldType.getDimensions().get(2).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(2) instanceof UnsignedLongDimension);
-
-            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
-
-            // Assert AVG gets added when both of its base metrics is already present
-            List<MetricStat> expectedMetrics = List.of(MetricStat.SUM);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(
-                new HashSet<>(Arrays.asList("@timestamp", "status", "unsignedLongDimension")),
-                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
-            );
-        }
-    }
-
-    public void testMetricsWithCountAndSum() throws IOException {
-        MapperService mapperService = createMapperService(getExpandedMappingWithSumAndCount("status", "size"));
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<Rounding.DateTimeUnit> expectedTimeUnits = Arrays.asList(
-                Rounding.DateTimeUnit.DAY_OF_MONTH,
-                Rounding.DateTimeUnit.MONTH_OF_YEAR
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(new DateTimeUnitAdapter(expectedTimeUnits.get(i)), dateDim.getIntervals().get(i));
-            }
-            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
-            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
-
-            // Assert AVG gets added when both of its base metrics is already present
-            List<MetricStat> expectedMetrics = List.of(MetricStat.SUM, MetricStat.VALUE_COUNT, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-
-            Metric metric = starTreeFieldType.getMetrics().get(1);
-            assertEquals("_doc_count", metric.getField());
-            assertEquals(List.of(MetricStat.DOC_COUNT), metric.getMetrics());
-
-            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(
-                new HashSet<>(Arrays.asList("@timestamp", "status")),
-                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
-            );
-        }
-    }
-
-    public void testValidStarTreeWithNoDateDim() throws IOException {
-        MapperService mapperService = createMapperService(getMinMappingWithDateDims(false, true, true));
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("status", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof NumericDimension);
-            assertEquals("metric_field", starTreeFieldType.getDimensions().get(1).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof NumericDimension);
-            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
-            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(new HashSet<>(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
-        }
-    }
-
-    public void testValidStarTreeDefaults() throws IOException {
-        MapperService mapperService = createMapperService(getMinMapping());
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<String> expectedDimensionFields = Arrays.asList("@timestamp_minute", "@timestamp_half-hour");
-            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
-            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MINUTES_OF_HOUR),
-                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getIntervals().get(i).shortName());
-            }
-            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
-            assertEquals(3, starTreeFieldType.getMetrics().size());
-            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
-            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-
-            assertEquals("metric_field", starTreeFieldType.getMetrics().get(1).getField());
-            expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(1).getMetrics());
-            Metric metric = starTreeFieldType.getMetrics().get(2);
-            assertEquals("_doc_count", metric.getField());
-            assertEquals(List.of(MetricStat.DOC_COUNT), metric.getMetrics());
-            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
-        }
-    }
-
-    public void testValidStarTreeDateDims() throws IOException {
-        MapperService mapperService = createMapperService(getMinMappingWithDateDims(false, false, false));
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<String> expectedDimensionFields = Arrays.asList("@timestamp_half-hour", "@timestamp_week", "@timestamp_month");
-            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
-            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
-                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY,
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.WEEK_OF_WEEKYEAR),
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MONTH_OF_YEAR)
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getSortedCalendarIntervals().get(i).shortName());
-            }
-            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
-            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
-            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
-        }
-    }
-
-    public void testValidStarTreeNestedFieldsAndMultiFields() throws IOException {
-        MapperService mapperService = createMapperService(getMinMappingWithNestedField());
-        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
-        for (CompositeMappedFieldType type : compositeFieldTypes) {
-            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
-            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
-            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
-            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
-            List<String> expectedDimensionFields = Arrays.asList("@timestamp_minute", "@timestamp_half-hour");
-            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
-            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
-                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MINUTES_OF_HOUR),
-                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY
-            );
-            for (int i = 0; i < expectedTimeUnits.size(); i++) {
-                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getSortedCalendarIntervals().get(i).shortName());
-            }
-            assertEquals("nested.status", starTreeFieldType.getDimensions().get(1).getField());
-            assertEquals("nested.name.keyword1", starTreeFieldType.getDimensions().get(2).getField());
-            assertEquals("nested.name.keyword2", starTreeFieldType.getDimensions().get(3).getField());
-            assertEquals("name.keyword1", starTreeFieldType.getDimensions().get(4).getField());
-            assertEquals("name.keyword2", starTreeFieldType.getDimensions().get(5).getField());
-
-            assertEquals("nested.status", starTreeFieldType.getMetrics().get(0).getField());
-            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
-            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
-            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
-            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
-            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
-        }
-    }
-
-    public void testInValidStarTreeMinDims() throws IOException {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMappingWithDateDims(false, true, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: Atleast two dimensions are required to build star tree index field [startree]",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidStarTreeDateDims() throws IOException {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMappingWithDateDims(true, false, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: At most [3] calendar intervals are allowed in dimension [@timestamp]",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidDim() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getExpandedMappingWithJustAvg("invalid", "size"))
-        );
-        assertEquals("Failed to parse mapping [_doc]: unknown dimension field [invalid]", ex.getMessage());
-    }
-
-    public void testInvalidMetric() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getExpandedMappingWithJustAvg("status", "invalid"))
-        );
-        assertEquals("Failed to parse mapping [_doc]: unknown metric field [invalid]", ex.getMessage());
-    }
-
-    public void testNoMetrics() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMapping(false, true, false, false, false))
-        );
-        assertThat(
-            ex.getMessage(),
-            containsString("Failed to parse mapping [_doc]: metrics section is required for star tree field [startree]")
-        );
-    }
-
-    public void testInvalidParam() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, false, false, false, true, false, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: Star tree mapping definition has unsupported parameters:  [invalid : {invalid=invalid}]",
-            ex.getMessage()
-        );
-    }
-
-    public void testNoDims() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMapping(true, false, false, false, false))
-        );
-        assertThat(
-            ex.getMessage(),
-            containsString("Failed to parse mapping [_doc]: ordered_dimensions is required for star tree field [startree]")
-        );
-    }
-
-    public void testMissingDateDims() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMapping(false, false, false, false, true))
-        );
-        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown date dimension field [@timestamp]"));
-    }
-
-    public void testMissingDims() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMapping(false, false, true, false, false))
-        );
-        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown dimension field [status]"));
-    }
-
-    public void testMissingMetrics() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMapping(false, false, false, true, false))
-        );
-        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown metric field [metric_field]"));
-    }
-
-    public void testInvalidMetricType() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, false, false, true))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: non-numeric field type is associated with star tree metric [startree]",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidMetricTypeWithDocCount() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, false, false, false, false, true, false))
-        );
-        assertEquals("Failed to parse mapping [_doc]: Invalid metric stat: _doc_count", ex.getMessage());
-    }
-
-    public void testInvalidDimType() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, false, true, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: unsupported field type associated with dimension [status] as part of star tree field [startree]",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidDateDimType() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, false, true, false, false, false, true))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: date_dimension [@timestamp] should be of type date for star tree field [startree]",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidSkipDim() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(false, true, false, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: [invalid] in skip_star_node_creation_for_dimensions should be part of ordered_dimensions",
-            ex.getMessage()
-        );
-    }
-
-    public void testInvalidSingleDim() {
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getInvalidMapping(true, false, false, false))
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: Atleast two dimensions are required to build star tree index field [startree]",
-            ex.getMessage()
-        );
-    }
-
-    public void testDuplicateDimensions() {
-        XContentBuilder finalMapping = getMappingWithDuplicateFields(true, false);
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> createMapperService(finalMapping));
-        assertEquals(
-            "Failed to parse mapping [_doc]: Duplicate dimension [numeric_dv] present as part star tree index field [startree-1]",
-            ex.getMessage()
-        );
-    }
-
-    public void testDuplicateMetrics() {
-        XContentBuilder finalMapping = getMappingWithDuplicateFields(false, true);
-        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> createMapperService(finalMapping));
-        assertEquals(
-            "Failed to parse mapping [_doc]: Duplicate metrics [numeric_dv] present as part star tree index field [startree-1]",
-            ex.getMessage()
-        );
-    }
-
-    public void testMetric() {
-        List<MetricStat> m1 = new ArrayList<>();
-        m1.add(MetricStat.MAX);
-        Metric metric1 = new Metric("name", m1);
-        Metric metric2 = new Metric("name", m1);
-        assertEquals(metric1, metric2);
-        List<MetricStat> m2 = new ArrayList<>();
-        m2.add(MetricStat.MAX);
-        m2.add(MetricStat.VALUE_COUNT);
-        metric2 = new Metric("name", m2);
-        assertNotEquals(metric1, metric2);
-
-        assertEquals(MetricStat.VALUE_COUNT, MetricStat.fromTypeName("value_count"));
-        assertEquals(MetricStat.MAX, MetricStat.fromTypeName("max"));
-        assertEquals(MetricStat.MIN, MetricStat.fromTypeName("min"));
-        assertEquals(MetricStat.SUM, MetricStat.fromTypeName("sum"));
-        assertEquals(MetricStat.AVG, MetricStat.fromTypeName("avg"));
-
-        assertEquals(List.of(MetricStat.VALUE_COUNT, MetricStat.SUM), MetricStat.AVG.getBaseMetrics());
-
-        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> MetricStat.fromTypeName("invalid"));
-        assertEquals("Invalid metric stat: invalid", ex.getMessage());
-    }
-
-    public void testDimensions() {
-        List<DateTimeUnitRounding> d1CalendarIntervals = new ArrayList<>();
-        d1CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
-        DateDimension d1 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
-        DateDimension d2 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
-        assertEquals(d1, d2);
-        d2 = new DateDimension("name1", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
-        assertNotEquals(d1, d2);
-        List<DateTimeUnitRounding> d2CalendarIntervals = new ArrayList<>();
-        d2CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
-        d2CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
+            b.endObject();
+    ) throws IOException {
         d2 = new DateDimension("name", d2CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
-        assertNotEquals(d1, d2);
-        NumericDimension n1 = new NumericDimension("name");
-        NumericDimension n2 = new NumericDimension("name");
-        assertEquals(n1, n2);
-        n2 = new NumericDimension("name1");
-        assertNotEquals(n1, n2);
-    }
-
-    public void testReadDimensions() {
-        ReadDimension r1 = new ReadDimension("name");
-        ReadDimension r2 = new ReadDimension("name");
-        assertEquals(r1, r2);
-        r2 = new ReadDimension("name1");
-        assertNotEquals(r1, r2);
-    }
-
-    public void testStarTreeField() {
-        List<MetricStat> m1 = new ArrayList<>();
-        m1.add(MetricStat.MAX);
-        Metric metric1 = new Metric("name", m1);
-        List<DateTimeUnitRounding> d1CalendarIntervals = new ArrayList<>();
-        d1CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
-        DateDimension d1 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
-        NumericDimension n1 = new NumericDimension("numeric");
-        NumericDimension n2 = new NumericDimension("name1");
-        UnsignedLongDimension n3 = new UnsignedLongDimension("name2");
-
-        List<Metric> metrics = List.of(metric1);
-        List<Dimension> dims = List.of(d1, n2);
-        StarTreeFieldConfiguration config = new StarTreeFieldConfiguration(
-            100,
-            Set.of("name"),
-            StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP
-        );
-
-        StarTreeField field1 = new StarTreeField("starTree", dims, metrics, config);
-        StarTreeField field2 = new StarTreeField("starTree", dims, metrics, config);
         assertEquals(field1, field2);
-
-        List<Dimension> dims1 = List.of(d1, n1, n2, n3);
-        StarTreeField field3 = new StarTreeField("starTree", dims1, metrics, config);
-        StarTreeField field4 = new StarTreeField("starTree", dims1, metrics, config);
-        assertEquals(field3, field4);
-
-        dims = List.of(d1, n2, n1);
-        field2 = new StarTreeField("starTree", dims, metrics, config);
-        assertNotEquals(field1, field2);
-
-        dims = List.of(d1, n2);
-        metrics = List.of(metric1, metric1);
-        field2 = new StarTreeField("starTree", dims, metrics, config);
-        assertNotEquals(field1, field2);
-
-        dims = List.of(d1, n2);
-        metrics = List.of(metric1);
-        StarTreeFieldConfiguration config1 = new StarTreeFieldConfiguration(
-            1000,
-            Set.of("name"),
-            StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP
-        );
-        field2 = new StarTreeField("starTree", dims, metrics, config1);
-        assertNotEquals(field1, field2);
-
-        config1 = new StarTreeFieldConfiguration(100, Set.of("name", "field2"), StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP);
-        field2 = new StarTreeField("starTree", dims, metrics, config1);
-        assertNotEquals(field1, field2);
-
-        config1 = new StarTreeFieldConfiguration(100, Set.of("name"), StarTreeFieldConfiguration.StarTreeBuildMode.ON_HEAP);
-        field2 = new StarTreeField("starTree", dims, metrics, config1);
-        assertNotEquals(field1, field2);
-
-        field2 = new StarTreeField("starTree", dims, metrics, config);
-        assertEquals(field1, field2);
-    }
-
-    public void testValidations() throws IOException {
-        MapperService mapperService = createMapperService(getExpandedMappingWithJustAvg("status", "size"));
-        Settings settings = Settings.builder().put(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING.getKey(), true).build();
-        CompositeIndexSettings enabledCompositeIndexSettings = new CompositeIndexSettings(
-            settings,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
-        CompositeIndexValidator.validate(mapperService, enabledCompositeIndexSettings, mapperService.getIndexSettings());
-        settings = Settings.builder().put(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING.getKey(), false).build();
-        CompositeIndexSettings disabledCompositeIndexSettings = new CompositeIndexSettings(
-            settings,
-            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
-        );
-        MapperService finalMapperService = mapperService;
-
-        // Since the mapper has no specific index setting to enable star tree, throw error
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> CompositeIndexValidator.validate(
-                finalMapperService,
-                disabledCompositeIndexSettings,
-                finalMapperService.getIndexSettings()
             )
-        );
-        assertEquals(
-            "star tree index cannot be created, enable it using [indices.composite_index.star_tree.enabled] cluster setting or [index.search.star_tree_index.enabled] index setting",
-            ex.getMessage()
-        );
-
-        IndexSettings enabledIndexSettings = new IndexSettings(
-            IndexMetadata.builder("test")
-                .settings(
-                    Settings.builder()
-                        .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-                        .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-                        .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
-                        .put(StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(), true)
-                        .put(SETTINGS)
-                        .build()
-                )
-                .numberOfShards(1)
-                .numberOfReplicas(0)
-                .build(),
-            Settings.EMPTY
-        );
-
-        // since index setting is enabled, throws no error
-        CompositeIndexValidator.validate(mapperService, disabledCompositeIndexSettings, enabledIndexSettings);
-
-        IndexSettings disabledIndexSettings = new IndexSettings(
-            IndexMetadata.builder("test")
-                .settings(
-                    Settings.builder()
-                        .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
-                        .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
-                        .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
-                        .put(StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(), false)
-                        .put(SETTINGS)
-                        .build()
-                )
-                .numberOfShards(1)
-                .numberOfReplicas(0)
-                .build(),
-            Settings.EMPTY
-        );
-
-        // since index setting is disabled, throw exception
-        ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> CompositeIndexValidator.validate(finalMapperService, enabledCompositeIndexSettings, disabledIndexSettings)
-        );
-        assertEquals(
-            "star tree index cannot be created, enable it using [indices.composite_index.star_tree.enabled] cluster setting or [index.search.star_tree_index.enabled] index setting",
-            ex.getMessage()
-        );
-
-        MapperService mapperServiceInvalid = createMapperService(getInvalidMappingWithDv(false, false, false, true));
-        ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> CompositeIndexValidator.validate(
-                mapperServiceInvalid,
-                enabledCompositeIndexSettings,
-                mapperServiceInvalid.getIndexSettings()
-            )
-        );
-        assertEquals(
-            "Aggregations not supported for the metrics field [metric_field] with field type [integer] as part of star tree field",
-            ex.getMessage()
-        );
-
-        MapperService mapperServiceInvalidDim = createMapperService(getInvalidMappingWithDv(false, false, true, false));
-        ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> CompositeIndexValidator.validate(
-                mapperServiceInvalidDim,
-                enabledCompositeIndexSettings,
-                mapperServiceInvalidDim.getIndexSettings()
-            )
-        );
-        assertEquals(
-            "Aggregations not supported for the dimension field [@timestamp] with field type [date] as part of star tree field",
-            ex.getMessage()
-        );
-
-        MapperParsingException mapperParsingExceptionex = expectThrows(
-            MapperParsingException.class,
-            () -> createMapperService(getMinMappingWith2StarTrees())
-        );
-        assertEquals(
-            "Failed to parse mapping [_doc]: Composite fields cannot have more than [1] fields",
-            mapperParsingExceptionex.getMessage()
-        );
-    }
-
-    private XContentBuilder getExpandedMappingWithJustAvg(String dim, String metric) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-            b.field("max_leaf_docs", 100);
-            b.startArray("skip_star_node_creation_for_dimensions");
-            {
-                b.value("@timestamp");
-                b.value("status");
-            }
-            b.endArray();
-            b.startObject("date_dimension");
-            b.field("name", "@timestamp");
-            b.startArray("calendar_intervals");
-            b.value("day");
-            b.value("month");
-            b.endArray();
-            b.endObject();
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
             b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", dim);
-            b.endObject();
-            b.startObject();
-            b.field("name", "unsignedLongDimension"); // UnsignedLongDimension
-            b.endObject();
             b.endArray();
+        assertEquals(4, doc.rootDoc().getFields("size").length);
+                b.startObject();
+        return Settings.builder()
+            b.startObject("config");
+package org.opensearch.index.mapper;
+        }
+    protected void writeFieldValue(XContentBuilder builder) throws IOException {}
+        StarTreeFieldConfiguration config = new StarTreeFieldConfiguration(
+        DateDimension d1 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
+                .startArray("ordered_dimensions")
+            }
+    public void testMetric() {
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+            () -> createMapperService(getMinMapping(false, false, false, false, true))
+                .startObject()
+import org.opensearch.core.common.unit.ByteSizeValue;
+            b.startObject("");
+        NumericDimension n2 = new NumericDimension("name1");
+    }
+        return false;
+            ex.getMessage()
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(1).getMetrics());
+        StarTreeFieldConfiguration config1 = new StarTreeFieldConfiguration(
+            b.endObject();
+            b.endObject();
             b.startArray("metrics");
+    public void testNoMetrics() {
+            Metric metric = starTreeFieldType.getMetrics().get(2);
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+        boolean invalidParam,
+            b.field("type", "date");
+            b.startObject("date_dimension");
+            ex.getMessage(),
+                b.field("type", "date");
+                b.field("type", "date");
+            b.startObject("properties");
+                b.endObject();
+        DocumentMapper mapper = createDocumentMapper(pluggableSettings, getExpandedMappingWithJustAvg("status", "size"));
+            b.endArray();
+            containsString("Failed to parse mapping [_doc]: metrics section is required for star tree field [startree]")
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), false)
             b.startObject();
-            b.field("name", metric);
+                b.field("type", "date");
+            )
+        assertEquals(MetricStat.SUM, MetricStat.fromTypeName("sum"));
+            }
+        );
+        b.field("name", "status");
+        return false;
+            MapperParsingException.class,
+                .startObject()
+        MapperService mapperService = createMapperService(getMinMappingWithNestedField());
+import org.opensearch.index.compositeindex.datacube.MetricStat;
+        });
+            b.endObject();
+            b.startObject("@timestamp");
+            b.endObject();
+            () -> createMapperService(getInvalidMapping(false, false, false, false, true, false, false))
+            assertEquals(
+            b.field("type", "keyword");
+    }
+            b.endObject();
+        boolean invalidMetricType
+    private XContentBuilder getMinMapping() throws IOException {
+        m2.add(MetricStat.VALUE_COUNT);
+            b.startObject("properties");
+                b.startObject();
+                }
+        }
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+        m2.add(MetricStat.MAX);
+            b.field("name", "metric_field");
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+            b.endObject();
+                b.field("invalid", "invalid");
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+            () -> createMapperService(getMinMapping(true, false, false, false, false))
+        field2 = new StarTreeField("starTree", dims, metrics, config);
+                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
+            ex.getMessage()
             b.startArray("stats");
+        MapperParsingException ex = expectThrows(
+                .startObject("numeric_dv1")
+            b.startObject("unsignedLongDimension");
+        b.endArray();
+            b.startObject("config");
+                .endObject()
+            b.startObject("composite");
+        List<Dimension> dims = List.of(d1, n2);
+    }
+    public void testValidValueForFlushTresholdSizeWithoutCompositeIndex() {
+                        .put(StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(), false)
+            ex.getMessage()
+            )
+ * SPDX-License-Identifier: Apache-2.0
+        ex = expectThrows(
+            b.endObject();
+            b.field("type", "star_tree");
+    private XContentBuilder getExpandedMappingWithSumAndCount(String dim, String metric) throws IOException {
+        );
+                b.startObject("invalid");
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MONTH_OF_YEAR)
+                b.field("doc_values", "false");
+        ReadDimension r1 = new ReadDimension("name");
+                        .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            }
+            b.startObject("config");
+            b.endObject();
+            b.startObject("keyword1");
+            b.startObject("fields");
+            b.startObject("config");
+        return topMapping(b -> {
+            if (!missingDim) {
+                        .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+                b.value("status");
+            ex.getMessage()
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+            assertEquals("name.keyword2", starTreeFieldType.getDimensions().get(5).getField());
+            b.field("name", "nested.status");
+    private XContentBuilder getMinMappingWithNestedField() throws IOException {
+        assertEquals(new ByteSizeValue(256, ByteSizeUnit.MB), INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.get(settings));
+            "star tree index cannot be created, enable it using [indices.composite_index.star_tree.enabled] cluster setting or [index.search.star_tree_index.enabled] index setting",
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+        try {
+                b.endArray();
+            b.startObject("config");
+        assertEquals(
+            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
+        throws IOException {
+    public void testInvalidParam() {
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+                b.endObject();
+            } else {
+            }
             b.value("avg");
             b.endArray();
-            b.endObject();
-            b.endArray();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("size");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.startObject("unsignedLongDimension");
-            b.field("type", "unsigned_long");
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getMappingWithDuplicateFields(boolean isDuplicateDim, boolean isDuplicateMetric) {
-        XContentBuilder mapping = null;
-        try {
-            mapping = jsonBuilder().startObject()
-                .startObject("composite")
-                .startObject("startree-1")
-                .field("type", "star_tree")
-                .startObject("config")
-                .startObject("date_dimension")
-                .field("name", "timestamp")
-                .endObject()
-                .startArray("ordered_dimensions")
-                .startObject()
-                .field("name", "numeric_dv")
-                .endObject()
-                .startObject()
-                .field("name", isDuplicateDim ? "numeric_dv" : "numeric_dv1")  // Duplicate dimension
-                .endObject()
-                .endArray()
-                .startArray("metrics")
-                .startObject()
-                .field("name", "numeric_dv")
-                .endObject()
-                .startObject()
-                .field("name", isDuplicateMetric ? "numeric_dv" : "numeric_dv1")  // Duplicate metric
-                .endObject()
-                .endArray()
-                .endObject()
-                .endObject()
-                .endObject()
-                .startObject("properties")
-                .startObject("timestamp")
-                .field("type", "date")
-                .endObject()
-                .startObject("numeric_dv")
-                .field("type", "integer")
-                .field("doc_values", true)
-                .endObject()
-                .startObject("numeric_dv1")
-                .field("type", "integer")
-                .field("doc_values", true)
-                .endObject()
-
-                .endObject()
-                .endObject();
-        } catch (IOException e) {
-            fail("Failed to create mapping: " + e.getMessage());
-        }
-        return mapping;
-    }
-
-    private XContentBuilder getExpandedMappingWithJustSum(String dim, String metric) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-            b.field("max_leaf_docs", 100);
-            b.startArray("skip_star_node_creation_for_dimensions");
-            {
-                b.value("@timestamp");
-                b.value("status");
-                b.value("unsignedLongDimension");
-            }
-            b.endArray();
-            b.startObject("date_dimension");
-            b.field("name", "@timestamp");
-            b.startArray("calendar_intervals");
-            b.value("day");
-            b.value("month");
-            b.endArray();
-            b.endObject();
-            b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", dim);
-            b.endObject();
-            b.startObject();
-            b.field("name", "unsignedLongDimension"); // UnsignedLongDimension
-            b.endObject();
-            b.endArray();
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", metric);
-            b.startArray("stats");
-            b.value("sum");
-            b.endArray();
-            b.endObject();
-            b.endArray();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("size");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.startObject("unsignedLongDimension");
-            b.field("type", "unsigned_long");
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getExpandedMappingWithSumAndCount(String dim, String metric) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-            b.field("max_leaf_docs", 100);
-            b.startArray("skip_star_node_creation_for_dimensions");
-            {
-                b.value("@timestamp");
-                b.value("status");
-            }
-            b.endArray();
-            b.startObject("date_dimension");
-            b.field("name", "@timestamp");
-            b.startArray("calendar_intervals");
-            b.value("day");
-            b.value("month");
-            b.endArray();
-            b.endObject();
-            b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", dim);
-            b.endObject();
-            b.endArray();
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", metric);
-            b.startArray("stats");
-            b.value("sum");
-            b.value("value_count");
-            b.endArray();
-            b.endObject();
-            b.endArray();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("size");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getMinMapping() throws IOException {
-        return getMinMapping(false, false, false, false, false);
-    }
-
-    private XContentBuilder getMinMappingWithDateDims(boolean calendarIntervalsExceeded, boolean dateDimsAbsent, boolean additionalDim)
-        throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-
-            b.field("type", "star_tree");
-
-            b.startObject("config");
-            if (!dateDimsAbsent) {
-                b.startObject("date_dimension");
-                b.field("name", "@timestamp");
-                b.startArray("calendar_intervals");
-                b.value(getRandom().nextBoolean() ? "week" : "1w");
-                if (calendarIntervalsExceeded) {
-                    b.value(getRandom().nextBoolean() ? "day" : "1d");
-                    b.value(getRandom().nextBoolean() ? "second" : "1s");
-                    b.value(getRandom().nextBoolean() ? "hour" : "1h");
-                    b.value(getRandom().nextBoolean() ? "minute" : "1m");
-                    b.value(getRandom().nextBoolean() ? "year" : "1y");
-                    b.value(getRandom().nextBoolean() ? "quarter-hour" : "15m");
-                }
-                b.value(getRandom().nextBoolean() ? "month" : "1M");
-                b.value(getRandom().nextBoolean() ? "half-hour" : "30m");
-                b.endArray();
-                b.endObject();
-            }
-            b.startArray("ordered_dimensions");
-            b.startObject();
             b.field("name", "status");
-            b.endObject();
-            if (additionalDim) {
-                b.startObject();
-                b.field("name", "metric_field");
-                b.endObject();
-                b.startObject();
-                b.field("name", "keyword1");
-                b.endObject();
-            }
-            b.endArray();
-
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
-            b.endObject();
-            b.endArray();
-
-            b.endObject();
-
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-
-            b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-
             b.startObject("metric_field");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getMinMapping(
-        boolean isEmptyDims,
-        boolean isEmptyMetrics,
-        boolean missingDim,
-        boolean missingMetric,
-        boolean missingDateDim
-    ) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-            if (!isEmptyDims) {
-                b.startObject("date_dimension");
-                b.field("name", "@timestamp");
-                b.endObject();
+            b.startArray("skip_star_node_creation_for_dimensions");
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+            b.startObject("@timestamp");
+            assertEquals("unsignedLongDimension", starTreeFieldType.getDimensions().get(2).getField());
+            b.startObject("@timestamp");
+                b.startObject();
+        IllegalArgumentException ex = expectThrows(
+        config1 = new StarTreeFieldConfiguration(100, Set.of("name"), StarTreeFieldConfiguration.StarTreeBuildMode.ON_HEAP);
                 b.startArray("ordered_dimensions");
-                b.startObject();
-                b.field("name", "status");
-                b.endObject();
-                b.startObject();
-                b.field("name", "keyword1");
-                b.endObject();
-                b.endArray();
-            }
-            if (!isEmptyMetrics) {
-                b.startArray("metrics");
-                b.startObject();
-                b.field("name", "status");
-                b.endObject();
-                b.startObject();
-                b.field("name", "metric_field");
-                b.endObject();
-                b.endArray();
-            }
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
             b.endObject();
             b.endObject();
-            b.endObject();
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
             b.startObject("properties");
+            b.endObject();
+        b.endArray();
+        );
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+            b.endObject();
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+        return topMapping(b -> {
+            b.field("name", "status");
+                .field("name", "numeric_dv")
+            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
+            b.field("name", "@timestamp");
             if (!missingDateDim) {
-                b.startObject("@timestamp");
-                b.field("type", "date");
-                b.endObject();
-            }
-            if (!missingDim) {
-                b.startObject("status");
-                b.field("type", "integer");
-                b.endObject();
-            }
-            if (!missingMetric) {
-                b.startObject("metric_field");
-                b.field("type", "integer");
-                b.endObject();
-            }
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.endObject();
+            b.startObject("config");
+            settings,
+            b.startObject();
+            assertEquals(
         });
-    }
-
-    private XContentBuilder getMinMappingWith2StarTrees() throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-
-            b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", "@timestamp");
-            b.endObject();
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.endArray();
-
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
-            b.endObject();
-            b.endArray();
-
-            b.endObject();
-            b.endObject();
-
-            b.startObject("startree1");
-            b.field("type", "star_tree");
-            b.startObject("config");
-
-            b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", "@timestamp");
-            b.endObject();
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.endArray();
-
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
-            b.endObject();
-            b.endArray();
-
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
+        );
+    @Override
             b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-            b.startObject("status");
+            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
+            if (!singleDim) {
+            ex.getMessage()
             b.field("type", "integer");
+        boolean singleDim,
+            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
+            );
+        assertNotEquals(r1, r2);
             b.endObject();
-            b.startObject("metric_field");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getMinMappingWithNestedField() throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            b.field("type", "star_tree");
-            b.startObject("config");
-
-            b.startArray("ordered_dimensions");
-            b.startObject();
-            b.field("name", "@timestamp");
-            b.endObject();
-            b.startObject();
-            b.field("name", "nested.status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "nested.name.keyword1");
-            b.endObject();
-            b.startObject();
-            b.field("name", "nested.name.keyword2");
-            b.endObject();
-            b.startObject();
+            }
             b.field("name", "name.keyword1");
             b.endObject();
-            b.startObject();
-            b.field("name", "name.keyword2");
-            b.endObject();
-            b.endArray();
-
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "nested.status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
-            b.endObject();
-            b.endArray();
-
-            b.endObject();
-            b.endObject();
-
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            b.field("type", "date");
-            b.endObject();
-            b.startObject("nested");
-            b.startObject("properties");
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("name");
-            b.field("type", "text");
-            b.startObject("fields");
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.field("ignore_above", 512);
-            b.endObject();
-            b.startObject("keyword2");
-            b.field("type", "keyword");
-            b.field("ignore_above", 512);
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("metric_field");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.startObject("name");
-            b.field("type", "text");
-            b.startObject("fields");
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.field("ignore_above", 512);
-            b.endObject();
-            b.startObject("keyword2");
-            b.field("type", "keyword");
-            b.field("ignore_above", 512);
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getInvalidMapping(
-        boolean singleDim,
-        boolean invalidSkipDims,
-        boolean invalidDimType,
-        boolean invalidMetricType,
-        boolean invalidParam,
-        boolean invalidDocCountMetricType,
-        boolean invalidDate
-    ) throws IOException {
-        return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
+            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
             b.field("type", "star_tree");
-            b.startObject("config");
-            b.startArray("skip_star_node_creation_for_dimensions");
-            {
-                if (invalidSkipDims) {
-                    b.value("invalid");
-                }
-                b.value("status");
-            }
-            b.endArray();
-            b.startObject("date_dimension");
-            b.field("name", "@timestamp");
-            b.endObject();
-            if (invalidParam) {
-                b.startObject("invalid");
-                b.field("invalid", "invalid");
-                b.endObject();
-            }
-            b.startArray("ordered_dimensions");
-            if (!singleDim) {
-                b.startObject();
-                b.field("name", "status");
-                b.endObject();
-                b.startObject();
-                b.field("name", "keyword1");
-                b.endObject();
-                b.startObject();
-                b.field("name", "ip1");
-                b.endObject();
-            }
-            b.endArray();
-            b.startArray("metrics");
-            b.startObject();
-            b.field("name", "status");
-            b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
-            if (invalidDocCountMetricType) {
-                b.startArray("stats");
-                b.value("_doc_count");
-                b.value("avg");
-                b.endArray();
-            }
-            b.endObject();
-            b.endArray();
-            b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            if (!invalidDate) {
-                b.field("type", "date");
-            } else {
-                b.field("type", "keyword");
-            }
-            b.endObject();
-
-            b.startObject("status");
-            if (!invalidDimType) {
-                b.field("type", "integer");
-            } else {
-                b.field("type", "wildcard");
-            }
-            b.endObject();
-            b.startObject("metric_field");
-            if (invalidMetricType) {
-                b.field("type", "date");
-            } else {
-                b.field("type", "integer");
-            }
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.startObject("ip1");
+                .field("type", "integer")
             b.field("type", "ip");
             b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getInvalidMappingWithDv(
-        boolean singleDim,
-        boolean invalidSkipDims,
-        boolean invalidDimType,
-        boolean invalidMetricType
-    ) throws IOException {
-        return topMapping(b -> {
+                .field("name", isDuplicateMetric ? "numeric_dv" : "numeric_dv1")  // Duplicate metric
+            b.field("type", "keyword");
+            } else {
+        );
+            assertEquals("nested.name.keyword2", starTreeFieldType.getDimensions().get(3).getField());
+        b.endObject();
+            1000,
+    public void testInvalidSingleDim() {
             b.startObject("composite");
-            b.startObject("startree");
+                .field("doc_values", true)
+            b.field("type", "keyword");
+            b.field("type", "date");
+            b.endObject();
+            .put(SETTINGS)
+            b.endObject();
+        m1.add(MetricStat.MAX);
+    }
+        Settings settings = Settings.builder()
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof NumericDimension);
+            "Failed to parse mapping [_doc]: Atleast two dimensions are required to build star tree index field [startree]",
+            b.startObject("status");
+            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
+                b.value(getRandom().nextBoolean() ? "month" : "1M");
+    protected void assertExistsQuery(MapperService mapperService) {}
+        }
+            .put(COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "512mb")
+    }
+                .startObject("composite")
+import org.opensearch.core.xcontent.XContentBuilder;
+        );
+            }
+        MapperService mapperService = createMapperService(getExpandedMappingWithJustAvg("status", "size"));
+        );
             b.field("type", "star_tree");
-            b.startObject("config");
-
-            b.startArray("skip_star_node_creation_for_dimensions");
-            {
-                if (invalidSkipDims) {
-                    b.value("invalid");
-                }
+            }
                 b.value("status");
             }
-            b.endArray();
-            b.startObject("date_dimension");
-            b.field("name", "@timestamp");
+        b.startObject();
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeIndexSettings;
             b.endObject();
-            b.startArray("ordered_dimensions");
-            if (!singleDim) {
+            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
                 b.startObject();
-                b.field("name", "status");
-                b.endObject();
-                b.startObject();
-                b.field("name", "keyword1");
-                b.endObject();
-            }
-            b.endArray();
-            b.startArray("metrics");
+            b.field("type", "star_tree");
+            b.endObject();
+    public void testReadDimensions() {
+            b.field("ignore_above", 512);
             b.startObject();
+    private XContentBuilder getInvalidMappingWithDv(
+            b.endArray();
+    }
+            b.endArray();
+            b.endObject();
+        MapperParsingException ex = expectThrows(
+                b.value("status");
+            // Assert AVG gets added when both of its base metrics is already present
+            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
+            b.startObject("status");
+        });
+            b.field("type", "star_tree");
+            "Failed to parse mapping [_doc]: Composite fields cannot have more than [1] fields",
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
+        return topMapping(b -> {
+        );
+            b.startArray("calendar_intervals");
+import org.opensearch.core.common.unit.ByteSizeUnit;
+            b.startObject();
+            b.endObject();
+            assertEquals("status", starTreeFieldType.getDimensions().get(0).getField());
+    @Override
+            b.endObject();
+            "Failed to parse mapping [_doc]: At most [3] calendar intervals are allowed in dimension [@timestamp]",
+            b.startObject("composite");
+import java.util.List;
+        );
+            b.startObject("properties");
+                mapperServiceInvalid.getIndexSettings()
+            b.startArray("ordered_dimensions");
+            b.startArray("ordered_dimensions");
+        );
+            () -> createMapperService(getMinMappingWith2StarTrees())
+            b.value("sum");
+            b.endObject();
+        );
+                        .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
+            b.startObject();
+            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
+            b.field("type", "integer");
+            if (!invalidDate) {
+            if (!singleDim) {
+    @Override
+            () -> createMapperService(getInvalidMapping(true, false, false, false))
+        assertEquals(d1, d2);
+                Rounding.DateTimeUnit.MONTH_OF_YEAR
+        assertNotEquals(field1, field2);
+                b.field("type", "date");
+            MapperParsingException.class,
+                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getIntervals().get(i).shortName());
+    public void testValidStarTree() throws IOException {
+    }
+            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
+            b.field("name", metric);
+                b.startObject();
+                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getSortedCalendarIntervals().get(i).shortName());
+        assertNotEquals(field1, field2);
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+            b.endObject();
+    }
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+        });
+                b.value(getRandom().nextBoolean() ? "half-hour" : "30m");
+        assertEquals(
+        d2 = new DateDimension("name1", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
+        MapperParsingException ex = expectThrows(
+        boolean isEmptyMetrics,
+            () -> CompositeIndexValidator.validate(
+            "Failed to parse mapping [_doc]: [invalid] in skip_star_node_creation_for_dimensions should be part of ordered_dimensions",
+            b.endObject();
+    public void testValidStarTreeNestedFieldsAndMultiFields() throws IOException {
+        MapperParsingException ex = expectThrows(
+            b.endObject();
+        assertThat(
+        assertEquals(
+            b.startObject("config");
+            {
+            }
+            List<Rounding.DateTimeUnit> expectedTimeUnits = Arrays.asList(
+    }
+        assertNotEquals(n1, n2);
+            );
+            b.startObject("startree");
+            b.startObject("startree");
+    }
+    public void testInvalidSkipDim() {
+            b.endObject();
+        CompositeIndexValidator.validate(mapperService, disabledCompositeIndexSettings, enabledIndexSettings);
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+        assertEquals(List.of(MetricStat.VALUE_COUNT, MetricStat.SUM), MetricStat.AVG.getBaseMetrics());
+        assertThat(e.getMessage(), containsString("name cannot be empty string"));
+import org.opensearch.index.compositeindex.CompositeIndexSettings;
+            b.endObject();
+            MapperParsingException.class,
+            b.endArray();
+        assertEquals(
+            MapperParsingException.class,
+            b.endObject();
+            b.endObject();
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+    public void testDuplicateDimensions() {
+            b.endObject();
+            if (!dateDimsAbsent) {
+/*
+            b.value("month");
+            if (!invalidDimType) {
+    }
+            b.endArray();
+        return getInvalidMapping(singleDim, invalidSkipDims, invalidDimType, invalidMetricType, false, false, false);
+import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitRounding;
+                if (invalidSkipDims) {
+            b.endObject();
+                .startObject("numeric_dv")
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+            b.endObject();
+            b.field("ignore_above", 512);
+            b.startObject("metric_field");
+            assertEquals("name.keyword1", starTreeFieldType.getDimensions().get(4).getField());
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
+    }
+            b.field("type", "integer");
+            b.field("type", "unsigned_long");
+        assertEquals(
+import static com.carrotsearch.randomizedtesting.RandomizedTest.getRandom;
+    }
+            b.field("name", "metric_field");
+    }
+            IllegalArgumentException.class,
+            StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP
+    }
+            // Assert COUNT and SUM gets added when AVG is defined
+        );
+            b.endArray();
+            () -> createMapperService(getMinMapping(false, false, false, true, false))
+            b.field("type", "integer");
+            b.startObject("composite");
+            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
+    protected final XContentBuilder fieldMapping(CheckedConsumer<XContentBuilder, IOException> buildField) throws IOException {
+            b.field("type", "keyword");
+                        .build()
+            }
+    public void testInvalidStarTreeDateDims() throws IOException {
+                .startObject("timestamp")
+        );
+        boolean missingDim,
+            b.endObject();
+                b.startObject();
+            .build();
+        return topMapping(b -> {
+            b.field("type", "text");
+            ex.getMessage()
+        MapperParsingException mapperParsingExceptionex = expectThrows(
+            b.endObject();
+            MapperParsingException.class,
+            ex.getMessage(),
+            "Failed to parse mapping [_doc]: Star tree mapping definition has unsupported parameters:  [invalid : {invalid=invalid}]",
+            b.endObject();
+            }
+                b.endObject();
+                .numberOfReplicas(0)
+            b.startArray("ordered_dimensions");
+    }
+            b.endObject();
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
+import org.opensearch.index.compositeindex.datacube.startree.utils.date.DateTimeUnitAdapter;
+            b.endObject();
+            b.endObject();
+            b.field("type", "star_tree");
+            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
+            b.startObject("keyword1");
+        CompositeIndexSettings disabledCompositeIndexSettings = new CompositeIndexSettings(
+            b.endObject();
+                b.endObject();
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> createMapperService(finalMapping));
+    @Override
+import org.opensearch.common.settings.Settings;
+            MapperParsingException.class,
+            () -> createMapperService(getInvalidMapping(false, false, false, false, false, true, false))
+            }
+        Metric metric2 = new Metric("name", m1);
+            b.startObject();
+            b.endObject();
+        assertEquals(MetricStat.MIN, MetricStat.fromTypeName("min"));
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+                b.endObject();
+                .endObject();
+        assertEquals(
+        MapperParsingException ex = expectThrows(
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+        );
+                b.startArray("calendar_intervals");
+                        .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+        assertEquals(metric1, metric2);
+        assertEquals(r1, r2);
+            b.startObject();
+            }
+                b.endObject();
+    private XContentBuilder getInvalidMapping(boolean singleDim, boolean invalidSkipDims, boolean invalidDimType, boolean invalidMetricType)
+                b.value("avg");
+        MapperParsingException ex = expectThrows(
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
+    protected void minimalMapping(XContentBuilder b) throws IOException {
+        d1CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
+            b.field("name", "unsignedLongDimension"); // UnsignedLongDimension
+                if (invalidSkipDims) {
+            MapperParsingException.class,
+    }
+            b.field("type", "integer");
+            b.field("name", "metric_field");
+        assertEquals(new ByteSizeValue(256, ByteSizeUnit.MB), INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.get(settings));
+/**
+            b.field("name", dim);
+        assertNotEquals(field1, field2);
+            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
+    }
+    }
+    ) throws IOException {
+                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
+            b.startObject("startree");
+            b.startObject("composite");
+            "star tree index cannot be created, enable it using [indices.composite_index.star_tree.enabled] cluster setting or [index.search.star_tree_index.enabled] index setting",
+        MapperParsingException ex = expectThrows(
+        MapperService mapperService = createMapperService(getMinMappingWithDateDims(false, false, false));
+            b.endArray();
+            b.endObject();
+            }
+            b.endObject();
+        assertEquals(MetricStat.AVG, MetricStat.fromTypeName("avg"));
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+            b.startObject("startree");
+            b.endObject();
+    }
+            b.startObject("composite");
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MONTH_OF_YEAR)
+                b.startObject("date_dimension");
+        );
+            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
+        );
+            settings,
+            b.field("name", "unsignedLongDimension"); // UnsignedLongDimension
+import org.opensearch.index.compositeindex.datacube.Dimension;
+            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
+            IndexMetadata.builder("test")
+            b.endObject();
+                mapperServiceInvalidDim,
+            }
+            }
+        StarTreeField field1 = new StarTreeField("starTree", dims, metrics, config);
+                    b.value(getRandom().nextBoolean() ? "quarter-hour" : "15m");
+        field2 = new StarTreeField("starTree", dims, metrics, config1);
+            assertEquals(3, starTreeFieldType.getMetrics().size());
+        assertEquals("Invalid metric stat: invalid", ex.getMessage());
+            List<String> expectedDimensionFields = Arrays.asList("@timestamp_minute", "@timestamp_half-hour");
+        MapperService mapperService = createMapperService(getMinMapping());
+                b.startObject();
+        dims = List.of(d1, n2);
+            b.field("type", "keyword");
+                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY
+            b.field("type", "integer");
+            b.startObject("composite");
+                    Settings.builder()
+            StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP
+            b.endObject();
+        IndexSettings disabledIndexSettings = new IndexSettings(
+            b.startObject();
+            assertEquals(List.of(MetricStat.DOC_COUNT), metric.getMetrics());
+            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
+    // Overriding fieldMapping to make it create composite mappings by default.
+            b.startObject("keyword2");
+        );
+            b.endObject();
+            b.startObject();
+        UnsignedLongDimension n3 = new UnsignedLongDimension("name2");
+            MapperParsingException.class,
+    public void testDimensions() {
             b.field("name", "status");
             b.endObject();
-            b.startObject();
-            b.field("name", "metric_field");
+            b.startObject("status");
+    public void testInvalidMetricTypeWithDocCount() {
+            }
+    public void testInvalidDateDimType() {
+    public void testMissingMetrics() {
+            b.field("type", "star_tree");
+            assertTrue(starTreeFieldType.getDimensions().get(2) instanceof UnsignedLongDimension);
+        assertEquals(
+        });
             b.endObject();
+                .field("name", "timestamp")
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+                )
+ */
+            b.startObject("composite");
+        MapperParsingException ex = expectThrows(
+        );
+            b.field("type", "keyword");
+        assertParseMinimalWarnings();
+            MapperParsingException.class,
+            b.endArray();
+        MapperService mapperServiceInvalidDim = createMapperService(getInvalidMappingWithDv(false, false, true, false));
+        ex = expectThrows(
+    public void testValidStarTreeWithNoDateDim() throws IOException {
+            b.field("type", "date");
+            b.field("type", "keyword");
+            b.endObject();
+        return getMinMapping(false, false, false, false, false);
+                b.endObject();
+    protected void registerParameters(ParameterChecker checker) throws IOException {
+            b.startObject("unsignedLongDimension");
+            Metric metric = starTreeFieldType.getMetrics().get(1);
+import org.opensearch.index.compositeindex.datacube.UnsignedLongDimension;
+            b.startObject("keyword1");
+        assertEquals(field1, field2);
+        d2CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
+                b.endObject();
+            b.field("name", "nested.status");
+            b.endObject();
+            IndexMetadata.builder("test")
+import java.util.Collections;
+                        .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
+            b.endObject();
+            assertEquals(3, starTreeFieldType.getDimensions().size());
+                b.value("@timestamp");
+        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown dimension field [status]"));
+                .endObject()
+        }
+        );
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+            if (additionalDim) {
+            b.field("type", "integer");
+            b.endObject();
+        assertNotEquals(field1, field2);
+            b.startObject("@timestamp");
+            b.startObject("@timestamp");
+        return topMapping(b -> {
+            b.endObject();
+        b.field("type", "star_tree");
+ * Tests for {@link StarTreeMapper}.
+            }
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.DAY_OF_MONTH),
+            if (invalidMetricType) {
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+            assertEquals("_doc_count", metric.getField());
+            b.endArray();
+            b.startObject("keyword1");
+            List<Rounding.DateTimeUnit> expectedTimeUnits = Arrays.asList(
+            b.endObject();
+        MapperService mapperService = createMapperService(getExpandedMappingWithSumAndCount("status", "size"));
+    private XContentBuilder getMinMappingWithDateDims(boolean calendarIntervalsExceeded, boolean dateDimsAbsent, boolean additionalDim)
+            b.field("name", "metric_field");
+                b.endObject();
+            );
+            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "256mb")
+        field2 = new StarTreeField("starTree", dims, metrics, config);
+        boolean invalidDimType,
+            b.startObject();
+                .numberOfShards(1)
+            }
+            b.startObject("status");
+            b.startObject("properties");
+        assertEquals("Failed to parse mapping [_doc]: Invalid metric stat: _doc_count", ex.getMessage());
+            b.endArray();
+            b.endArray();
+            );
+            b.startObject();
+            b.field("type", "star_tree");
+    @Override
+    }
+    }
+                mapperServiceInvalidDim.getIndexSettings()
+                mapperServiceInvalid,
+        ParsedDocument doc = mapper.parse(source(b -> b.startArray("size").value(0).value(1).endArray()));
+        boolean invalidDate
+            b.startObject("date_dimension");
+                b.value("_doc_count");
+            b.endObject();
+            assertEquals(
+            b.field("type", "keyword");
+            b.startObject("date_dimension");
+        MapperParsingException ex = expectThrows(
+            List<MetricStat> expectedMetrics = List.of(MetricStat.SUM);
+            b.field("type", "keyword");
+            b.endObject();
+        boolean missingDateDim
+        );
+                b.endObject();
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+            b.startObject("@timestamp");
+            b.startObject("date_dimension");
+            b.endObject();
+            b.endObject();
+        n2 = new NumericDimension("name1");
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+            b.field("name", "@timestamp");
+                    b.value(getRandom().nextBoolean() ? "day" : "1d");
+            ex.getMessage()
+    }
+            b.startArray("skip_star_node_creation_for_dimensions");
+            b.startArray("metrics");
+        return topMapping(b -> {
+                b.endObject();
+            b.endObject();
+            MapperParsingException.class,
+    }
+        );
+        assertEquals(MetricStat.VALUE_COUNT, MetricStat.fromTypeName("value_count"));
+        List<MetricStat> m2 = new ArrayList<>();
+        List<DateTimeUnitRounding> d1CalendarIntervals = new ArrayList<>();
+            b.startArray("metrics");
+                b.field("type", "date");
+            b.field("type", "keyword");
+    private XContentBuilder getExpandedMappingWithJustSum(String dim, String metric) throws IOException {
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MINUTES_OF_HOUR),
+            b.startObject("config");
+            b.endObject();
+                }
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeField;
+import org.opensearch.common.settings.ClusterSettings;
+    }
+                        .put(StarTreeIndexSettings.STAR_TREE_SEARCH_ENABLED_SETTING.getKey(), true)
+                .startObject()
+    public void testMissingDims() {
+            b.endObject();
+        );
+    }
+            ex.getMessage()
+            b.field("type", "text");
+            assertEquals(10000, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
+        List<MetricStat> m1 = new ArrayList<>();
+            b.field("name", "status");
+            IllegalArgumentException.class,
+            b.startObject();
+        XContentBuilder finalMapping = getMappingWithDuplicateFields(false, true);
+            b.endObject();
+            b.startArray("ordered_dimensions");
+        );
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+                .endObject()
+        assertEquals(
+        d2CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
+                        .build()
+import java.util.ArrayList;
+        field2 = new StarTreeField("starTree", dims, metrics, config);
+        return mapping;
+            b.startObject("composite");
+        }
+            b.startObject("startree");
+        StarTreeField field2 = new StarTreeField("starTree", dims, metrics, config);
+                b.field("doc_values", "true");
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.compositeindex.datacube.DateDimension;
+            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
+        boolean invalidSkipDims,
+        MapperParsingException e = expectThrows(MapperParsingException.class, () -> createMapperService(topMapping(b -> {
+            }
+    }
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+            b.field("name", "status");
+            b.endArray();
+        MapperParsingException ex = expectThrows(
+            b.endObject();
+            }
+            () -> createMapperService(getInvalidMapping(false, false, true, false))
+            b.startObject("keyword2");
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+            b.value("month");
+            b.field("type", "integer");
+            b.startObject();
+            mapperParsingExceptionex.getMessage()
+    }
+            b.startArray("ordered_dimensions");
+                b.endObject();
+            b.endObject();
+            b.field("type", "integer");
+                b.field("type", "integer");
+    }
+            b.field("type", "integer");
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+        assertNotEquals(field1, field2);
+    public void testValidations() throws IOException {
+            b.endObject();
+                starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims()
+        assertThat(ex.getCause().getMessage(), containsString("star tree field and cannot be added inside a document"));
+        boolean invalidDimType,
+        boolean invalidDocCountMetricType,
+        );
+            b.endObject();
+        );
             b.endArray();
             b.endObject();
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("@timestamp");
-            if (!invalidDimType) {
-                b.field("type", "date");
-                b.field("doc_values", "true");
-            } else {
-                b.field("type", "date");
-                b.field("doc_values", "false");
-            }
-            b.endObject();
-
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("metric_field");
-            if (invalidMetricType) {
-                b.field("type", "integer");
-                b.field("doc_values", "false");
-            } else {
-                b.field("type", "integer");
-                b.field("doc_values", "true");
-            }
-            b.endObject();
-            b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.endObject();
-        });
-    }
-
-    private XContentBuilder getInvalidMapping(boolean singleDim, boolean invalidSkipDims, boolean invalidDimType, boolean invalidMetricType)
-        throws IOException {
-        return getInvalidMapping(singleDim, invalidSkipDims, invalidDimType, invalidMetricType, false, false, false);
-    }
-
-    protected boolean supportsOrIgnoresBoost() {
-        return false;
-    }
-
-    protected boolean supportsMeta() {
-        return false;
-    }
-
-    @Override
-    protected void assertExistsQuery(MapperService mapperService) {}
-
-    // Overriding fieldMapping to make it create composite mappings by default.
-    // This way, the parent tests are checking the right behavior for this Mapper.
-    @Override
-    protected final XContentBuilder fieldMapping(CheckedConsumer<XContentBuilder, IOException> buildField) throws IOException {
+            () -> createMapperService(getMinMapping(false, true, false, false, false))
         return topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("startree");
-            buildField.accept(b);
-            b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("size");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("status");
-            b.field("type", "integer");
-            b.endObject();
-            b.endObject();
-        });
+                b.field("name", "metric_field");
     }
-
-    @Override
-    public void testEmptyName() {
-        MapperParsingException e = expectThrows(MapperParsingException.class, () -> createMapperService(topMapping(b -> {
-            b.startObject("composite");
-            b.startObject("");
-            minimalMapping(b);
+        Metric metric1 = new Metric("name", m1);
+            b.field("name", dim);
+            b.startArray("calendar_intervals");
+            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
+            Set.of("name"),
+        field2 = new StarTreeField("starTree", dims, metrics, config1);
+        List<DateTimeUnitRounding> d2CalendarIntervals = new ArrayList<>();
             b.endObject();
-            b.endObject();
-            b.startObject("properties");
-            b.startObject("size");
-            b.field("type", "integer");
-            b.endObject();
-            b.startObject("status");
-            b.field("type", "integer");
+            }
+            b.startObject();
             b.endObject();
             b.startObject("keyword1");
-            b.field("type", "keyword");
-            b.endObject();
-            b.endObject();
-        })));
-        assertThat(e.getMessage(), containsString("name cannot be empty string"));
-        assertParseMinimalWarnings();
-    }
-
-    @Override
-    protected void minimalMapping(XContentBuilder b) throws IOException {
-        b.field("type", "star_tree");
-        b.startObject("config");
-        b.startArray("ordered_dimensions");
-        b.startObject();
-        b.field("name", "size");
-        b.endObject();
-        b.startObject();
-        b.field("name", "status");
-        b.endObject();
-        b.endArray();
-        b.startArray("metrics");
-        b.startObject();
-        b.field("name", "status");
-        b.endObject();
-        b.endArray();
-        b.endObject();
-    }
-
-    @Override
-    protected void writeFieldValue(XContentBuilder builder) throws IOException {}
-
-    @Override
-    protected void registerParameters(ParameterChecker checker) throws IOException {
-
-    }
-
-    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
-    public void testPluggableDataFormatStarTreeThrows() throws IOException {
-        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
-        DocumentMapper mapper = createDocumentMapper(pluggableSettings, getExpandedMappingWithJustAvg("status", "size"));
-        CapturingDocumentInput docInput = new CapturingDocumentInput();
-        MapperParsingException ex = expectThrows(
-            MapperParsingException.class,
-            () -> mapper.parse(source(b -> b.field("startree", "some_value")), docInput)
-        );
-        assertThat(ex.getCause().getMessage(), containsString("star tree field and cannot be added inside a document"));
-    }
 }
+                .field("type", "integer")
+        // since index setting is enabled, throws no error
+            b.field("name", "status");
+            b.startObject("composite");
+            b.startObject("name");
+        );
+            for (int i = 0; i < expectedTimeUnits.size(); i++) {
+            b.startObject();
+            () -> createMapperService(getMinMappingWithDateDims(false, true, false))
+            b.endObject();
+            if (!missingMetric) {
+        settings = Settings.builder().put(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING.getKey(), false).build();
+            () -> CompositeIndexValidator.validate(
+            }
+    }
+            // Assert AVG gets added when both of its base metrics is already present
+        b.endObject();
+            100,
+        List<DateTimeUnitRounding> d1CalendarIntervals = new ArrayList<>();
+            MapperParsingException.class,
+                b.value("status");
+                b.endArray();
+            b.startArray("metrics");
+        boolean invalidSkipDims,
+        b.field("name", "status");
+            MapperParsingException.class,
+        CapturingDocumentInput docInput = new CapturingDocumentInput();
+                .endObject()
+        metrics = List.of(metric1, metric1);
+        b.field("name", "size");
+                assertEquals(new DateTimeUnitAdapter(expectedTimeUnits.get(i)), dateDim.getIntervals().get(i));
+                if (calendarIntervalsExceeded) {
+            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
+            b.endObject();
+            b.endObject();
+            b.field("name", "@timestamp");
+            "Failed to parse mapping [_doc]: Duplicate dimension [numeric_dv] present as part star tree index field [startree-1]",
+        );
+                b.field("name", "status");
+                b.startObject("status");
+                b.field("name", "status");
+import org.opensearch.index.compositeindex.datacube.ReadDimension;
+                b.field("type", "integer");
+            assertEquals(new HashSet<>(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
+                .startObject("properties")
+        ex = expectThrows(
+            IllegalArgumentException.class,
+            b.startArray("skip_star_node_creation_for_dimensions");
+            b.field("name", "metric_field");
+            b.endObject();
+            b.endObject();
+        Settings settings = Settings.builder().put(CompositeIndexSettings.STAR_TREE_INDEX_ENABLED_SETTING.getKey(), true).build();
+    }
+            b.endObject();
+        dims = List.of(d1, n2, n1);
+        throws IOException {
+        boolean isEmptyDims,
+            b.startObject("startree");
+        );
+ * The OpenSearch Contributors require contributions made to
+            b.endArray();
+                new HashSet<>(Arrays.asList("@timestamp", "status")),
+            b.endObject();
+            b.field("name", metric);
+        );
+            assertEquals(2, starTreeFieldType.getMetrics().size());
+            () -> createMapperService(getExpandedMappingWithJustAvg("status", "invalid"))
+            b.startObject("status");
+            b.field("name", "@timestamp");
+                .endObject()
+            b.endObject();
+            b.startObject("status");
+            "Aggregations not supported for the metrics field [metric_field] with field type [integer] as part of star tree field",
+                .build(),
+        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown date dimension field [@timestamp]"));
+            b.field("type", "keyword");
+                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getSortedCalendarIntervals().get(i).shortName());
+            () -> createMapperService(getMinMapping(false, false, true, false, false))
+            b.startObject("keyword1");
+                    b.value(getRandom().nextBoolean() ? "year" : "1y");
+                b.field("name", "keyword1");
+                .endObject()
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+                    b.value("invalid");
+            b.startObject("@timestamp");
+        XContentBuilder mapping = null;
+        assertNotEquals(metric1, metric2);
+    private XContentBuilder getMinMappingWith2StarTrees() throws IOException {
+            assertEquals(List.of(MetricStat.DOC_COUNT), metric.getMetrics());
+            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
+import org.opensearch.common.Rounding;
+            List<String> expectedDimensionFields = Arrays.asList("@timestamp_minute", "@timestamp_half-hour");
+        );
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+            b.field("type", "integer");
+            b.endObject();
+            b.endObject();
+            b.field("name", "@timestamp");
+        })));
+    }
+    }
+            b.startObject();
+            b.startObject("status");
+            assertEquals("status", starTreeFieldType.getMetrics().get(0).getField());
+            b.field("name", dim);
+            ex.getMessage()
+            b.endObject();
+        );
+        MapperParsingException ex = expectThrows(
+            b.endObject();
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+    }
+            List<DateTimeUnitRounding> expectedTimeUnits = Arrays.asList(
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+        dims = List.of(d1, n2);
+    public void testPluggableDataFormatStarTreeThrows() throws IOException {
+                b.field("doc_values", "true");
+                finalMapperService,
+                )
+        assertThat(
+    }
+        StarTreeField field4 = new StarTreeField("starTree", dims1, metrics, config);
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            b.value("day");
+            } else {
+            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
+    }
+                b.field("type", "integer");
+            () -> createMapperService(getExpandedMappingWithJustAvg("invalid", "size"))
+            .build();
+                disabledCompositeIndexSettings,
+                b.endObject();
+            b.field("max_leaf_docs", 100);
+        assertEquals(n1, n2);
+            );
+    public void testStarTreeField() {
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+            List<MetricStat> expectedMetrics = Arrays.asList(MetricStat.AVG, MetricStat.VALUE_COUNT, MetricStat.SUM);
+        XContentBuilder finalMapping = getMappingWithDuplicateFields(true, false);
+            IllegalArgumentException.class,
+                .endObject()
+    public void testInvalidDimType() {
+                b.startObject("metric_field");
+            b.startObject("size");
+            assertEquals("@timestamp", starTreeFieldType.getDimensions().get(0).getField());
+            Settings.EMPTY
+            b.endObject();
+        );
+        );
+        });
+            ex.getMessage()
+                b.field("name", "keyword1");
+import org.opensearch.index.compositeindex.CompositeIndexValidator;
+            b.field("type", "integer");
+            assertEquals("metric_field", starTreeFieldType.getMetrics().get(1).getField());
+                .field("doc_values", true)
+            b.field("type", "date");
+    public void testNoDims() {
+            b.startArray("skip_star_node_creation_for_dimensions");
+        b.startArray("metrics");
+            b.startObject("nested");
+            b.startObject("composite");
+            }
+ * this file be licensed under the Apache-2.0 license or a
+        MapperService mapperService = createMapperService(getExpandedMappingWithJustAvg("status", "size"));
+            b.startObject();
+        StarTreeField field3 = new StarTreeField("starTree", dims1, metrics, config);
+        } catch (IOException e) {
+            b.value("day");
+            minimalMapping(b);
+        MapperParsingException ex = expectThrows(
+                b.field("name", "@timestamp");
+        m1.add(MetricStat.MAX);
+            MapperParsingException.class,
+    @Override
+        CompositeIndexSettings enabledCompositeIndexSettings = new CompositeIndexSettings(
+                b.field("type", "integer");
+                .endObject()
+                .endObject()
+        MapperService mapperServiceInvalid = createMapperService(getInvalidMappingWithDv(false, false, false, true));
+            b.endObject();
+        d1CalendarIntervals.add(new DateTimeUnitAdapter(Rounding.DateTimeUnit.HOUR_OF_DAY));
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof NumericDimension);
+ * compatible open source license.
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.WEEK_OF_WEEKYEAR),
+        MapperParsingException ex = expectThrows(MapperParsingException.class, () -> createMapperService(finalMapping));
+            b.endObject();
+                b.value("@timestamp");
+            b.endObject();
+            b.startObject("startree");
+            b.field("name", "@timestamp");
+            MapperParsingException.class,
+        }
+            if (!invalidDimType) {
+    protected boolean supportsMeta() {
+            {
+            mapping = jsonBuilder().startObject()
+        assertEquals(
+            b.startObject("properties");
+            b.startObject("fields");
+            b.startObject();
+                b.field("name", "keyword1");
+            b.endObject();
+                b.field("doc_values", "false");
+        });
+            .put(IndexMetadata.INDEX_APPEND_ONLY_ENABLED_SETTING.getKey(), true)
+            ex.getMessage()
+        NumericDimension n1 = new NumericDimension("name");
+            b.endObject();
+            b.endObject();
+            assertEquals(StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP, starTreeFieldType.getStarTreeConfig().getBuildMode());
+        assertEquals(
+        });
+            b.field("type", "integer");
+            b.startObject("keyword1");
+            b.field("max_leaf_docs", 100);
+        );
+            assertEquals(100, starTreeFieldType.getStarTreeConfig().maxLeafDocs());
+        assertEquals(field3, field4);
+            b.endArray();
+                enabledCompositeIndexSettings,
+            "Failed to parse mapping [_doc]: unsupported field type associated with dimension [status] as part of star tree field [startree]",
+        );
+            b.startObject("config");
+    private XContentBuilder getInvalidMapping(
+                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY,
+        b.startObject();
+                    b.value(getRandom().nextBoolean() ? "minute" : "1m");
+    public void testInvalidMetric() {
+                .startObject()
+            b.endObject();
+            b.endObject();
+                .endObject()
+            MapperParsingException.class,
+                .endObject()
+        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> MetricStat.fromTypeName("invalid"));
+                b.field("name", "ip1");
+            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
+            assertEquals(Collections.emptySet(), starTreeFieldType.getStarTreeConfig().getSkipStarNodeCreationInDims());
+            b.field("name", "nested.name.keyword2");
+            b.startObject("date_dimension");
+ */
+            b.endObject();
+        assertEquals(
+            b.endArray();
+        b.endObject();
+                b.startObject();
+            b.startObject();
+                .startObject("config")
+            b.startObject();
+            MapperParsingException.class,
+        );
+    public void testMissingDateDims() {
+            );
+            b.endObject();
+            b.startObject("status");
+            b.startObject("size");
+import java.util.HashSet;
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+        assertNotEquals(d1, d2);
+            } else {
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+            b.endObject();
+        assertEquals(
+            b.endObject();
+            b.endObject();
+            b.startObject("ip1");
+            b.startObject();
+    public void testMetricsWithJustSum() throws IOException {
+            b.startArray("ordered_dimensions");
+import org.opensearch.cluster.metadata.IndexMetadata;
+    protected boolean supportsOrIgnoresBoost() {
+            "Failed to parse mapping [_doc]: non-numeric field type is associated with star tree metric [startree]",
+        CompositeIndexValidator.validate(mapperService, enabledCompositeIndexSettings, mapperService.getIndexSettings());
+                b.startObject("date_dimension");
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
+                .endArray()
+            b.field("name", "status");
+        // since index setting is disabled, throw exception
+        MapperService mapperService = createMapperService(getMinMappingWithDateDims(false, true, true));
+            "Failed to parse mapping [_doc]: Atleast two dimensions are required to build star tree index field [startree]",
+            containsString("Failed to parse mapping [_doc]: ordered_dimensions is required for star tree field [startree]")
+            b.endObject();
+            b.field("type", "integer");
+                Rounding.DateTimeUnit.DAY_OF_MONTH,
+        b.startObject("config");
+            b.startObject("status");
+            b.endObject();
+        for (CompositeMappedFieldType type : compositeFieldTypes) {
+    }
+        assertEquals(MetricStat.MAX, MetricStat.fromTypeName("max"));
+            b.startArray("ordered_dimensions");
+            Set.of("name"),
+            b.field("name", "metric_field");
+        assertEquals("Failed to parse mapping [_doc]: unknown metric field [invalid]", ex.getMessage());
+                b.value("@timestamp");
+            b.endObject();
+import org.opensearch.common.CheckedConsumer;
+            b.startObject("properties");
+            b.endObject();
+            b.startObject();
+        return topMapping(b -> {
+            b.endObject();
+                .settings(
+        MapperParsingException ex = expectThrows(
+import java.io.IOException;
+            b.startArray("metrics");
+            );
+            b.startObject();
+            b.endObject();
+        DateDimension d2 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
+            }
+                new HashSet<>(Arrays.asList("@timestamp", "status")),
+        );
+            b.field("type", "keyword");
+            ex.getMessage()
+            } else {
+        DateDimension d1 = new DateDimension("name", d1CalendarIntervals, DateFieldMapper.Resolution.MILLISECONDS);
+            b.endObject();
+    }
+            b.endArray();
+            new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS)
+            b.field("name", "name.keyword2");
+            b.endObject();
+            b.field("type", "integer");
+import org.opensearch.common.util.FeatureFlags;
+                        .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+        List<MetricStat> m1 = new ArrayList<>();
+                .startObject("date_dimension")
+            b.startObject("metric_field");
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+        assertEquals(
+        // 1 intPoint , 1 SNDV field for each value , so 4 in total
+        );
+        List<Dimension> dims1 = List.of(d1, n1, n2, n3);
+            }
+            assertEquals(expectedDimensionFields, dateDim.getSubDimensionNames());
+    }
+            () -> mapper.parse(source(b -> b.field("startree", "some_value")), docInput)
+            b.field("name", "nested.name.keyword1");
+            b.startArray("calendar_intervals");
+            b.endObject();
+            b.endObject();
+        ReadDimension r2 = new ReadDimension("name");
+        assertEquals("Failed to parse mapping [_doc]: unknown dimension field [invalid]", ex.getMessage());
+            b.endArray();
+                b.startObject();
+import org.opensearch.index.compositeindex.datacube.NumericDimension;
+            b.field("type", "keyword");
+            assertEquals("unsignedLongDimension", starTreeFieldType.getDimensions().get(2).getField());
+            b.startArray("metrics");
+                .startObject("startree-1")
+            b.endObject();
+                b.field("name", "status");
+    public void testValidStarTreeDefaults() throws IOException {
+                b.field("type", "keyword");
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+            b.field("name", "@timestamp");
+        );
+            MapperParsingException.class,
+            b.field("name", metric);
+        }
+            b.startObject("keyword1");
+    public void testInvalidDim() {
+            b.startObject("keyword1");
+            b.startObject();
+                .startArray("metrics")
+            expectedMetrics = Arrays.asList(MetricStat.VALUE_COUNT, MetricStat.SUM, MetricStat.AVG);
+            b.startObject("startree");
+        });
+            b.value("day");
+            () -> createMapperService(getInvalidMapping(false, false, false, true))
+    public void testInvalidMetricType() {
+            b.startObject("startree1");
+            b.endObject();
+            assertTrue(starTreeFieldType.getDimensions().get(2) instanceof UnsignedLongDimension);
+            b.endArray();
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+                .settings(
+            b.startObject();
+            {
+import org.opensearch.index.compositeindex.datacube.Metric;
+    }
+    public void testValidStarTreeDateDims() throws IOException {
+            b.endObject();
+                b.endObject();
+            b.value("month");
+            b.value("sum");
+    public void testEmptyName() {
+        metrics = List.of(metric1);
+    }
+                        .put(SETTINGS)
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+            );
+            b.field("name", "@timestamp");
+    }
+        b.startObject();
+            b.startObject("metric_field");
+            ex.getMessage()
+                assertEquals(new DateTimeUnitAdapter(expectedTimeUnits.get(i)), dateDim.getIntervals().get(i));
+        metric2 = new Metric("name", m2);
+            b.endObject();
+        config1 = new StarTreeFieldConfiguration(100, Set.of("name", "field2"), StarTreeFieldConfiguration.StarTreeBuildMode.OFF_HEAP);
+                Rounding.DateTimeUnit.MONTH_OF_YEAR
+import org.opensearch.index.compositeindex.datacube.DataCubeDateTimeUnit;
+            () -> createMapperService(getMinMappingWithDateDims(true, false, false))
+            b.field("type", "date");
+                new DateTimeUnitAdapter(Rounding.DateTimeUnit.MINUTES_OF_HOUR),
+                b.endObject();
+            b.endObject();
+            fail("Failed to create mapping: " + e.getMessage());
+    }
+    }
+            b.startObject("keyword1");
+            b.endArray();
+            b.field("type", "date");
+            {
+                b.endObject();
+        );
+    }
+            Settings.EMPTY
+            List<String> expectedDimensionFields = Arrays.asList("@timestamp_half-hour", "@timestamp_week", "@timestamp_month");
+            b.startObject();
+            b.endArray();
+        );
+            "Failed to parse mapping [_doc]: Duplicate metrics [numeric_dv] present as part star tree index field [startree-1]",
+                new HashSet<>(Arrays.asList("@timestamp", "status", "unsignedLongDimension")),
+            b.field("type", "keyword");
+        MapperParsingException ex = expectThrows(
+import static org.opensearch.index.compositeindex.CompositeIndexSettings.COMPOSITE_INDEX_MAX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING;
+            () -> mapper.parse(source(b -> b.startArray("status").value(0).value(1).endArray()))
+                b.endArray();
+            () -> createMapperService(getInvalidMapping(false, true, false, false))
+            b.endArray();
+            b.endObject();
+                b.field("name", "status");
+                finalMapperService.getIndexSettings()
+                .field("name", "numeric_dv")
+import java.util.Set;
+            ex.getMessage()
+                    b.value(getRandom().nextBoolean() ? "hour" : "1h");
+            b.endObject();
+            b.startObject();
+        r2 = new ReadDimension("name1");
+            b.endObject();
+                b.endArray();
+            b.startObject("size");
+        List<Metric> metrics = List.of(metric1);
+            DateDimension dateDim = (DateDimension) starTreeFieldType.getDimensions().get(0);
+            b.startObject("startree");
+        boolean missingMetric,
+            .put(StarTreeIndexSettings.IS_COMPOSITE_INDEX_SETTING.getKey(), true)
+        assertEquals(
+        );
+            assertEquals("nested.status", starTreeFieldType.getDimensions().get(1).getField());
+            b.startArray("metrics");
+            () -> CompositeIndexValidator.validate(finalMapperService, enabledCompositeIndexSettings, disabledIndexSettings)
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+            MapperParsingException.class,
+            b.field("type", "integer");
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+            b.endObject();
+    }
+            assertEquals("_doc_count", metric.getField());
+            b.endObject();
+import org.opensearch.index.compositeindex.datacube.startree.StarTreeFieldConfiguration;
+            () -> CompositeIndexValidator.validate(
+    private XContentBuilder getExpandedMappingWithJustAvg(String dim, String metric) throws IOException {
+            b.endArray();
+ *
+            if (invalidMetricType) {
+            "Aggregations not supported for the dimension field [@timestamp] with field type [date] as part of star tree field",
+            b.startObject();
+            b.startObject();
+                .build(),
+        Metric metric1 = new Metric("name", m1);
+        MapperParsingException ex = expectThrows(
+        });
+        b.endObject();
+                .field("type", "date")
+                b.startObject();
+            List<MetricStat> expectedMetrics = List.of(MetricStat.SUM, MetricStat.VALUE_COUNT, MetricStat.AVG);
+                enabledCompositeIndexSettings,
+        IndexSettings enabledIndexSettings = new IndexSettings(
+                .numberOfShards(1)
+import java.util.Arrays;
+            }
+            ex.getMessage()
+                b.field("name", "keyword1");
+                b.value("unsignedLongDimension");
+            b.endObject();
+        Settings pluggableSettings = Settings.builder().put(getIndexSettings()).put("index.pluggable.dataformat.enabled", true).build();
+        MapperService finalMapperService = mapperService;
+            b.startObject("startree");
+            b.field("ignore_above", 512);
+        assertThat(ex.getMessage(), containsString("Failed to parse mapping [_doc]: unknown metric field [metric_field]"));
+            b.field("type", "integer");
+        );
+        );
+    public void testInValidStarTreeMinDims() throws IOException {
+                b.startObject();
+        Set<CompositeMappedFieldType> compositeFieldTypes = mapperService.getCompositeFieldTypes();
+            b.field("type", "unsigned_long");
+            b.value("value_count");
+            b.field("max_leaf_docs", 100);
+            if (invalidDocCountMetricType) {
+    }
+            b.endObject();
+            b.startObject("properties");
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
+            b.startObject("config");
+            MapperParsingException.class,
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+            b.field("ignore_above", 512);
+            b.startArray("metrics");
+            b.startObject("properties");
+        return topMapping(b -> {
+            b.startObject("metric_field");
+            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), new ByteSizeValue(512, ByteSizeUnit.MB))
+            b.startObject("status");
+            assertEquals("metric_field", starTreeFieldType.getDimensions().get(1).getField());
+                Rounding.DateTimeUnit.DAY_OF_MONTH,
+                    b.value("invalid");
+            b.endObject();
+        field2 = new StarTreeField("starTree", dims, metrics, config1);
+            b.endObject();
+            );
+        b.startArray("ordered_dimensions");
+            b.endObject();
+        MapperService mapperService = createMapperService(getExpandedMappingWithJustSum("status", "size"));
+            b.startArray("stats");
+    }
+            b.startObject("size");
+            b.endObject();
+            "object mapping for [_doc] with array for [status] cannot be accepted, as the field is also part of composite index mapping which does not accept arrays",
+import static org.opensearch.index.IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING;
+            b.startArray("metrics");
+            buildField.accept(b);
+            b.startObject("name");
+            .put(INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), "256mb")
+                    Settings.builder()
+            b.endObject();
+            assertEquals("nested.status", starTreeFieldType.getMetrics().get(0).getField());
+                .field("type", "star_tree")
+    private XContentBuilder getMinMapping(
+            b.endObject();
+            b.endObject();
+            "Failed to parse mapping [_doc]: date_dimension [@timestamp] should be of type date for star tree field [startree]",
+                b.startArray("metrics");
+    public void testCompositeIndexWithArraysInCompositeField() throws IOException {
+                }
+            () -> createMapperService(getInvalidMapping(false, false, true, false, false, false, true))
+    public void testDuplicateMetrics() {
+            b.endObject();
+                .numberOfReplicas(0)
+        Settings settings = Settings.builder()
+                .endObject()
+        return topMapping(b -> {
+            b.startObject();
+            b.startArray("stats");
+            b.startObject("keyword1");
+    @Override
+            assertTrue(starTreeFieldType.getDimensions().get(1) instanceof NumericDimension);
+            assertTrue(starTreeFieldType.getDimensions().get(1) instanceof NumericDimension);
+                b.endObject();
+        boolean invalidMetricType,
+    // This way, the parent tests are checking the right behavior for this Mapper.
+        boolean singleDim,
+            b.startObject("properties");
+                DataCubeDateTimeUnit.HALF_HOUR_OF_DAY
+    protected Settings getIndexSettings() {
+        );
+                b.field("type", "wildcard");
+        }
+                .endArray()
+            StarTreeMapper.StarTreeFieldType starTreeFieldType = (StarTreeMapper.StarTreeFieldType) type;
+                b.field("name", "@timestamp");
+    ) throws IOException {
+        MapperParsingException ex = expectThrows(
+            b.endArray();
+                b.startArray("stats");
+            b.field("type", "star_tree");
+        assertEquals(
+                assertEquals(expectedTimeUnits.get(i).shortName(), dateDim.getIntervals().get(i).shortName());
+            assertEquals(expectedMetrics, starTreeFieldType.getMetrics().get(0).getMetrics());
+            b.endObject();
+            b.startObject("size");
+            b.endObject();
+            b.endArray();
+            assertEquals("size", starTreeFieldType.getMetrics().get(0).getField());
+        assertEquals(
+            b.field("type", "star_tree");
+    }
+        assertNotEquals(d1, d2);
+            b.startObject();
+            b.endObject();
+            b.startArray("skip_star_node_creation_for_dimensions");
+    @LockFeatureFlag(FeatureFlags.PLUGGABLE_DATAFORMAT_EXPERIMENTAL_FLAG)
+        NumericDimension n2 = new NumericDimension("name");
+            b.endArray();
+        DocumentMapper mapper = createDocumentMapper(getExpandedMappingWithJustAvg("status", "status"));
+            b.endObject();
+            if (!isEmptyDims) {
+            if (invalidParam) {
+            b.startArray("ordered_dimensions");
+    }
+            assertEquals("nested.name.keyword1", starTreeFieldType.getDimensions().get(2).getField());
+        MapperParsingException ex = expectThrows(
+                .field("name", isDuplicateDim ? "numeric_dv" : "numeric_dv1")  // Duplicate dimension
+            assertEquals("status", starTreeFieldType.getDimensions().get(1).getField());
+                b.value("status");
+            b.field("name", "status");
+            .build();
+import static org.hamcrest.Matchers.containsString;
+    }
+                        .put(SETTINGS)
+        NumericDimension n1 = new NumericDimension("numeric");
+                b.field("type", "integer");
+    public void testMetricsWithCountAndSum() throws IOException {
+                    b.value(getRandom().nextBoolean() ? "second" : "1s");
+            assertTrue(starTreeFieldType.getDimensions().get(0) instanceof DateDimension);
+                b.value(getRandom().nextBoolean() ? "week" : "1w");
+                b.field("name", "metric_field");
+        MapperParsingException ex = expectThrows(
+            if (!isEmptyMetrics) {
+    }
+                b.startObject("@timestamp");
+        // Since the mapper has no specific index setting to enable star tree, throw error
+    private XContentBuilder getMappingWithDuplicateFields(boolean isDuplicateDim, boolean isDuplicateMetric) {
+            {
+            b.startObject("properties");
+public class StarTreeMapperTests extends MapperTestCase {
+    public void testValidValueForCompositeIndex() {

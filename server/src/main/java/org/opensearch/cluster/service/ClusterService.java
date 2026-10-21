@@ -1,382 +1,332 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.service;
-
-import org.opensearch.cluster.ClusterManagerMetrics;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateApplier;
-import org.opensearch.cluster.ClusterStateListener;
-import org.opensearch.cluster.ClusterStateTaskConfig;
-import org.opensearch.cluster.ClusterStateTaskExecutor;
-import org.opensearch.cluster.ClusterStateTaskListener;
-import org.opensearch.cluster.LocalNodeClusterManagerListener;
-import org.opensearch.cluster.NodeConnectionsService;
-import org.opensearch.cluster.StreamNodeConnectionsService;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.OperationRouting;
-import org.opensearch.cluster.routing.RerouteService;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.index.IndexingPressureService;
-import org.opensearch.node.Node;
-import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.util.Collections;
-import java.util.Map;
-
-/**
- * Main Cluster Service
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class ClusterService extends AbstractLifecycleComponent {
-    private final ClusterManagerService clusterManagerService;
-
-    private final ClusterApplierService clusterApplierService;
-
-    public static final org.opensearch.common.settings.Setting.AffixSetting<String> USER_DEFINED_METADATA = Setting.prefixKeySetting(
-        "cluster.metadata.",
-        (key) -> Setting.simpleString(key, Property.Dynamic, Property.NodeScope)
-    );
-
-    /**
-     * The node's settings.
-     */
-    private final Settings settings;
-
-    private final ClusterName clusterName;
-
-    private final OperationRouting operationRouting;
-
-    private final ClusterSettings clusterSettings;
-
-    private final String nodeName;
-
-    private RerouteService rerouteService;
-
-    private IndexingPressureService indexingPressureService;
-
-    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
-        this(settings, clusterSettings, threadPool, new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE));
-    }
-
-    public ClusterService(
-        Settings settings,
-        ClusterSettings clusterSettings,
-        ThreadPool threadPool,
-        ClusterManagerMetrics clusterManagerMetrics
-    ) {
-        this(
-            settings,
-            clusterSettings,
-            new ClusterManagerService(settings, clusterSettings, threadPool, clusterManagerMetrics),
-            new ClusterApplierService(Node.NODE_NAME_SETTING.get(settings), settings, clusterSettings, threadPool, clusterManagerMetrics)
         );
-    }
-
-    public ClusterService(
-        Settings settings,
-        ClusterSettings clusterSettings,
-        ClusterManagerService clusterManagerService,
-        ClusterApplierService clusterApplierService
-    ) {
-        this.settings = settings;
-        this.nodeName = Node.NODE_NAME_SETTING.get(settings);
-        this.clusterManagerService = clusterManagerService;
-        this.operationRouting = new OperationRouting(settings, clusterSettings);
-        this.clusterSettings = clusterSettings;
-        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
-        // Add a no-op update consumer so changes are logged
         this.clusterSettings.addAffixUpdateConsumer(USER_DEFINED_METADATA, (first, second) -> {}, (first, second) -> {});
-        this.clusterApplierService = clusterApplierService;
-    }
-
-    public synchronized void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {
-        clusterApplierService.setNodeConnectionsService(nodeConnectionsService);
-    }
-
-    public synchronized void setStreamNodeConnectionsService(StreamNodeConnectionsService streamNodeConnectionsService) {
-        clusterApplierService.setStreamNodeConnectionsService(streamNodeConnectionsService);
-    }
-
-    public void setRerouteService(RerouteService rerouteService) {
-        assert this.rerouteService == null : "RerouteService is already set";
-        this.rerouteService = rerouteService;
-    }
-
-    public RerouteService getRerouteService() {
-        assert this.rerouteService != null : "RerouteService not set";
-        return rerouteService;
-    }
-
-    @Override
-    protected synchronized void doStart() {
-        clusterApplierService.start();
-        clusterManagerService.start();
-    }
-
-    @Override
-    protected synchronized void doStop() {
-        clusterManagerService.stop();
-        clusterApplierService.stop();
-    }
-
-    @Override
-    protected synchronized void doClose() {
-        clusterManagerService.close();
-        clusterApplierService.close();
-    }
-
-    /**
-     * The local node.
+     * @param <T>      the type of the cluster state update task state
+import org.opensearch.node.Node;
      */
-    public DiscoveryNode localNode() {
-        DiscoveryNode localNode = state().getNodes().getLocalNode();
-        if (localNode == null) {
-            throw new IllegalStateException("No local node found. Is the node started?");
-        }
+     *                 that share the same executor will be executed
         return localNode;
-    }
-
-    public OperationRouting operationRouting() {
-        return operationRouting;
-    }
-
+        ClusterStateTaskExecutor<T> executor,
     /**
-     * The currently applied cluster state.
-     * TODO: Should be renamed to appliedState / appliedClusterState
-     */
-    public ClusterState state() {
-        return clusterApplierService.state();
-    }
-
-    /**
-     * Returns true if the state in appliedClusterState is not null
-     */
-    public boolean isStateInitialised() {
-        return clusterApplierService.isStateInitialised();
-    }
-
-    /**
-     * The state that is persisted to store but may not be applied to cluster.
-     * @return ClusterState
-     */
-    public ClusterState preCommitState() {
-        return clusterApplierService.preCommitState();
-    }
-
-    /**
-     * Adds a high priority applier of updated cluster states.
-     */
-    public void addHighPriorityApplier(ClusterStateApplier applier) {
-        clusterApplierService.addHighPriorityApplier(applier);
-    }
-
-    /**
-     * Adds an applier which will be called after all high priority and normal appliers have been called.
-     */
-    public void addLowPriorityApplier(ClusterStateApplier applier) {
-        clusterApplierService.addLowPriorityApplier(applier);
-    }
-
-    /**
-     * Adds a applier of updated cluster states.
-     */
-    public void addStateApplier(ClusterStateApplier applier) {
-        clusterApplierService.addStateApplier(applier);
-    }
-
-    /**
-     * Removes an applier of updated cluster states.
-     */
-    public void removeApplier(ClusterStateApplier applier) {
-        clusterApplierService.removeApplier(applier);
-    }
-
+    public synchronized void setNodeConnectionsService(NodeConnectionsService nodeConnectionsService) {
     /**
      * Add a listener for updated cluster states
-     */
-    public void addListener(ClusterStateListener listener) {
-        clusterApplierService.addListener(listener);
-    }
-
+    public void addStateApplier(ClusterStateApplier applier) {
+ */
     /**
-     * Removes a listener for updated cluster states.
+/*
+            clusterSettings,
+        return clusterApplierService.state();
      */
-    public void removeListener(ClusterStateListener listener) {
-        clusterApplierService.removeListener(listener);
     }
-
-    /**
-     * Add a listener for on/off local node cluster-manager events
-     */
-    public void addLocalNodeClusterManagerListener(LocalNodeClusterManagerListener listener) {
-        clusterApplierService.addLocalNodeClusterManagerListener(listener);
     }
-
-    public ClusterManagerService getClusterManagerService() {
-        return clusterManagerService;
-    }
-
-    /**
-     * Getter and Setter for IndexingPressureService, This method exposes IndexingPressureService stats to other plugins for usage.
-     * Although Indexing Pressure instances can be accessed via Node and NodeService class but none of them are
-     * present in the createComponents signature of Plugin interface currently. {@link org.opensearch.plugins.Plugin#createComponents}
+        assert this.rerouteService != null : "RerouteService not set";
+     *
+ * @opensearch.api
      * Going forward, IndexingPressureService will have required constructs for exposing listeners/interfaces for plugin development.(#478)
-     */
-    public void setIndexingPressureService(IndexingPressureService indexingPressureService) {
-        this.indexingPressureService = indexingPressureService;
+    private final ClusterSettings clusterSettings;
     }
-
-    public IndexingPressureService getIndexingPressureService() {
-        return indexingPressureService;
-    }
-
-    public ClusterApplierService getClusterApplierService() {
-        return clusterApplierService;
-    }
-
-    public static boolean assertClusterOrClusterManagerStateThread() {
-        assert Thread.currentThread().getName().contains(ClusterApplierService.CLUSTER_UPDATE_THREAD_NAME)
-            || Thread.currentThread().getName().contains(ClusterManagerService.CLUSTER_MANAGER_UPDATE_THREAD_NAME)
-            : "not called from the master/cluster state update thread";
-        return true;
-    }
-
-    public ClusterName getClusterName() {
-        return clusterName;
-    }
-
-    public ClusterSettings getClusterSettings() {
-        return clusterSettings;
-    }
-
-    /**
-     * The node's settings.
-     */
-    public Settings getSettings() {
-        return settings;
-    }
-
-    /**
-     * The name of this node.
-     */
-    public final String getNodeName() {
-        return nodeName;
-    }
-
-    /**
-     * Functionality for register task key to cluster manager node.
-     *
-     * @param task - cluster manager task
-     * @param throttlingEnabled - throttling is enabled for task or not i.e does data node perform retries on it or not
-     * @return throttling task key which needs to be passed while submitting task to cluster manager
-     */
-    public ClusterManagerTaskThrottler.ThrottlingKey registerClusterManagerTask(ClusterManagerTask task, boolean throttlingEnabled) {
-        return clusterManagerService.registerClusterManagerTask(task, throttlingEnabled);
-    }
-
-    /**
-     * Submits a cluster state update task; unlike {@link #submitStateUpdateTask(String, Object, ClusterStateTaskConfig,
-     * ClusterStateTaskExecutor, ClusterStateTaskListener)}, submitted updates will not be batched.
-     *
-     * @param source     the source of the cluster state update task
-     * @param updateTask the full context for the cluster state update
-     *                   task
-     *
-     */
-    public <T extends ClusterStateTaskConfig & ClusterStateTaskExecutor<T> & ClusterStateTaskListener> void submitStateUpdateTask(
-        String source,
-        T updateTask
-    ) {
-        submitStateUpdateTask(source, updateTask, updateTask, updateTask, updateTask);
-    }
-
-    /**
-     * Submits a cluster state update task; submitted updates will be
-     * batched across the same instance of executor. The exact batching
-     * semantics depend on the underlying implementation but a rough
-     * guideline is that if the update task is submitted while there
-     * are pending update tasks for the same executor, these update
-     * tasks will all be executed on the executor in a single batch
-     *
-     * @param source   the source of the cluster state update task
      * @param task     the state needed for the cluster state update task
-     * @param config   the cluster state update task configuration
-     * @param executor the cluster state update task executor; tasks
-     *                 that share the same executor will be executed
-     *                 batches on this executor
-     * @param listener callback after the cluster state update task
-     *                 completes
-     * @param <T>      the type of the cluster state update task state
-     *
+    private final ClusterApplierService clusterApplierService;
      */
-    public <T> void submitStateUpdateTask(
-        String source,
-        T task,
-        ClusterStateTaskConfig config,
-        ClusterStateTaskExecutor<T> executor,
-        ClusterStateTaskListener listener
-    ) {
-        submitStateUpdateTasks(source, Collections.singletonMap(task, listener), config, executor);
-    }
-
+            throw new IllegalStateException("No local node found. Is the node started?");
     /**
-     * Submits a batch of cluster state update tasks; submitted updates are guaranteed to be processed together,
+    public <T> void submitStateUpdateTask(
+import org.opensearch.common.lifecycle.AbstractLifecycleComponent;
+     * @param config   the cluster state update task configuration
+    /**
+     * Adds an applier which will be called after all high priority and normal appliers have been called.
+import org.opensearch.common.settings.ClusterSettings;
+    public ClusterState state() {
+ * this work for additional information regarding copyright
+    }
+    public void addLocalNodeClusterManagerListener(LocalNodeClusterManagerListener listener) {
+     * The node's settings.
+            new ClusterManagerService(settings, clusterSettings, threadPool, clusterManagerMetrics),
+    /**
+    }
+import org.opensearch.cluster.ClusterStateTaskListener;
+     * @param config   the cluster state update task configuration
+        submitStateUpdateTasks(source, Collections.singletonMap(task, listener), config, executor);
+     * @return ClusterState
+    public ClusterService(
+    @Override
+        String source,
+        ClusterManagerMetrics clusterManagerMetrics
+/*
+        this.clusterApplierService = clusterApplierService;
+    }
+    }
+    }
+ * under the License.
+import org.opensearch.index.IndexingPressureService;
+        ClusterSettings clusterSettings,
+        clusterApplierService.setStreamNodeConnectionsService(streamNodeConnectionsService);
+import org.opensearch.cluster.ClusterState;
+    }
+        this.clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
+        ClusterManagerService clusterManagerService,
+ * compatible open source license.
+        clusterApplierService.close();
+ * SPDX-License-Identifier: Apache-2.0
+     */
+import org.opensearch.cluster.LocalNodeClusterManagerListener;
+        clusterApplierService.addStateApplier(applier);
+ * Modifications Copyright OpenSearch Contributors. See
+    /**
+import org.opensearch.telemetry.metrics.noop.NoopMetricsRegistry;
+        assert this.rerouteService == null : "RerouteService is already set";
+     * tasks will all be executed on the executor in a single batch
+        this.indexingPressureService = indexingPressureService;
+    @Override
+    }
      * potentially with more tasks of the same executor.
      *
-     * @param source   the source of the cluster state update task
-     * @param tasks    a map of update tasks and their corresponding listeners
-     * @param config   the cluster state update task configuration
-     * @param executor the cluster state update task executor; tasks
-     *                 that share the same executor will be executed
-     *                 batches on this executor
-     * @param <T>      the type of the cluster state update task state
-     *
      */
-    public <T> void submitStateUpdateTasks(
+     *                 batches on this executor
+     * @param source   the source of the cluster state update task
+    public ClusterState preCommitState() {
         final String source,
-        final Map<T, ClusterStateTaskListener> tasks,
+    public void addLowPriorityApplier(ClusterStateApplier applier) {
+    public IndexingPressureService getIndexingPressureService() {
+     *                 completes
+    /**
+ *
+    );
+     *
         final ClusterStateTaskConfig config,
-        final ClusterStateTaskExecutor<T> executor
+    public void removeListener(ClusterStateListener listener) {
+     * @param source     the source of the cluster state update task
+    }
+        clusterApplierService.start();
+     * @param throttlingEnabled - throttling is enabled for task or not i.e does data node perform retries on it or not
+        ClusterStateTaskConfig config,
+ * Licensed to Elasticsearch under one or more contributor
+     */
+     *                 that share the same executor will be executed
+        return operationRouting;
+import org.opensearch.cluster.ClusterName;
+ * the Apache License, Version 2.0 (the "License"); you may
+ * ownership. Elasticsearch licenses this file to you under
+    private final ClusterManagerService clusterManagerService;
+    private final String nodeName;
+        this.nodeName = Node.NODE_NAME_SETTING.get(settings);
+import org.opensearch.cluster.routing.OperationRouting;
     ) {
-        clusterManagerService.submitStateUpdateTasks(source, tasks, config, executor);
+     * @param tasks    a map of update tasks and their corresponding listeners
+    public ClusterSettings getClusterSettings() {
+        clusterApplierService.removeListener(listener);
+     */
+        clusterManagerService.stop();
+ * license agreements. See the NOTICE file distributed with
+     * The currently applied cluster state.
+     * batched across the same instance of executor. The exact batching
     }
 }
+        return nodeName;
+    public ClusterManagerTaskThrottler.ThrottlingKey registerClusterManagerTask(ClusterManagerTask task, boolean throttlingEnabled) {
+    }
+        this(settings, clusterSettings, threadPool, new ClusterManagerMetrics(NoopMetricsRegistry.INSTANCE));
+    }
+    }
+     * Removes a listener for updated cluster states.
+    public void setRerouteService(RerouteService rerouteService) {
+     * Submits a batch of cluster state update tasks; submitted updates are guaranteed to be processed together,
+    /**
+@PublicApi(since = "1.0.0")
+    ) {
+     * Submits a cluster state update task; submitted updates will be
+     * present in the createComponents signature of Plugin interface currently. {@link org.opensearch.plugins.Plugin#createComponents}
+     * @param <T>      the type of the cluster state update task state
+    private final OperationRouting operationRouting;
+    public ClusterName getClusterName() {
+    }
+    protected synchronized void doClose() {
+    private RerouteService rerouteService;
+ * The OpenSearch Contributors require contributions made to
+        return clusterManagerService;
+    }
+     * Submits a cluster state update task; unlike {@link #submitStateUpdateTask(String, Object, ClusterStateTaskConfig,
+        this(
+    public void setIndexingPressureService(IndexingPressureService indexingPressureService) {
+     * Functionality for register task key to cluster manager node.
+ *
+    }
+import org.opensearch.cluster.ClusterStateApplier;
+    private final Settings settings;
+    ) {
+     * @param task - cluster manager task
+    public void addHighPriorityApplier(ClusterStateApplier applier) {
+    /**
+    public Settings getSettings() {
+public class ClusterService extends AbstractLifecycleComponent {
+        final Map<T, ClusterStateTaskListener> tasks,
+        // Add a no-op update consumer so changes are logged
+    }
+     * TODO: Should be renamed to appliedState / appliedClusterState
+            settings,
+    }
+    public ClusterManagerService getClusterManagerService() {
+    }
+        clusterApplierService.setNodeConnectionsService(nodeConnectionsService);
+    public boolean isStateInitialised() {
+        ClusterStateTaskListener listener
+    /**
+     * @param listener callback after the cluster state update task
+    }
+import org.opensearch.cluster.ClusterStateTaskConfig;
+    private IndexingPressureService indexingPressureService;
+    /**
+    public <T> void submitStateUpdateTasks(
+     */
+    }
+        assert Thread.currentThread().getName().contains(ClusterApplierService.CLUSTER_UPDATE_THREAD_NAME)
+import org.opensearch.cluster.StreamNodeConnectionsService;
+        clusterApplierService.stop();
+     */
+        Settings settings,
+package org.opensearch.cluster.service;
+     * Although Indexing Pressure instances can be accessed via Node and NodeService class but none of them are
+import org.opensearch.common.annotation.PublicApi;
+     */
+    /**
+import org.opensearch.common.settings.Setting;
+    public ClusterService(
+        return true;
+    public ClusterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
+     * The node's settings.
+        String source,
+        clusterApplierService.addLocalNodeClusterManagerListener(listener);
+        ClusterApplierService clusterApplierService
+        this.settings = settings;
+import java.util.Map;
+    }
+        return indexingPressureService;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+    public OperationRouting operationRouting() {
+     * Returns true if the state in appliedClusterState is not null
+        clusterApplierService.addLowPriorityApplier(applier);
+    }
+     */
+            || Thread.currentThread().getName().contains(ClusterManagerService.CLUSTER_MANAGER_UPDATE_THREAD_NAME)
+import org.opensearch.cluster.ClusterStateTaskExecutor;
+    public synchronized void setStreamNodeConnectionsService(StreamNodeConnectionsService streamNodeConnectionsService) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * not use this file except in compliance with the License.
+     */
+     * The name of this node.
+    ) {
+        Settings settings,
+ * GitHub history for details.
+/**
+        return rerouteService;
+    }
+        return clusterApplierService.isStateInitialised();
+import org.opensearch.cluster.routing.RerouteService;
+     * are pending update tasks for the same executor, these update
+    public static boolean assertClusterOrClusterManagerStateThread() {
+     */
+        this.rerouteService = rerouteService;
+ * specific language governing permissions and limitations
+        T task,
+     * Getter and Setter for IndexingPressureService, This method exposes IndexingPressureService stats to other plugins for usage.
+        return clusterName;
+import org.opensearch.cluster.node.DiscoveryNode;
+import org.opensearch.common.settings.Settings;
+     * The state that is persisted to store but may not be applied to cluster.
+import org.opensearch.cluster.ClusterStateListener;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * KIND, either express or implied.  See the License for the
+    public void addListener(ClusterStateListener listener) {
+    public static final org.opensearch.common.settings.Setting.AffixSetting<String> USER_DEFINED_METADATA = Setting.prefixKeySetting(
+    /**
+    @Override
+     * @param executor the cluster state update task executor; tasks
+     *
+     */
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.common.settings.Setting.Property;
+        T updateTask
+    ) {
+    protected synchronized void doStart() {
+     * semantics depend on the underlying implementation but a rough
+        clusterApplierService.addHighPriorityApplier(applier);
+     */
+        clusterApplierService.addListener(listener);
+ * Main Cluster Service
+ * software distributed under the License is distributed on an
+     */
+    protected synchronized void doStop() {
+     */
+     * Adds a high priority applier of updated cluster states.
+     * @return throttling task key which needs to be passed while submitting task to cluster manager
+import org.opensearch.cluster.ClusterManagerMetrics;
+     *
+     *
+    /**
+    public void removeApplier(ClusterStateApplier applier) {
+    /**
+        return clusterSettings;
+import org.opensearch.cluster.NodeConnectionsService;
+        DiscoveryNode localNode = state().getNodes().getLocalNode();
+ */
+    }
+        return clusterManagerService.registerClusterManagerTask(task, throttlingEnabled);
+    }
+     * @param source   the source of the cluster state update task
+    public ClusterApplierService getClusterApplierService() {
+    }
+import java.util.Collections;
+    /**
+        clusterApplierService.removeApplier(applier);
+    /**
+        this.clusterSettings = clusterSettings;
+ *
+        clusterManagerService.submitStateUpdateTasks(source, tasks, config, executor);
+            : "not called from the master/cluster state update thread";
+        if (localNode == null) {
+        final ClusterStateTaskExecutor<T> executor
+    private final ClusterName clusterName;
+    /**
+        submitStateUpdateTask(source, updateTask, updateTask, updateTask, updateTask);
+     */
+     * guideline is that if the update task is submitted while there
+        return clusterApplierService;
+    }
+        clusterManagerService.start();
+     * @param updateTask the full context for the cluster state update
+        ClusterSettings clusterSettings,
+     *                 batches on this executor
+    public DiscoveryNode localNode() {
+        this.clusterManagerService = clusterManagerService;
+        clusterManagerService.close();
+        }
+     * Adds a applier of updated cluster states.
+ */
+    }
+     */
+        return clusterApplierService.preCommitState();
+    }
+    public <T extends ClusterStateTaskConfig & ClusterStateTaskExecutor<T> & ClusterStateTaskListener> void submitStateUpdateTask(
+     * @param executor the cluster state update task executor; tasks
+     * Removes an applier of updated cluster states.
+    public RerouteService getRerouteService() {
+ * You may obtain a copy of the License at
+        return settings;
+    }
+     *
+    }
+        (key) -> Setting.simpleString(key, Property.Dynamic, Property.NodeScope)
+/*
+    public final String getNodeName() {
+ * Unless required by applicable law or agreed to in writing,
+        "cluster.metadata.",
+     * ClusterStateTaskExecutor, ClusterStateTaskListener)}, submitted updates will not be batched.
+     * Add a listener for on/off local node cluster-manager events
+ *
+            new ClusterApplierService(Node.NODE_NAME_SETTING.get(settings), settings, clusterSettings, threadPool, clusterManagerMetrics)
+     * The local node.
+     *                   task
+        ThreadPool threadPool,
+        this.operationRouting = new OperationRouting(settings, clusterSettings);
+ */

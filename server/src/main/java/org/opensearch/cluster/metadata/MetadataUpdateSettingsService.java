@@ -1,622 +1,568 @@
+ * license agreements. See the NOTICE file distributed with
+     */
+        AllocationService allocationService,
+                    for (Map.Entry<String, Tuple<Version, String>> entry : request.versions().entrySet()) {
+            ) {
+            } else {
+            ) {
+        IndexScopedSettings indexScopedSettings,
+                                            Settings.builder()
+    }
+                            IndexMetadata.SETTING_NUMBER_OF_REPLICAS,
+                                        IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.get(Settings.EMPTY)
+                            clusterService.getClusterSettings(),
+ *
+    private final ClusterService clusterService;
+            }
+        if (updatedNumberOfSearchReplicas > 0) {
+                || isArchived
+                        actualIndices[i] = index.getName();
+                    }
+            "update-settings " + Arrays.toString(request.indices()),
+import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex;
+                        Settings indexSettings;
+                                        updatedNumberOfSearchReplicas,
+                                if (index.getName().charAt(0) != '.') {
+    /**
+import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;
+                    + " isWildcard: "
+                            if (Version.CURRENT.equals(indexMetadata.getCreationVersion()) == false) {
+        if (setting.exists(openSettings)) {
+                throw new IllegalArgumentException("Cannot change store type to 'cryptofs' for index [" + index.getName() + "]");
+                        throw new IllegalArgumentException(
+                }
+     * @param indices indices that are changing
+ * KIND, either express or implied.  See the License for the
+ * Service responsible for submitting update index settings requests
+        return replicaIncrease * shardsInIndex;
+                            }
+                                 * including updating it to null, indicating that they want to use the default value. In this case, we again
+        clusterService.submitStateUpdateTask(
+                        String index = entry.getKey();
+                }
+                        exception.addValidationErrors(validationErrors);
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
+                throw new IllegalArgumentException(
+            String newStoreType = indexSettings.get(storeTypeKey);
+                        for (String index : actualIndices) {
+                        }
+        this.clusterService = clusterService;
+                    if (!closeIndices.isEmpty()) {
+                                Settings finalSettings = indexSettings.build();
+ * Modifications Copyright OpenSearch Contributors. See
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        Collection<DiscoveryNode> nodes = clusterService.state().nodes().getNodes().values();
+                            indicesService.verifyIndexMetadata(currentMetadata, updatedMetadata);
+                                 * not set. A user can update this setting though, including updating it to null, indicating that they want to
+                                 * The setting index.number_of_replicas is special; we require that this setting has a value in the index. When
+                        changed = true;
+        }
+                            // Verify that this won't take us over the cluster shard limit.
+    private final ShardLimitValidator shardLimitValidator;
+            }
+import org.opensearch.cluster.service.ClusterService;
+    }
+                        }
+                    if (!openIndices.isEmpty()) {
+                    // increment settings versions
+        final UpdateSettingsClusterStateUpdateRequest request,
+                            changed = true;
+                            metadataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
+                    for (int i = 0; i < request.indices().length; i++) {
+                Priority.URGENT,
+                                );
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
+ * software distributed under the License is distributed on an
+import java.util.HashSet;
+        // Get the setting value
+import org.opensearch.cluster.node.DiscoveryNode;
+            boolean isArchived = key.startsWith(ARCHIVED_SETTINGS_PREFIX);
+                        }
+        indexScopedSettings.validate(
+    @Inject
+ * specific language governing permissions and limitations
+                            shardLimitValidator.validateShardLimitForIndices(
+                        }
+import java.util.ArrayList;
+                        }
+            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.cluster.ClusterState;
+    private AwarenessReplicaBalance awarenessReplicaBalance;
+import org.opensearch.cluster.routing.RoutingTable;
+import org.opensearch.cluster.block.ClusterBlock;
+        if (!isRemoteSegmentStoreEnabled) {
+    public static void validateIndexTotalPrimaryShardsPerNodeSetting(Settings indexSettings, ClusterService clusterService) {
+        this.awarenessReplicaBalance = awarenessReplicaBalance;
+                        final int updatedNumberOfSearchReplicas = IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.get(openSettings);
+            return;
+                                normalizedSettings.keySet(),
+                    // allow to change any settings to a close index, and only allow dynamic settings to be changed
+     *
+                } else {
+                    + INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey()
+                        validateSearchReplicaCountSettings(normalizedSettings, request.indices(), currentState);
+                                    false, // ignorePrivateSettings
+                            if (indexScopedSettings.updateSettings(closedSettings, indexSettings, updates, index.getName())) {
+import org.opensearch.common.ValidationException;
+                            Settings.Builder updates = Settings.builder();
+import java.util.List;
+                        .build();
+        }
+     */
+                                    true  // ignoreArchivedSettings
+        // Only validate if store.type is being explicitly modified
+                                 * creating the index, we ensure this by explicitly providing a value for the setting to the default (one) if
+                    }
+                                }
+                                    finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false),
+        final Settings normalizedSettings = Settings.builder()
+        int indexPrimaryShardsPerNode = INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings);
+                public ClusterState execute(ClusterState currentState) {
+                request,
+            true
+                                }
+                            validateOverlap(
+                                        .settings(
+                                // no reason to pollute the settings, we didn't really upgrade anything
+public class MetadataUpdateSettingsService {
+                    }
+                    final String[] actualIndices = new String[request.indices().length];
+ * ownership. Elasticsearch licenses this file to you under
+                            logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
+                    } catch (IOException ex) {
+    private static final Logger logger = LogManager.getLogger(MetadataUpdateSettingsService.class);
+                                indexScopedSettings.validate(
+        validateCryptoStoreSettings(normalizedSettings, request.indices(), clusterService.state());
+                                "Can't update non dynamic settings [%s] for open indices %s",
+                            String.format(
+            for (String index : actualIndices) {
+        final Settings closedSettings = settingsForClosedIndices.build();
+                        final IndexMetadata metadata = currentState.metadata().getIndexSafe(index);
+                    }
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_STORE_ENABLED;
+     * Updates the cluster block only iff the setting exists in the given settings
+                    ClusterState updatedState = ClusterState.builder(currentState)
+                        ).ifPresent(validationErrors::add);
+package org.opensearch.cluster.metadata;
+                            ).ifPresent(validationErrors::add);
+                            // Verify that this won't take us over the cluster shard limit.
+                            metadata.getSettings()
+                            Settings.Builder indexSettings = Settings.builder().put(indexMetadata.getSettings());
+                            Settings.Builder indexSettings = Settings.builder().put(indexMetadata.getSettings());
+                            metadataBuilder.updateNumberOfSearchReplicas(updatedNumberOfSearchReplicas, actualIndices);
+        ShardLimitValidator shardLimitValidator,
+            Setting setting = indexScopedSettings.get(key);
+                                    indexSettings.put(indexMetadata.getSettings());
+                                    // No replica count validation for system indices
+                        validateTranslogFlushIntervalSettingsForCompositeIndex(
+                            indicesService.verifyIndexMetadata(updatedMetadata, updatedMetadata);
+                                index.getName()
+import org.opensearch.common.settings.Settings;
+                                        updatedNumberOfReplicas,
+            }
+                                }
+ * The OpenSearch Contributors require contributions made to
+                                updatedNumberOfSearchReplicas,
+            if ("cryptofs".equals(currentStoreType) && !"cryptofs".equals(newStoreType)) {
+                            openIndices.add(index);
+                                    );
+                        if (indexMetadata != null) {
+                                }
+                settingsForOpenIndices.copy(key, normalizedSettings);
+ * GitHub history for details.
+                                "updating number_of_Search Replicas to [{}] for indices {}",
+                                metadataBuilder.put(IndexMetadata.builder(indexMetadata).settings(finalSettings));
+                                currentState,
+                                 * have to provide an explicit value for the setting to the default (one).
+                }
+import org.opensearch.Version;
+                @Override
+            "update-index-compatibility-versions",
+            .build();
+                    for (IndexMetadata.APIBlock block : IndexMetadata.APIBlock.values()) {
+    /**
+                    "To set " + SETTING_NUMBER_OF_SEARCH_REPLICAS + ", " + SETTING_REMOTE_STORE_ENABLED + " must be set to true"
+        Settings openSettings
+    }
+    private void validateSearchReplicaCountSettings(Settings requestSettings, Index[] indices, ClusterState currentState) {
+                                    indexSettings.put(indexMetadata.getSettings());
+                            shardLimitValidator.validateShardLimitForIndices(
+                                        IndexMetadata.SETTING_NUMBER_OF_REPLICAS,
+import java.util.Optional;
+                        final int updatedNumberOfReplicas = openSettings.getAsInt(
+                    }
+                            MetadataCreateIndexService.validateStoreTypeSettings(indexSettings);
+                if (updateBlock) {
+            return;
+ * this work for additional information regarding copyright
+                        for (Index index : openIndices) {
+                                /*
+                    }
+import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
+                                    }
+                }
+                                        .settingsVersion(1 + indexMetadata.getSettingsVersion())
+import org.opensearch.common.Priority;
+                            final IndexMetadata updatedMetadata = updatedState.metadata().getIndexSafe(index);
+            settingsForClosedIndices.copy(key, normalizedSettings);
+                            IndexMetadata indexMetadata = metadataBuilder.getSafe(index);
+            }
+    }
+        if (indexPrimaryShardsPerNode == -1 && indexRemoteCapablePrimaryShardsPerNode == -1) {
+                                metadataBuilder.put(
+                    if (!skippedSettings.isEmpty() && !openIndices.isEmpty()) {
+import org.opensearch.common.collect.Tuple;
+    private static boolean maybeUpdateClusterBlock(
+                                /*
 /*
+                    if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(openSettings)) {
+        int replicaIncrease = updatedNumberOfReplicas - oldNumberOfReplicas;
+import org.opensearch.core.index.Index;
+                    "Cannot change store type from 'cryptofs' for index [" + index.getName() + "] - cryptofs store type is immutable"
+            // Prevent changing FROM cryptofs to anything else (including null)
+                                 * use the value configured by cluster settings or a default value 1. In this case, we again have to provide
+import org.opensearch.indices.ShardLimitValidator;
+                                        ex.addValidationError(error.get());
+                request,
+                                openIndices
+            normalizedSettings.filter(s -> Regex.isSimpleMatchPattern(s) == false), // don't validate wildcards
+                                 * The setting index.number_of_replicas is special; we require that this setting has a value in the index. When
+                    + INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING.getKey()
+                        .blocks(blocks)
+                    return ClusterState.builder(currentState).metadata(metadataBuilder).build();
+                            final IndexMetadata currentMetadata = currentState.getMetadata().getIndexSafe(index);
+     */
+                    if (blocks.hasIndexBlock(index, block) == false) {
+                        if (same(currentState.metadata().index(index).getSettings(), metadataBuilder.get(index).getSettings()) == false) {
+        // would additionally demand a cluster state repository, which segments_only nodes never configure.
+                            // Now check that we can create the index with the updated settings (dynamic and non-dynamic).
+                public ClusterState execute(ClusterState currentState) {
+                            normalizedSettings,
+ * @opensearch.internal
+                    if (IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.exists(normalizedSettings)
+                    Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
+            if (Arrays.stream(indices)
+                                 * an explicit value for the setting.
+        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
+                                        AutoExpandSearchReplicas.SETTING.get(openSettings)
+                                    if (error.isPresent()) {
+                            final IndexMetadata updatedMetadata = updatedState.metadata().getIndexSafe(index);
+        final Set<String> skippedSettings = new HashSet<>();
+        ClusterBlocks.Builder blocks,
+                             * TODO: should we update the in-sync allocation IDs once the data is deleted by the node?
+import org.opensearch.threadpool.ThreadPool;
+                    // now, reroute in case things change that require it (like number of replicas)
+                    + isWildcard
+                                        throw ex;
+                        for (Index index : closeIndices) {
+                }
+                                    finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false),
+    public void updateSettings(
+     * Validates the 'index.routing.allocation.total_primary_shards_per_node' setting during index settings update.
+        final ActionListener<ClusterStateUpdateResponse> listener
+                        }
+        // (allMatch is vacuously true on an empty node set, which must not count as remote-store enabled). Balancing
+}
+                        if (preserveExisting == false) {
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
+        validateTranslogDurabilitySettings(normalizedSettings, clusterService.getClusterSettings(), clusterService.getSettings());
+                            for (Index index : request.indices()) {
+import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateTranslogDurabilitySettings;
+                                    // No replica count validation for system indices
+        this.indexScopedSettings = indexScopedSettings;
+                                 * there is no value provided on the source of the index creation or "cluster.default_number_of_replicas" is
+        final String storeTypeKey = "index.store.type";
+                                if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(indexSettings) == false) {
+ *
+import org.opensearch.indices.IndicesService;
+import org.opensearch.action.admin.indices.upgrade.post.UpgradeSettingsClusterStateUpdateRequest;
+            // Only allow dynamic settings and wildcards for open indices. Skip archived settings.
+                                    indexSettings.put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, defaultReplicaCount);
+import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findComponentTemplate;
+        final boolean preserveExisting = request.isPreserveExisting();
+import org.opensearch.ExceptionsHelper;
+        // primaries is a placement concern, so it only requires the segments to be remote backed; isRemoteStoreNode()
+                            defaultReplicaCount
+                        if (preserveExisting == false) {
+        for (Index index : indices) {
+/*
+import java.util.Arrays;
+    private final AllocationService allocationService;
+import java.util.Collection;
+                                skippedSettings,
+    ) {
+        this.indicesService = indicesService;
+    private final IndexScopedSettings indexScopedSettings;
+        ClusterBlock block,
+                                request.indices(),
+import org.opensearch.common.inject.Inject;
+import static org.opensearch.cluster.service.ClusterManagerTask.UPDATE_SETTINGS;
+        }
+                skippedSettings.add(key);
+                    }
+                    }
+        if (!indexSettings.keySet().contains(storeTypeKey)) {
+                    if (validationErrors.size() > 0) {
+/*
+                                    IndexMetadata.builder(indexMetadata)
+    public void upgradeIndexSettings(
+        );
+                        .routingTable(routingTableBuilder.build())
+                    Set<Index> closeIndices = new HashSet<>();
+                                    true, // validateDependencies
+        validateIndexTotalPrimaryShardsPerNodeSetting(normalizedSettings, clusterService);
+                    if (blocks.hasIndexBlock(index, block)) {
+                             */
+                    }
+                .allMatch(
+                             * these copies stale.
+                            indexSettings = metadataBuilder.get(index).getSettings();
+                    Set<Index> openIndices = new HashSet<>();
+                    + "] or ["
+            throw new IllegalArgumentException(
+import static org.opensearch.action.support.ContextPreservingActionListener.wrapPreservingContext;
+                            final IndexMetadata.Builder builder = IndexMetadata.builder(metadataBuilder.get(index));
+                                    false, // ignorePrivateSettings
+    }
+            // Prevent changing TO cryptofs from any other type
+    }
+                @Override
+                        blocks.addIndexBlock(index, block);
+            assert setting != null // we already validated the normalized settings
+                    }
+                        changed = true;
+            boolean isWildcard = setting == null && Regex.isSimpleMatchPattern(key);
+                                request.indices(),
+        final Settings openSettings = settingsForOpenIndices.build();
+ */
+        boolean changed = false;
+ * under the License.
+                                    if (error.isPresent()) {
+        this.threadPool = threadPool;
+    ) {
+                    + normalizedSettings.hasValue(key);
+                            // validate storeType for deprecating index stores
+                            routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
+                                if (preserveExisting) {
+                            /*
+                            IndexMetadata indexMetadata = metadataBuilder.getSafe(index);
+                        blocks.removeIndexBlock(index, block);
+import java.util.Locale;
+import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateOverlap;
+                @Override
+                        for (Index index : openIndices) {
+                        );
+    private final ThreadPool threadPool;
+ * Unless required by applicable law or agreed to in writing,
+                    }
+                        Index index = request.indices()[i];
+import org.opensearch.common.settings.Setting;
+                                    Optional<String> error = awarenessReplicaBalance.validate(
+                            builder.settingsVersion(1 + builder.settingsVersion());
+        }
+                        }
+        }
+                    final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
+    private final ClusterManagerTaskThrottler.ThrottlingKey updateSettingsTaskKey;
+                                }
+                                currentState,
+                        return currentState;
+                                        AutoExpandReplicas.SETTING.get(openSettings)
+                                    }
+                                    true, // validateDependencies
+                        || IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.exists(normalizedSettings)) {
+        updateSettingsTaskKey = clusterService.registerClusterManagerTask(UPDATE_SETTINGS, true);
+                @Override
+                        if (metadata.getState() == IndexMetadata.State.OPEN) {
+                                actualIndices
+                                                .put(indexMetadata.getSettings())
+ * Licensed to Elasticsearch under one or more contributor
+                                 * there is a not value provided on the source of the index creation. A user can update this setting though,
+import org.apache.logging.log4j.Logger;
+                );
+                                    true  // ignoreArchivedSettings
+                                if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(indexSettings) == false) {
+                                );
+    /**
+            final boolean updateBlock = setting.get(openSettings);
+                || (isWildcard && normalizedSettings.hasValue(key) == false) : "unknown setting: "
  * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.Version;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsClusterStateUpdateRequest;
-import org.opensearch.action.admin.indices.upgrade.post.UpgradeSettingsClusterStateUpdateRequest;
-import org.opensearch.cluster.AckedClusterStateUpdateTask;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.block.ClusterBlock;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.routing.allocation.AwarenessReplicaBalance;
-import org.opensearch.cluster.service.ClusterManagerTaskThrottler;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Priority;
-import org.opensearch.common.ValidationException;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.regex.Regex;
-import org.opensearch.common.settings.IndexScopedSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.index.Index;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.ShardLimitValidator;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-
-import static org.opensearch.action.support.ContextPreservingActionListener.wrapPreservingContext;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SEARCH_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_REMOTE_STORE_ENABLED;
-import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateOverlap;
-import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateRefreshIntervalSettings;
-import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateTranslogDurabilitySettings;
-import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateTranslogFlushIntervalSettingsForCompositeIndex;
-import static org.opensearch.cluster.metadata.MetadataIndexTemplateService.findComponentTemplate;
-import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
-import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING;
-import static org.opensearch.cluster.service.ClusterManagerTask.UPDATE_SETTINGS;
-import static org.opensearch.common.settings.AbstractScopedSettings.ARCHIVED_SETTINGS_PREFIX;
-import static org.opensearch.index.IndexSettings.same;
-
-/**
- * Service responsible for submitting update index settings requests
- *
- * @opensearch.internal
- */
-public class MetadataUpdateSettingsService {
-    private static final Logger logger = LogManager.getLogger(MetadataUpdateSettingsService.class);
-
-    private final ClusterService clusterService;
-
-    private final AllocationService allocationService;
-
-    private final IndexScopedSettings indexScopedSettings;
-    private final IndicesService indicesService;
-    private final ShardLimitValidator shardLimitValidator;
-    private final ThreadPool threadPool;
-    private final ClusterManagerTaskThrottler.ThrottlingKey updateSettingsTaskKey;
-
-    private AwarenessReplicaBalance awarenessReplicaBalance;
-
-    @Inject
-    public MetadataUpdateSettingsService(
-        ClusterService clusterService,
-        AllocationService allocationService,
-        IndexScopedSettings indexScopedSettings,
-        IndicesService indicesService,
-        ShardLimitValidator shardLimitValidator,
-        ThreadPool threadPool,
+                throw new IllegalArgumentException(
+                             *
+    ) {
+                            routingTableBuilder.updateNumberOfSearchReplicas(updatedNumberOfSearchReplicas, actualIndices);
+                        .metadata(metadataBuilder)
+                                index -> getTotalNewShards(index, currentState, updatedNumberOfReplicas)
         AwarenessReplicaBalance awarenessReplicaBalance
-    ) {
-        this.clusterService = clusterService;
-        this.threadPool = threadPool;
-        this.allocationService = allocationService;
-        this.indexScopedSettings = indexScopedSettings;
-        this.indicesService = indicesService;
-        this.shardLimitValidator = shardLimitValidator;
-        this.awarenessReplicaBalance = awarenessReplicaBalance;
-
-        // Task is onboarded for throttling, it will get retried from associated TransportClusterManagerNodeAction.
-        updateSettingsTaskKey = clusterService.registerClusterManagerTask(UPDATE_SETTINGS, true);
-    }
-
-    public void updateSettings(
-        final UpdateSettingsClusterStateUpdateRequest request,
+                            for (Index index : request.indices()) {
+     */
+                                Locale.ROOT,
+                        throw exception;
+            false, // don't validate dependencies here we check it below never allow to change the number of shards
+        }
+        ClusterService clusterService,
+                wrapPreservingContext(listener, threadPool.getThreadContext())
+                    if (changed == false) {
+import org.opensearch.index.IndexSettings;
+                            indicesService.verifyIndexMetadata(currentMetadata, updatedMetadata);
+                            // This step is mandatory since we allow to update non-dynamic settings on closed indices.
+        ); // validate internal or private index settings
+                            if (indexScopedSettings.updateDynamicSettings(openSettings, indexSettings, updates, index.getName())) {
+        // If default value (-1), no validation needed
+                                if (preserveExisting) {
+                    final List<String> validationErrors = new ArrayList<>();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        String[] actualIndices,
+        ThreadPool threadPool,
+                    }
+                            );
+import org.opensearch.cluster.routing.allocation.AllocationService;
+                            final IndexMetadata currentMetadata = currentState.getMetadata().getIndexSafe(index);
+ */
+                    try {
+                        );
+        int shardsInIndex = indexMetadata.getNumberOfShards();
+import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING;
+import org.opensearch.cluster.AckedClusterStateUpdateTask;
+            }
+ */
+                                    indexSettings.put(
+                                        throw ex;
+                Priority.URGENT,
+                @Override
+            }
+            String currentStoreType = clusterState.metadata().getIndexSafe(index).getSettings().get(storeTypeKey, "");
+            }
+                        }
+                                indexScopedSettings.validate(
+            );
+ * the Apache License, Version 2.0 (the "License"); you may
         final ActionListener<ClusterStateUpdateResponse> listener
-    ) {
-        final Settings normalizedSettings = Settings.builder()
+                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
+        // Remote store is enabled only when there is at least one node and every node has a remote segment store
+        int indexRemoteCapablePrimaryShardsPerNode = INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings);
+                            }
+                                findComponentTemplate(currentState.metadata(), metadata.context()).template().settings(),
+                        changed |= maybeUpdateClusterBlock(actualIndices, blocks, block.block, block.setting, openSettings);
+                                metadataBuilder.put(IndexMetadata.builder(indexMetadata).settings(finalSettings));
+                                if (index.getName().charAt(0) != '.') {
+                            metadataBuilder.put(builder);
+                    + "] can only be used with remote store enabled clusters"
+                    return updatedState;
+                                );
+                             * We do not update the in-sync allocation IDs as they will be removed upon the first index operation which makes
+    private int getTotalNewShards(Index index, ClusterState currentState, int updatedNumberOfReplicas) {
+                ) == false) {
+            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(
             .put(request.settings())
             .normalizePrefix(IndexMetadata.INDEX_SETTING_PREFIX)
-            .build();
-
-        validateRefreshIntervalSettings(normalizedSettings, clusterService.getClusterSettings());
-        validateTranslogDurabilitySettings(normalizedSettings, clusterService.getClusterSettings(), clusterService.getSettings());
-        validateIndexTotalPrimaryShardsPerNodeSetting(normalizedSettings, clusterService);
-        validateCryptoStoreSettings(normalizedSettings, request.indices(), clusterService.state());
-        final int defaultReplicaCount = clusterService.getClusterSettings().get(Metadata.DEFAULT_REPLICA_COUNT_SETTING);
-
-        Settings.Builder settingsForClosedIndices = Settings.builder();
-        Settings.Builder settingsForOpenIndices = Settings.builder();
-        final Set<String> skippedSettings = new HashSet<>();
-
-        indexScopedSettings.validate(
-            normalizedSettings.filter(s -> Regex.isSimpleMatchPattern(s) == false), // don't validate wildcards
-            false, // don't validate dependencies here we check it below never allow to change the number of shards
-            false,
-            true, // Ignore archived setting.
-            true
-        ); // validate internal or private index settings
-        for (String key : normalizedSettings.keySet()) {
-            Setting setting = indexScopedSettings.get(key);
-            boolean isWildcard = setting == null && Regex.isSimpleMatchPattern(key);
-            boolean isArchived = key.startsWith(ARCHIVED_SETTINGS_PREFIX);
-            assert setting != null // we already validated the normalized settings
-                || isArchived
-                || (isWildcard && normalizedSettings.hasValue(key) == false) : "unknown setting: "
-                    + key
-                    + " isWildcard: "
-                    + isWildcard
-                    + " hasValue: "
-                    + normalizedSettings.hasValue(key);
-            settingsForClosedIndices.copy(key, normalizedSettings);
-            // Only allow dynamic settings and wildcards for open indices. Skip archived settings.
-            if (isArchived == false && (isWildcard || setting.isDynamic())) {
-                settingsForOpenIndices.copy(key, normalizedSettings);
-            } else {
-                skippedSettings.add(key);
-            }
-        }
-        final Settings closedSettings = settingsForClosedIndices.build();
-        final Settings openSettings = settingsForOpenIndices.build();
-        final boolean preserveExisting = request.isPreserveExisting();
-
-        clusterService.submitStateUpdateTask(
-            "update-settings " + Arrays.toString(request.indices()),
-            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(
-                Priority.URGENT,
-                request,
-                wrapPreservingContext(listener, threadPool.getThreadContext())
-            ) {
-
-                @Override
-                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
-                    return new ClusterStateUpdateResponse(acknowledged);
-                }
-
-                @Override
-                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
-                    return updateSettingsTaskKey;
-                }
-
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-
-                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder(currentState.routingTable());
-                    Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
-
-                    // allow to change any settings to a close index, and only allow dynamic settings to be changed
-                    // on an open index
-                    Set<Index> openIndices = new HashSet<>();
-                    Set<Index> closeIndices = new HashSet<>();
-                    final String[] actualIndices = new String[request.indices().length];
-                    final List<String> validationErrors = new ArrayList<>();
-                    for (int i = 0; i < request.indices().length; i++) {
-                        Index index = request.indices()[i];
-                        actualIndices[i] = index.getName();
-                        final IndexMetadata metadata = currentState.metadata().getIndexSafe(index);
-                        if (metadata.getState() == IndexMetadata.State.OPEN) {
-                            openIndices.add(index);
-                        } else {
-                            closeIndices.add(index);
-                        }
+                );
                         if (metadata.context() != null) {
-                            validateOverlap(
-                                normalizedSettings.keySet(),
-                                findComponentTemplate(currentState.metadata(), metadata.context()).template().settings(),
-                                index.getName()
-                            ).ifPresent(validationErrors::add);
-                        }
-                        validateTranslogFlushIntervalSettingsForCompositeIndex(
-                            normalizedSettings,
-                            clusterService.getClusterSettings(),
-                            metadata.getSettings()
-                        ).ifPresent(validationErrors::add);
-
-                    }
-
-                    if (validationErrors.size() > 0) {
-                        ValidationException exception = new ValidationException();
-                        exception.addValidationErrors(validationErrors);
-                        throw exception;
-                    }
-
-                    if (!skippedSettings.isEmpty() && !openIndices.isEmpty()) {
-                        throw new IllegalArgumentException(
-                            String.format(
-                                Locale.ROOT,
-                                "Can't update non dynamic settings [%s] for open indices %s",
-                                skippedSettings,
-                                openIndices
-                            )
-                        );
-                    }
-
-                    if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(openSettings)) {
-                        final int updatedNumberOfReplicas = openSettings.getAsInt(
-                            IndexMetadata.SETTING_NUMBER_OF_REPLICAS,
-                            defaultReplicaCount
-                        );
-                        if (preserveExisting == false) {
-                            for (Index index : request.indices()) {
-                                if (index.getName().charAt(0) != '.') {
-                                    // No replica count validation for system indices
-                                    Optional<String> error = awarenessReplicaBalance.validate(
-                                        updatedNumberOfReplicas,
-                                        AutoExpandReplicas.SETTING.get(openSettings)
-                                    );
-
-                                    if (error.isPresent()) {
-                                        ValidationException ex = new ValidationException();
-                                        ex.addValidationError(error.get());
-                                        throw ex;
-                                    }
-                                }
                             }
-
-                            // Verify that this won't take us over the cluster shard limit.
-                            shardLimitValidator.validateShardLimitForIndices(
-                                request.indices(),
-                                currentState,
-                                index -> getTotalNewShards(index, currentState, updatedNumberOfReplicas)
-                            );
-
-                            /*
-                             * We do not update the in-sync allocation IDs as they will be removed upon the first index operation which makes
-                             * these copies stale.
-                             *
-                             * TODO: should we update the in-sync allocation IDs once the data is deleted by the node?
-                             */
-                            routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
-                            metadataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
-                            logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
-                        }
                     }
-
-                    if (IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.exists(openSettings)) {
-                        validateSearchReplicaCountSettings(normalizedSettings, request.indices(), currentState);
-                        final int updatedNumberOfSearchReplicas = IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.get(openSettings);
-                        if (preserveExisting == false) {
-                            for (Index index : request.indices()) {
-                                if (index.getName().charAt(0) != '.') {
-                                    // No replica count validation for system indices
-                                    Optional<String> error = awarenessReplicaBalance.validate(
-                                        updatedNumberOfSearchReplicas,
-                                        AutoExpandSearchReplicas.SETTING.get(openSettings)
-                                    );
-
-                                    if (error.isPresent()) {
-                                        ValidationException ex = new ValidationException();
-                                        ex.addValidationError(error.get());
-                                        throw ex;
-                                    }
-                                }
-                            }
-
-                            // Verify that this won't take us over the cluster shard limit.
-                            shardLimitValidator.validateShardLimitForIndices(
-                                request.indices(),
-                                currentState,
-                                index -> getTotalNewShards(index, currentState, updatedNumberOfSearchReplicas)
-                            );
-
-                            routingTableBuilder.updateNumberOfSearchReplicas(updatedNumberOfSearchReplicas, actualIndices);
-                            metadataBuilder.updateNumberOfSearchReplicas(updatedNumberOfSearchReplicas, actualIndices);
-                            logger.info(
-                                "updating number_of_Search Replicas to [{}] for indices {}",
-                                updatedNumberOfSearchReplicas,
-                                actualIndices
-                            );
-                        }
-                    }
-
-                    if (!openIndices.isEmpty()) {
-                        for (Index index : openIndices) {
-                            IndexMetadata indexMetadata = metadataBuilder.getSafe(index);
-                            Settings.Builder updates = Settings.builder();
-                            Settings.Builder indexSettings = Settings.builder().put(indexMetadata.getSettings());
-                            if (indexScopedSettings.updateDynamicSettings(openSettings, indexSettings, updates, index.getName())) {
-                                if (preserveExisting) {
-                                    indexSettings.put(indexMetadata.getSettings());
-                                }
-                                /*
-                                 * The setting index.number_of_replicas is special; we require that this setting has a value in the index. When
-                                 * creating the index, we ensure this by explicitly providing a value for the setting to the default (one) if
-                                 * there is no value provided on the source of the index creation or "cluster.default_number_of_replicas" is
-                                 * not set. A user can update this setting though, including updating it to null, indicating that they want to
-                                 * use the value configured by cluster settings or a default value 1. In this case, we again have to provide
-                                 * an explicit value for the setting.
-                                 */
-                                if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(indexSettings) == false) {
-                                    indexSettings.put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, defaultReplicaCount);
-                                }
-                                Settings finalSettings = indexSettings.build();
-                                indexScopedSettings.validate(
-                                    finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false),
-                                    true, // validateDependencies
-                                    false, // ignorePrivateSettings
-                                    true  // ignoreArchivedSettings
-                                );
-                                metadataBuilder.put(IndexMetadata.builder(indexMetadata).settings(finalSettings));
-                            }
-                        }
-                    }
-
-                    if (!closeIndices.isEmpty()) {
-                        for (Index index : closeIndices) {
-                            IndexMetadata indexMetadata = metadataBuilder.getSafe(index);
-                            Settings.Builder updates = Settings.builder();
-                            Settings.Builder indexSettings = Settings.builder().put(indexMetadata.getSettings());
-                            if (indexScopedSettings.updateSettings(closedSettings, indexSettings, updates, index.getName())) {
-                                if (preserveExisting) {
-                                    indexSettings.put(indexMetadata.getSettings());
-                                }
-                                /*
-                                 * The setting index.number_of_replicas is special; we require that this setting has a value in the index. When
-                                 * creating the index, we ensure this by explicitly providing a value for the setting to the default (one) if
-                                 * there is a not value provided on the source of the index creation. A user can update this setting though,
-                                 * including updating it to null, indicating that they want to use the default value. In this case, we again
-                                 * have to provide an explicit value for the setting to the default (one).
-                                 */
-                                if (IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.exists(indexSettings) == false) {
-                                    indexSettings.put(
-                                        IndexMetadata.SETTING_NUMBER_OF_REPLICAS,
-                                        IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.get(Settings.EMPTY)
-                                    );
-                                }
-                                Settings finalSettings = indexSettings.build();
-                                indexScopedSettings.validate(
-                                    finalSettings.filter(k -> indexScopedSettings.isPrivateSetting(k) == false),
-                                    true, // validateDependencies
-                                    false, // ignorePrivateSettings
-                                    true  // ignoreArchivedSettings
-                                );
-                                metadataBuilder.put(IndexMetadata.builder(indexMetadata).settings(finalSettings));
-                            }
-                        }
-                    }
-
-                    if (IndexSettings.INDEX_TRANSLOG_RETENTION_AGE_SETTING.exists(normalizedSettings)
-                        || IndexSettings.INDEX_TRANSLOG_RETENTION_SIZE_SETTING.exists(normalizedSettings)) {
-                        Settings indexSettings;
-                        for (String index : actualIndices) {
-                            indexSettings = metadataBuilder.get(index).getSettings();
-                            MetadataCreateIndexService.validateTranslogRetentionSettings(indexSettings);
-                            // validate storeType for deprecating index stores
-                            MetadataCreateIndexService.validateStoreTypeSettings(indexSettings);
-                        }
-                    }
-                    boolean changed = false;
-                    // increment settings versions
-                    for (final String index : actualIndices) {
-                        if (same(currentState.metadata().index(index).getSettings(), metadataBuilder.get(index).getSettings()) == false) {
-                            changed = true;
-                            final IndexMetadata.Builder builder = IndexMetadata.builder(metadataBuilder.get(index));
-                            builder.settingsVersion(1 + builder.settingsVersion());
-                            metadataBuilder.put(builder);
-                        }
-                    }
-
-                    final ClusterBlocks.Builder blocks = ClusterBlocks.builder().blocks(currentState.blocks());
-                    for (IndexMetadata.APIBlock block : IndexMetadata.APIBlock.values()) {
-                        changed |= maybeUpdateClusterBlock(actualIndices, blocks, block.block, block.setting, openSettings);
-                    }
-
-                    if (changed == false) {
-                        return currentState;
-                    }
-
-                    ClusterState updatedState = ClusterState.builder(currentState)
-                        .metadata(metadataBuilder)
-                        .routingTable(routingTableBuilder.build())
-                        .blocks(blocks)
-                        .build();
-                    // now, reroute in case things change that require it (like number of replicas)
-                    updatedState = allocationService.reroute(updatedState, "settings update");
-                    try {
-                        for (Index index : openIndices) {
-                            final IndexMetadata currentMetadata = currentState.getMetadata().getIndexSafe(index);
-                            final IndexMetadata updatedMetadata = updatedState.metadata().getIndexSafe(index);
-                            indicesService.verifyIndexMetadata(currentMetadata, updatedMetadata);
-                        }
-                        for (Index index : closeIndices) {
-                            final IndexMetadata currentMetadata = currentState.getMetadata().getIndexSafe(index);
-                            final IndexMetadata updatedMetadata = updatedState.metadata().getIndexSafe(index);
                             // Verifies that the current index settings can be updated with the updated dynamic settings.
-                            indicesService.verifyIndexMetadata(currentMetadata, updatedMetadata);
-                            // Now check that we can create the index with the updated settings (dynamic and non-dynamic).
-                            // This step is mandatory since we allow to update non-dynamic settings on closed indices.
-                            indicesService.verifyIndexMetadata(updatedMetadata, updatedMetadata);
-                        }
-                    } catch (IOException ex) {
-                        throw ExceptionsHelper.convertToOpenSearchException(ex);
-                    }
-                    return updatedState;
-                }
-            }
-        );
+/**
     }
-
-    private int getTotalNewShards(Index index, ClusterState currentState, int updatedNumberOfReplicas) {
-        IndexMetadata indexMetadata = currentState.metadata().index(index);
-        int shardsInIndex = indexMetadata.getNumberOfShards();
-        int oldNumberOfReplicas = indexMetadata.getNumberOfReplicas();
-        int replicaIncrease = updatedNumberOfReplicas - oldNumberOfReplicas;
-        return replicaIncrease * shardsInIndex;
-    }
-
-    /**
-     * Updates the cluster block only iff the setting exists in the given settings
-     */
-    private static boolean maybeUpdateClusterBlock(
-        String[] actualIndices,
-        ClusterBlocks.Builder blocks,
-        ClusterBlock block,
-        Setting<Boolean> setting,
-        Settings openSettings
-    ) {
-        boolean changed = false;
-        if (setting.exists(openSettings)) {
-            final boolean updateBlock = setting.get(openSettings);
-            for (String index : actualIndices) {
-                if (updateBlock) {
-                    if (blocks.hasIndexBlock(index, block) == false) {
-                        blocks.addIndexBlock(index, block);
-                        changed = true;
-                    }
-                } else {
-                    if (blocks.hasIndexBlock(index, block)) {
-                        blocks.removeIndexBlock(index, block);
-                        changed = true;
-                    }
-                }
-            }
-        }
-        return changed;
-    }
-
-    public void upgradeIndexSettings(
-        final UpgradeSettingsClusterStateUpdateRequest request,
-        final ActionListener<ClusterStateUpdateResponse> listener
-    ) {
-        clusterService.submitStateUpdateTask(
-            "update-index-compatibility-versions",
-            new AckedClusterStateUpdateTask<ClusterStateUpdateResponse>(
-                Priority.URGENT,
-                request,
-                wrapPreservingContext(listener, threadPool.getThreadContext())
-            ) {
-
-                @Override
-                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
-                    return new ClusterStateUpdateResponse(acknowledged);
-                }
-
-                @Override
-                public ClusterState execute(ClusterState currentState) {
-                    Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
-                    for (Map.Entry<String, Tuple<Version, String>> entry : request.versions().entrySet()) {
-                        String index = entry.getKey();
-                        IndexMetadata indexMetadata = metadataBuilder.get(index);
-                        if (indexMetadata != null) {
-                            if (Version.CURRENT.equals(indexMetadata.getCreationVersion()) == false) {
-                                // no reason to pollute the settings, we didn't really upgrade anything
-                                metadataBuilder.put(
-                                    IndexMetadata.builder(indexMetadata)
-                                        .settings(
-                                            Settings.builder()
-                                                .put(indexMetadata.getSettings())
-                                                .put(IndexMetadata.SETTING_VERSION_UPGRADED, entry.getValue().v1())
-                                        )
-                                        .settingsVersion(1 + indexMetadata.getSettingsVersion())
-                                );
-                            }
-                        }
-                    }
-                    return ClusterState.builder(currentState).metadata(metadataBuilder).build();
-                }
-            }
-        );
-    }
-
-    /**
-     * Validates that if we are trying to update search replica count the index is segrep enabled.
-     *
      * @param requestSettings {@link Settings}
-     * @param indices indices that are changing
-     * @param currentState {@link ClusterState} current cluster state
-     */
-    private void validateSearchReplicaCountSettings(Settings requestSettings, Index[] indices, ClusterState currentState) {
-        final int updatedNumberOfSearchReplicas = IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.get(requestSettings);
-        if (updatedNumberOfSearchReplicas > 0) {
-            if (Arrays.stream(indices)
-                .allMatch(
-                    index -> currentState.metadata().index(index.getName()).getSettings().getAsBoolean(SETTING_REMOTE_STORE_ENABLED, false)
-                ) == false) {
-                throw new IllegalArgumentException(
-                    "To set " + SETTING_NUMBER_OF_SEARCH_REPLICAS + ", " + SETTING_REMOTE_STORE_ENABLED + " must be set to true"
-                );
-            }
-        }
-    }
-
-    /**
-     * Validates the 'index.routing.allocation.total_primary_shards_per_node' setting during index settings update.
-     * Ensures this setting can only be modified for existing indices in remote store enabled clusters.
-     */
-    public static void validateIndexTotalPrimaryShardsPerNodeSetting(Settings indexSettings, ClusterService clusterService) {
-        // Get the setting value
-        int indexPrimaryShardsPerNode = INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings);
-        int indexRemoteCapablePrimaryShardsPerNode = INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING.get(indexSettings);
-
-        // If default value (-1), no validation needed
-        if (indexPrimaryShardsPerNode == -1 && indexRemoteCapablePrimaryShardsPerNode == -1) {
-            return;
-        }
-
-        // Remote store is enabled only when there is at least one node and every node has a remote segment store
-        // (allMatch is vacuously true on an empty node set, which must not count as remote-store enabled). Balancing
-        // primaries is a placement concern, so it only requires the segments to be remote backed; isRemoteStoreNode()
-        // would additionally demand a cluster state repository, which segments_only nodes never configure.
-        Collection<DiscoveryNode> nodes = clusterService.state().nodes().getNodes().values();
+                            }
+                            );
+                    // on an open index
+                    if (IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.exists(openSettings)) {
         boolean isRemoteSegmentStoreEnabled = !nodes.isEmpty() && nodes.stream().allMatch(DiscoveryNode::isRemoteSegmentStoreNode);
-        if (!isRemoteSegmentStoreEnabled) {
-            throw new IllegalArgumentException(
-                "Setting ["
-                    + INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING.getKey()
-                    + "] or ["
-                    + INDEX_TOTAL_REMOTE_CAPABLE_PRIMARY_SHARDS_PER_NODE_SETTING.getKey()
-                    + "] can only be used with remote store enabled clusters"
-            );
-        }
-    }
-
-    /**
+                                 * creating the index, we ensure this by explicitly providing a value for the setting to the default (one) if
+import static org.opensearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_PRIMARY_SHARDS_PER_NODE_SETTING;
+                    }
      * Validates crypto store settings are immutable after index creation.
-     */
-    public static void validateCryptoStoreSettings(Settings indexSettings, Index[] indices, ClusterState clusterState) {
-        final String storeTypeKey = "index.store.type";
-
-        // Only validate if store.type is being explicitly modified
-        if (!indexSettings.keySet().contains(storeTypeKey)) {
-            return;
+                            closeIndices.add(index);
+            true, // Ignore archived setting.
+                                 */
+ * You may obtain a copy of the License at
+                wrapPreservingContext(listener, threadPool.getThreadContext())
+ * this file be licensed under the Apache-2.0 license or a
+                public ClusterManagerTaskThrottler.ThrottlingKey getClusterManagerThrottlingKey() {
         }
-
-        for (Index index : indices) {
-            String currentStoreType = clusterState.metadata().getIndexSafe(index).getSettings().get(storeTypeKey, "");
-            String newStoreType = indexSettings.get(storeTypeKey);
-
-            // Prevent changing FROM cryptofs to anything else (including null)
-            if ("cryptofs".equals(currentStoreType) && !"cryptofs".equals(newStoreType)) {
-                throw new IllegalArgumentException(
-                    "Cannot change store type from 'cryptofs' for index [" + index.getName() + "] - cryptofs store type is immutable"
-                );
-            }
-
-            // Prevent changing TO cryptofs from any other type
+ * compatible open source license.
+import java.util.Map;
+            false,
+        final int defaultReplicaCount = clusterService.getClusterSettings().get(Metadata.DEFAULT_REPLICA_COUNT_SETTING);
+     * @param currentState {@link ClusterState} current cluster state
+                        }
+                    return updateSettingsTaskKey;
+                                Settings finalSettings = indexSettings.build();
+                        IndexMetadata indexMetadata = metadataBuilder.get(index);
+                            );
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+        IndicesService indicesService,
+                                        ValidationException ex = new ValidationException();
+        return changed;
+                        } else {
+ */
+                                        ex.addValidationError(error.get());
+                    Metadata.Builder metadataBuilder = Metadata.builder(currentState.metadata());
             if (!"cryptofs".equals(currentStoreType) && "cryptofs".equals(newStoreType)) {
-                throw new IllegalArgumentException("Cannot change store type to 'cryptofs' for index [" + index.getName() + "]");
-            }
-        }
+                                    );
+        final int updatedNumberOfSearchReplicas = IndexMetadata.INDEX_NUMBER_OF_SEARCH_REPLICAS_SETTING.get(requestSettings);
+                                 */
+import static org.opensearch.index.IndexSettings.same;
+                        ValidationException exception = new ValidationException();
+        Settings.Builder settingsForOpenIndices = Settings.builder();
+                    boolean changed = false;
+                    updatedState = allocationService.reroute(updatedState, "settings update");
+import java.io.IOException;
+import static org.opensearch.cluster.metadata.MetadataCreateIndexService.validateRefreshIntervalSettings;
+        );
+                                        ValidationException ex = new ValidationException();
+                "Setting ["
+                                                .put(IndexMetadata.SETTING_VERSION_UPGRADED, entry.getValue().v1())
+    public static void validateCryptoStoreSettings(Settings indexSettings, Index[] indices, ClusterState clusterState) {
+                        for (Index index : closeIndices) {
+    /**
+                    }
+        int oldNumberOfReplicas = indexMetadata.getNumberOfReplicas();
+        IndexMetadata indexMetadata = currentState.metadata().index(index);
+        final UpgradeSettingsClusterStateUpdateRequest request,
+     * Validates that if we are trying to update search replica count the index is segrep enabled.
+import org.apache.logging.log4j.LogManager;
+                    for (final String index : actualIndices) {
     }
-}
+                }
+                                        )
+                                    Optional<String> error = awarenessReplicaBalance.validate(
+    public MetadataUpdateSettingsService(
+        clusterService.submitStateUpdateTask(
+    ) {
+        for (String key : normalizedSettings.keySet()) {
+    private final IndicesService indicesService;
+            if (isArchived == false && (isWildcard || setting.isDynamic())) {
+        Setting<Boolean> setting,
+                    index -> currentState.metadata().index(index.getName()).getSettings().getAsBoolean(SETTING_REMOTE_STORE_ENABLED, false)
+                    return new ClusterStateUpdateResponse(acknowledged);
+                            logger.info(
+                                index -> getTotalNewShards(index, currentState, updatedNumberOfSearchReplicas)
+                    return new ClusterStateUpdateResponse(acknowledged);
+                        throw ExceptionsHelper.convertToOpenSearchException(ex);
+                    + " hasValue: "
+     * Ensures this setting can only be modified for existing indices in remote store enabled clusters.
+import org.opensearch.common.settings.IndexScopedSettings;
+                    + key
+                            }
+        this.allocationService = allocationService;
+                                    );
+import static org.opensearch.common.settings.AbstractScopedSettings.ARCHIVED_SETTINGS_PREFIX;
+import org.opensearch.cluster.block.ClusterBlocks;
+ * not use this file except in compliance with the License.
+                            Settings.Builder updates = Settings.builder();
+                            MetadataCreateIndexService.validateTranslogRetentionSettings(indexSettings);
+                protected ClusterStateUpdateResponse newResponse(boolean acknowledged) {
+                            )
+                                }
+        Settings.Builder settingsForClosedIndices = Settings.builder();
+        validateRefreshIntervalSettings(normalizedSettings, clusterService.getClusterSettings());
+ *
+import org.opensearch.common.regex.Regex;
+                        }
+        this.shardLimitValidator = shardLimitValidator;
+                        }

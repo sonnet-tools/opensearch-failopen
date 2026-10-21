@@ -1,1341 +1,1043 @@
-setup:
-  - do:
-      indices.create:
-          index: test_1
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
-            mappings:
-              properties:
-                str:
-                   type: keyword
-                ip:
-                   type: ip
-                boolean:
-                   type: boolean
-                integer:
-                  type: long
-                double:
-                  type: double
-                number:
-                  type: long
-                date:
-                  type: date
-
-  - do:
-      indices.create:
-          index: test_2
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
-                number:
-                  type: double
-
-  - do:
-      cluster.health:
-        wait_for_status: green
-
----
-"Basic test":
-  - do:
-      index:
         index: test_1
+      indices.refresh: {}
         id: 1
-        body: { "str" : "abc" }
-
+        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "unmapped_long", "value_type" : "long", "missing": 3 } } } }
+        id: 1
   - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "str": "bcd" }
-
   - do:
       indices.refresh: {}
-
+          { "str": "pig", "number": 1 }
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 2 }
-
-  - match: { aggregations.str_terms.buckets.0.key: "abc" }
-
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.str_terms.buckets.1.key: "bcd" }
-
-  - is_false: aggregations.str_terms.buckets.1.key_as_string
-
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
-
----
-"IP test":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "ip": "::1" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "ip": "127.0.0.1" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "ip": "::1" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_terms.buckets: 2 }
-
-  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
-
-  - is_false: aggregations.ip_terms.buckets.0.key_as_string
-
-  - match: { aggregations.ip_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.ip_terms.buckets.1.key: "127.0.0.1" }
-
-  - is_false: aggregations.ip_terms.buckets.1.key_as_string
-
-  - match: { aggregations.ip_terms.buckets.1.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
         body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip", "include" : [ "127.0.0.1" ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_terms.buckets: 1 }
-
-  - match: { aggregations.ip_terms.buckets.0.key: "127.0.0.1" }
-
+          size: 0
+          { "str": ["pig", "sheep"], "number": 100 }
+  - length: { aggregations.number_terms.buckets: 4 }
+  - length: { aggregations.number_terms.buckets: 3 }
   - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip", "exclude" : [ "127.0.0.1" ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.ip_terms.buckets: 1 }
-
-  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
-
-  - do:
-      catch: request
-      search:
-        rest_total_hits_as_int: true
-        index: test_1
-        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip", "exclude" :  "127.*"  } } } }
-
-
-
----
-"Boolean test":
-  - do:
-      index:
-        index: test_1
+              type: unsigned_long
+  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
+        id: 3
         id: 1
-        body: { "boolean": true }
-
-  - do:
+        refresh: true
+  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
+---
+      indices.refresh: {}
+      bulk:
       index:
+        body: { "str": "bcd" }
+        id: 1
+      indices.refresh: {}
+      search:
+        body: { "str": "abc" }
+  - do:
+  - do:
+        body: { "str": "bcd" }
+        body: { "integer": 1234 }
+  - length: { aggregations.integer_terms.buckets: 2 }
         index: test_1
         id: 2
-        body: { "boolean": false }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "boolean": true }
-
-  - do:
+  - match: { aggregations.ip_terms.buckets.0.key: "127.0.0.1" }
+        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip" } } } }
       indices.refresh: {}
-
+  - do:
+          size: 0
+  - match: { aggregations.str_terms.buckets.2.max_number.value: 1 }
+        index: test_1
+                collect_mode: breadth_first
+  - length: { aggregations.str_terms.buckets: 1 }
+  - match: { hits.total: 3 }
+        index: test_1
+          size: 0
+      index:
+  - do:
+  - do:
+              query: sheep cow
+        rest_total_hits_as_int: true
+  - do:
+  - match: { aggregations.number_terms.buckets.3.key: 10223372036854775807.0 }
+  - match: { aggregations.long_terms.buckets.0.key: 4611686018427387903 }
+              fields: [str]
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "integer", "include" : {"partition": 1, "num_partitions": 2 } } } } }
+  - match: { aggregations.str_terms.buckets.2.key: pig }
+          query:
+  - is_false: aggregations.long_terms.buckets.0.key_as_string
+  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
+        fielddata_fields: str
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+  - match: { aggregations.long_terms.buckets.0.doc_count: 1 }
+        body: { "unsigned": 10223372036854775807 }
+      index:
+  - do:
+        body: { "date": "2014-09-01" }
+      index:
+  - match: { aggregations.str_terms.buckets.0.key: sheep }
+                  max:
+        id: 3
+        id: 1
+  - do:
+        rest_total_hits_as_int: true
+                ip:
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
+                    field: number
+              query: sheep cow
+  - match: { aggregations.str_terms.buckets.0.doc_count: 1 }
+          { "number": 1 }
+          profile: true
+      index:
+                  max:
+  - do:
+  - match: { aggregations.str_terms.buckets.1.key: cow }
+  - do:
+        id: 2
+  - length: { aggregations.long_terms.buckets: 2 }
+      index:
+  - match: { aggregations.number_terms.buckets.3.doc_count: 1 }
+  - match: { aggregations.str_terms.buckets.0.key: 5678 }
+      allowed_warnings:
+      index:
+      indices.create:
+  - is_false: aggregations.long_terms.buckets.1.key_as_string
+            str_terms:
+              number_of_shards: 1
+      indices.refresh: {}
+  - do:
+        body: { "number": -4611686018427387904 }
+        body: { "size" : 0, "aggs" : { "boolean_terms" : { "terms" : { "field" : "unmapped_boolean", "value_type" : "boolean", "missing": true } } } }
+        refresh: true
+  - do:
+        body: |
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
+  - match: { hits.total: 1 }
+        index: test_1
+  - match: { aggregations.double_terms.buckets.1.key: 5678.5 }
+      index:
+        body: { "number": 4611686018427387903 }
+  - do:
+  - do:
+        index: test_1
+        id: 2
+          { "index": {} }
+  - length: { aggregations.boolean_terms.buckets: 1 }
+  - match: { aggregations.integer_terms.buckets.1.doc_count: 1 }
+  - match: { profile.shards.0.aggregations.0.debug.collection_strategy: dense }
+        id: 3
+  - length: { aggregations.str_terms.buckets: 2 }
+      index:
+  - length: { aggregations.long_terms.buckets: 1 }
+        id: 2
+        body: {}
+  - match: { aggregations.str_terms.buckets.1.key: cow }
+  - match: { aggregations.string_terms.buckets.0.doc_count: 1 }
+  - match: { aggregations.str_terms.buckets.0.key: sheep }
+  - do:
+  - match: { aggregations.date_terms.buckets.0.key_as_string: "2014-09-01T00:00:00.000Z" }
+                  type: double
+        index: test_1
+        body: { "str" : "abc" }
+  - do:
+        body: { "integer": 1234 }
+        id: 1
+  - do:
+  - match: { hits.total: 5 }
+        index: test_1
+        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date" } } } }
+  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
+      index:
+        body:
+        body: { "integer": 5678 }
+  - do:
+        body: { "ip": "::1" }
+  - match: { profile.shards.0.aggregations.0.debug.collection_strategy: dense }
+  - length: { aggregations.unsigned_terms.buckets: 1 }
+  - length: { aggregations.date_terms.buckets: 1 }
+          { "str": "cow", "number": 1 }
+      search:
+  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
+  - do:
+        index: test_1
+        rest_total_hits_as_int: true
+  - do:
+  - do:
+"Double test":
+        refresh: true
+        body: {}
+            settings:
+  - match: { hits.total.value: 3}
+      cluster.health:
+      search:
+          index: test_3
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "include" : {"partition": 1, "num_partitions": 2 } } } } }
+---
+  - match: { profile.shards.0.aggregations.0.description: n_terms }
+          { "str": "cow", "number": 1 }
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+      search:
+  - do:
+  - match: { hits.total.value: 3}
+        body: { "size" : 0, "aggs" : { "integer_terms" : { "terms" : { "field" : "integer" } } } }
+        index: test_1
+---
+        index: test_1
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "integer", "include" : {"partition": 0, "num_partitions": 2 } } } } }
+  - do:
+          { "str": "pig", "number": 1 }
+  - do:
+        rest_total_hits_as_int: true
+              terms:
+        id: 3
+      bulk:
+      version: " - 7.99.99"
+                   type: boolean
+        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "unmapped_date", "value_type" : "date", "missing": "2016-05-11" } } } }
+        id: 1
+  - is_false: aggregations.str_terms.buckets.1.key_as_string
+              aggs:
+      version: " - 2.7.99"
+                min_doc_count: 2
+  - do:
+        rest_total_hits_as_int: true
+"Mixing longs, unsigned  long and doubles":
+      index:
+  - length: { aggregations.boolean_terms.buckets: 2 }
+  - match: { aggregations.number_terms.buckets.1.key: 100.0 }
+        index: test_1
+  - do:
+        refresh: true
+      index:
+              number_of_replicas: 0
+  - match: { aggregations.number_terms.buckets.1.key: 100.0 }
+  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
+        refresh: true
+                field: str
+        index: test_1
+  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-11T00:00:00.000Z" }
+                  type: double
+  - do:
+                  max:
+"Partitioned string test":
+  - do:
+        refresh: true
+      indices.refresh: {}
+  - match: { profile.shards.0.aggregations.0.type: NumericTermsAggregator }
+              aggs:
+        id: 2
+  - do:
+        body:
+  - do:
+            n_terms:
+        index: test_1
+      version: " - 2.7.99"
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+            str_terms:
+        index: test_1
+        rest_total_hits_as_int: true
+  - do:
+        id: 3
+          { "str": "sheep", "number": 3 }
+"Unmapped unsigned longs":
+        index: test_3
+            simple_query_string:
+        index: test_1
+  - is_false: aggregations.integer_terms.buckets.1.key_as_string
   - do:
       search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "boolean_terms" : { "terms" : { "field" : "boolean" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.boolean_terms.buckets: 2 }
-
-  - match: { aggregations.boolean_terms.buckets.0.key: 1 }
-
-  - match: { aggregations.boolean_terms.buckets.0.key_as_string: "true" }
-
-  - match: { aggregations.boolean_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.boolean_terms.buckets.1.key: 0 }
-
-  - match: { aggregations.boolean_terms.buckets.1.key_as_string: "false" }
-
-  - match: { aggregations.boolean_terms.buckets.1.doc_count: 1 }
-
+  - match: { profile.shards.0.aggregations.0.type: GlobalOrdinalsStringTermsAggregator }
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+        index: test_1
+  - do:
+  - match: { aggregations.date_terms.buckets.0.doc_count: 1 }
+  - match: { aggregations.date_terms.buckets.0.doc_count: 2 }
+        body: { "size" : 0, "aggs" : { "unsigned_terms" : { "terms" : { "field" : "unmapped_unsigned", "value_type" : "unsigned_long", "missing": 3 } } } }
+"string profiler via map":
+          { "index": {} }
+  - match: { aggregations.double_terms.buckets.0.doc_count: 2 }
+          { "number": 1 }
+      index:
+        body: { "str": "abc" }
 ---
+  - do:
+        index: test_2
+  - match: { profile.shards.0.aggregations.0.debug.has_filter: false }
+  - gt: { indices.test_1.total.fielddata.memory_size_in_bytes: 0}
+"Global ordinals are loaded with the global_ordinals execution hint":
+  - match: { aggregations.ip_terms.buckets.0.doc_count: 2 }
+  - do:
+        body: {"number": 100}
+  - match: { aggregations.n_terms.buckets.1.key: 3 }
+                max_number:
+  - length: { aggregations.date_terms.buckets: 2 }
+"Basic test":
+        index: test_1
+---
+      indices.refresh: {}
+---
+          query:
+        index: test_1
+          size: 0
+  - do:
+        body: { "size" : 0, "aggs" : { "boolean_terms" : { "terms" : { "field" : "boolean" } } } }
+                date:
+        wait_for_status: green
+        id: 2
+  - match: { aggregations.str_terms.buckets.2.key: pig }
+        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "number" } } } }
+        fielddata_fields: str
+  - match: { aggregations.str_terms.buckets.2.doc_count: 0 }
+        id: 3
+  - length: { aggregations.ip_terms.buckets: 2 }
+  - match: { aggregations.boolean_terms.buckets.1.key: 0 }
+        index: test_1
+              number_of_replicas: 0
+        rest_total_hits_as_int: true
+        index: test_1
+        body: {"number": 10}
+      search:
+  - do:
+          { "number": 1 }
+        index: test_1
+          { "index": {} }
+  - match: { profile.shards.0.aggregations.0.description: str_terms }
+  - match: { aggregations.number_terms.buckets.0.doc_count: 2 }
+        id: 1
+---
+              query: sheep cow
+  - do:
+---
+        body: { "integer": 5678 }
+                   type: ip
+  - skip:
+        rest_total_hits_as_int: true
+  - do:
+        body: {"number": 10.0}
+        rest_total_hits_as_int: true
+  - do:
+            unsigned:
+              aggs:
+      index:
+          { "index": {} }
+  - do:
+  - do:
+  - length: { aggregations.str_terms.buckets: 2 }
+  - match: { aggregations.str_terms.buckets.0.key: sheep }
+  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
+        index: test_3
+        id: 1
+        body: { "str": "abc" }
+      indices.refresh: {}
+  - length: { aggregations.str_terms.buckets: 2 }
+              minimum_should_match: 1
+      index:
+      index:
+      indices.create:
+  - do:
+        index: test_1
+        index: test_1
+  - is_false: aggregations.str_terms.buckets.1.key_as_string
+              minimum_should_match: 1
+  - do:
+"Unmapped doubles":
+                field: str
+---
+        id: 2
+      index:
+  - match: { aggregations.double_terms.buckets.0.key: 1234.5 }
+---
+        body: { "date": "2016-05-03" }
+  - match: { aggregations.date_terms.buckets.0.key: 1462924800000 }
+  - skip:
+      indices.refresh: {}
+        body: { "size" : 0, "aggs" : { "string_terms" : { "terms" : { "field" : "unmapped_string", "value_type" : "string", "missing": "abc" } } } }
+        id: 3
+  - length: { aggregations.str_terms.buckets: 1 }
+  - do:
+  - do:
+        id: 1
+---
+      index:
+        id: 1
+          { "index": {} }
+        id: 1
+      index:
+      index:
+"Partitioned integer test":
+      index:
+              properties:
+        body:
+      index:
+        - "Deprecated aggregation order key [_term] used, replaced by [_key]"
+        index: test_1
+        index: test_1
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
+        id: 2
+      index:
+              type: unsigned_long
+  - do:
+  - length: { aggregations.str_terms.buckets: 3 }
+  - match: { aggregations.str_terms.buckets.2.max_number.value: 1 }
+        id: 2
+  - do:
+            str_terms:
+        body: { "double": 1234.5 }
+        index: test_1
+      index:
+        index: test_1
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "include" : {"partition": 0, "num_partitions": 2 } } } } }
+        rest_total_hits_as_int: true
+                max_number:
+  - do:
+          { "str": "sheep", "number": 3 }
+  - do:
+  - match: { aggregations.str_terms.buckets.1.key: cow }
+          { "index": {} }
+  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
+        body: |
+              terms:
+        rest_total_hits_as_int: true
+      index:
+  - do:
+        id: 1
+  - do:
+        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date", "include" : [ "2016-05-03" ] } } } }
+          index: test_1
+                max_number:
+  - match: { profile.shards.0.aggregations.0.description: str_terms }
+        body: {"number": 10223372036854775807}
+  - length: { aggregations.double_terms.buckets: 1 }
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+  - do:
+        index: test_1
+        rest_total_hits_as_int: true
+                    field: number
+          { "index": {} }
+        refresh: true
+  - do:
+  - do:
+  - match: { hits.total: 1 }
+  - length: { aggregations.date_terms.buckets: 1 }
+  - match: { hits.total: 3 }
+              query: sheep cow
+            str_terms:
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+      search:
+                field: str
+        body: { "size" : 0, "aggs" : { "no_field_terms" : { "terms" : { "size": 1 } } } }
+        max_num_segments: 1
+        index: test_1
+        rest_total_hits_as_int: true
+  - match: { hits.total: 1 }
+        id: 1
+        rest_total_hits_as_int: true
+  - do:
+              number_of_replicas: 0
+        index: test_1
+            mappings:
+                max_number:
+          aggs:
+      version: " - 2.7.99"
+  - match: { aggregations.str_terms.buckets.1.key: cow }
+          body:
 "Integer test":
   - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "integer": 1234 }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "integer": 5678 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "integer": 1234 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "integer_terms" : { "terms" : { "field" : "integer" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.integer_terms.buckets: 2 }
-
+                boolean:
   - match: { aggregations.integer_terms.buckets.0.key: 1234 }
-
-  - is_false: aggregations.integer_terms.buckets.0.key_as_string
-
-  - match: { aggregations.integer_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.integer_terms.buckets.1.key: 5678 }
-
-  - is_false: aggregations.integer_terms.buckets.1.key_as_string
-
-  - match: { aggregations.integer_terms.buckets.1.doc_count: 1 }
-
+        body:
+  - do:
+                  type: long
+  - do:
+  - match: { hits.total: 3 }
+        body:
+      indices.stats:
+  - match: { aggregations.long_terms.buckets.1.key: -4611686018427387904 }
+  - match: { aggregations.str_terms.buckets.2.key: pig }
+      search:
+        index: test_1
+            str_terms:
+        body: { "boolean": true }
+        rest_total_hits_as_int: true
+  - do:
+  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-03T00:00:00.000Z" }
 ---
-"Long test":
+  - match: { hits.total: 3 }
   - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "number": 4611686018427387903 }
-
-  - do:
-      index:
-        index: test_1
         id: 2
-        body: { "number": -4611686018427387904 }
-
+        id: 1
+  - match: { aggregations.number_terms.buckets.0.key: 10.0 }
+  - is_false: aggregations.unsigned_terms.buckets.0.key_as_string
+  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-03T00:00:00.000Z" }
   - do:
-      index:
+                number:
+        body: { "double": 5678.5 }
+setup:
+        body:
+                min_doc_count: 0
+        body: {}
         index: test_1
-        id: 3
-        body: { "number": 4611686018427387903 }
-
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 100 }
   - do:
+          aggs:
+          size: 0
+  - is_false: aggregations.integer_terms.buckets.0.key_as_string
+      indices.create:
       indices.refresh: {}
-
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "order" :  { "_term" : "desc" } } } } }
+            mappings:
+                  max:
+        index: test_1
+        rest_total_hits_as_int: true
+        index: test_1
+        body: { "integer": 1234 }
+  - do:
+          index: test_2
+  - do:
+                str:
+"Unmapped strings":
+  - match: { hits.total: 3 }
+        routing: 1
+  - match: { profile.shards.0.aggregations.0.debug.result_strategy: long_terms }
+                number:
+      search:
+  - match: { aggregations.str_terms.buckets.0.key: sheep }
+  - is_false: aggregations.double_terms.buckets.0.key_as_string
+        body: { "size" : 0, "aggs" : { "unsigned_terms" : { "terms" : { "field" : "unsigned" } } } }
+        index: test_1
+        body: {"number": 10.0}
+      catch: request
+                   type: keyword
+  - match: { aggregations.str_terms.buckets.0.doc_count: 1 }
   - do:
       search:
+      search:
+            unsigned:
+              aggs:
+      search:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+      indices.put_mapping:
+  - do:
+              fields: [str]
+      reason: unsigned_long is not supported before 2.8.0
+"Unmapped booleans":
+        routing: 1
+  - length: { aggregations.str_terms.buckets: 2 }
+  - match: { hits.total : 3 }
+        body: { "str": "abc" }
+          aggs:
+        body:
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+  - do:
+        index: test_2
+          aggs:
+  - do:
+  - do:
+  - do:
+        id: 3
+  - length: { aggregations.double_terms.buckets: 2 }
+  - gte:   { profile.shards.0.aggregations.0.debug.total_buckets: 1 }
+"string profiler via global ordinals":
+          { "number": 3 }
+        body: { "str": "abc" }
+  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_multi_valued_ords: 0 }
+  - match: { aggregations.boolean_terms.buckets.0.doc_count: 1 }
+        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date", "exclude" : [ "2016-05-03" ] } } } }
+      index:
+        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip", "exclude" : [ "127.0.0.1" ] } } } }
         rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "number" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.long_terms.buckets: 2 }
-
-  - match: { aggregations.long_terms.buckets.0.key: 4611686018427387903 }
-
-  - is_false: aggregations.long_terms.buckets.0.key_as_string
-
-  - match: { aggregations.long_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.long_terms.buckets.1.key: -4611686018427387904 }
-
-  - is_false: aggregations.long_terms.buckets.1.key_as_string
-
-  - match: { aggregations.long_terms.buckets.1.doc_count: 1 }
-
+        body: { "str": "abc" }
+  - do:
+        index: test_1
+        rest_total_hits_as_int: true
+  - do:
+  - match: { aggregations.number_terms.buckets.1.doc_count: 2 }
+  - match: { aggregations.number_terms.buckets.2.doc_count: 1 }
+      search:
 ---
 "Unsigned Long test":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.put_mapping:
-        index: test_1
-        body:
-          properties:
-            unsigned:
-              type: unsigned_long
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "unsigned": 18446744073709551615 }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "unsigned": 10223372036854775807 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "unsigned": 18446744073709551615 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "unsigned_terms" : { "terms" : { "field" : "unsigned" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.unsigned_terms.buckets: 2 }
-
-  - match: { aggregations.unsigned_terms.buckets.0.key: 18446744073709551615 }
-
-  - is_false: aggregations.unsigned_terms.buckets.0.key_as_string
-
-  - match: { aggregations.unsigned_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.unsigned_terms.buckets.1.key: 10223372036854775807 }
-
-  - is_false: aggregations.unsigned_terms.buckets.1.key_as_string
-
-  - match: { aggregations.unsigned_terms.buckets.1.doc_count: 1 }
-
----
-"Double test":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "double": 1234.5 }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "double": 5678.5 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "double": 1234.5 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "double" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.double_terms.buckets: 2 }
-
-  - match: { aggregations.double_terms.buckets.0.key: 1234.5 }
-
-  - is_false: aggregations.double_terms.buckets.0.key_as_string
-
-  - match: { aggregations.double_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.double_terms.buckets.1.key: 5678.5 }
-
-  - is_false: aggregations.double_terms.buckets.1.key_as_string
-
-  - match: { aggregations.double_terms.buckets.1.doc_count: 1 }
-
----
-"Date test":
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "date": "2016-05-03" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "date": "2014-09-01" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "date": "2016-05-03" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date" } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.date_terms.buckets: 2 }
-
-  - match: { aggregations.date_terms.buckets.0.key: 1462233600000 }
-
-  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-03T00:00:00.000Z" }
-
-  - match: { aggregations.date_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.date_terms.buckets.1.key: 1409529600000 }
-
-  - match: { aggregations.date_terms.buckets.1.key_as_string: "2014-09-01T00:00:00.000Z" }
-
-  - match: { aggregations.date_terms.buckets.1.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date", "include" : [ "2016-05-03" ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.date_terms.buckets: 1 }
-
-  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-03T00:00:00.000Z" }
-
-  - match: { aggregations.date_terms.buckets.0.doc_count: 2 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "date", "exclude" : [ "2016-05-03" ] } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.date_terms.buckets: 1 }
-
-  - match: { aggregations.date_terms.buckets.0.key_as_string: "2014-09-01T00:00:00.000Z" }
-
-  - match: { aggregations.date_terms.buckets.0.doc_count: 1 }
-
----
-"Partitioned string test":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "str" : "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
+  - match: { aggregations.integer_terms.buckets.1.key: 5678 }
+        body: {"number": 14.6}
         body: { "str": "bcd" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
+              terms:
+          profile: true
+        routing: 1
+        index: test_1
+      index:
       search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "include" : {"partition": 0, "num_partitions": 2 } } } } }
-
-  - match: { hits.total : 3 }
-
-  - length: { aggregations.str_terms.buckets: 1 }
-
-  - match: { aggregations.str_terms.buckets.0.key: "bcd" }
-
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-
+              terms:
   - match: { aggregations.str_terms.buckets.0.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "include" : {"partition": 1, "num_partitions": 2 } } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 1 }
-
+---
+        index: test_1
   - match: { aggregations.str_terms.buckets.0.key: "abc" }
-
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-
----
-"Partitioned integer test":
-
-  - do:
-      index:
-        index: test_1
         id: 1
-        body: { "integer": 1234 }
-
   - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "integer": 5678 }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "integer": 1234 }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "integer", "include" : {"partition": 0, "num_partitions": 2 } } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 1 }
-
-  - match: { aggregations.str_terms.buckets.0.key: 5678 }
-
-  - match: { aggregations.str_terms.buckets.0.doc_count: 1 }
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "integer", "include" : {"partition": 1, "num_partitions": 2 } } } } }
-
-  - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 1 }
-
-  - match: { aggregations.str_terms.buckets.0.key: 1234 }
-
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-
----
-"Unmapped strings":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "string_terms" : { "terms" : { "field" : "unmapped_string", "value_type" : "string", "missing": "abc" } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.string_terms.buckets: 1 }
-
-  - match: { aggregations.string_terms.buckets.0.key: "abc" }
-
-  - match: { aggregations.string_terms.buckets.0.doc_count: 1 }
-
----
-"Unmapped booleans":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "boolean_terms" : { "terms" : { "field" : "unmapped_boolean", "value_type" : "boolean", "missing": true } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.boolean_terms.buckets: 1 }
-
-  - match: { aggregations.boolean_terms.buckets.0.key: 1 }
-
-  - match: { aggregations.boolean_terms.buckets.0.key_as_string: "true" }
-
-  - match: { aggregations.boolean_terms.buckets.0.doc_count: 1 }
-
----
-"Unmapped dates":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "date_terms" : { "terms" : { "field" : "unmapped_date", "value_type" : "date", "missing": "2016-05-11" } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.date_terms.buckets: 1 }
-
-  - match: { aggregations.date_terms.buckets.0.key: 1462924800000 }
-
-  - match: { aggregations.date_terms.buckets.0.key_as_string: "2016-05-11T00:00:00.000Z" }
-
-  - match: { aggregations.date_terms.buckets.0.doc_count: 1 }
-
----
-"Unmapped longs":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "long_terms" : { "terms" : { "field" : "unmapped_long", "value_type" : "long", "missing": 3 } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.long_terms.buckets: 1 }
-
-  - match: { aggregations.long_terms.buckets.0.key: 3 }
-
-  - match: { aggregations.long_terms.buckets.0.doc_count: 1 }
-
----
-"Unmapped unsigned longs":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.put_mapping:
-        index: test_1
-        body:
-          properties:
-            unsigned:
-              type: unsigned_long
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "unsigned_terms" : { "terms" : { "field" : "unmapped_unsigned", "value_type" : "unsigned_long", "missing": 3 } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.unsigned_terms.buckets: 1 }
-
-  - match: { aggregations.unsigned_terms.buckets.0.key: 3 }
-
-  - match: { aggregations.unsigned_terms.buckets.0.doc_count: 1 }
-
----
-"Unmapped doubles":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "unmapped_double", "value_type" : "double", "missing": 3.5 } } } }
-
-  - match: { hits.total: 1 }
-
-  - length: { aggregations.double_terms.buckets: 1 }
-
-  - match: { aggregations.double_terms.buckets.0.key: 3.5 }
-
-  - match: { aggregations.double_terms.buckets.0.doc_count: 1 }
-
----
-"Mixing longs and doubles":
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {"number": 100}
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: {"number": 10}
-
-  - do:
-      index:
-        index: test_2
-        id: 3
-        body: {"number": 100.0}
-
-  - do:
-      index:
-        index: test_2
-        id: 1
-        body: {"number": 10.0}
-
-  - do:
-      index:
-        index: test_2
-        id: 2
-        body: {"number": 14.6}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "number_terms" : { "terms" : { "field" : "number" } } } }
-
-  - match: { hits.total: 5 }
-
-  - length: { aggregations.number_terms.buckets: 3 }
-
-  - match: { aggregations.number_terms.buckets.0.key: 10.0 }
-
-  - match: { aggregations.number_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.number_terms.buckets.1.key: 100.0 }
-
-  - match: { aggregations.number_terms.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.number_terms.buckets.2.key: 14.6 }
-
-  - match: { aggregations.number_terms.buckets.2.doc_count: 1 }
-
----
-"Mixing longs, unsigned  long and doubles":
-  - skip:
-      version: " - 2.7.99"
-      reason: unsigned_long is not supported before 2.8.0
-
-  - do:
-      indices.put_mapping:
-        index: test_1
-        body:
-          properties:
-            unsigned:
-              type: unsigned_long
-
-  - do:
-      indices.create:
-          index: test_3
-          body:
-            settings:
-              number_of_replicas: 0
-            mappings:
-              properties:
+  - match: { aggregations.unsigned_terms.buckets.1.doc_count: 1 }
+          { "str": "pig", "number": 1 }
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
                 number:
-                  type: unsigned_long
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: {"number": 100}
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: {"number": 10}
-
-  - do:
-      index:
-        index: test_2
-        id: 3
-        body: {"number": 100.0}
-
-  - do:
-      index:
-        index: test_2
-        id: 1
-        body: {"number": 10.0}
-
-  - do:
-      index:
-        index: test_2
-        id: 2
-        body: {"number": 14.6}
-
-  - do:
-      index:
-        index: test_3
-        id: 1
-        body: {"number": 10223372036854775807}
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "number_terms" : { "terms" : { "field" : "number" } } } }
-
-  - match: { hits.total: 6 }
-
-  - length: { aggregations.number_terms.buckets: 4 }
-
-  - match: { aggregations.number_terms.buckets.0.key: 10.0 }
-
-  - match: { aggregations.number_terms.buckets.0.doc_count: 2 }
-
-  - match: { aggregations.number_terms.buckets.1.key: 100.0 }
-
-  - match: { aggregations.number_terms.buckets.1.doc_count: 2 }
-
-  - match: { aggregations.number_terms.buckets.2.key: 14.6 }
-
-  - match: { aggregations.number_terms.buckets.2.doc_count: 1 }
-
-  - match: { aggregations.number_terms.buckets.3.key: 10223372036854775807.0 }
-
-  - match: { aggregations.number_terms.buckets.3.doc_count: 1 }
-
----
-"Deprecated _term order":
-
-  - skip:
-      reason:  _term order deprecated in 6.0, replaced by _key
-      features: "allowed_warnings"
-
-  - do:
-      index:
-        index: test_1
-        id: 1
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 2
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        index: test_1
-        id: 3
-        body: { "str": "bcd" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "order" :  { "_term" : "desc" } } } } }
-      allowed_warnings:
-        - "Deprecated aggregation order key [_term] used, replaced by [_key]"
-
   - match: { hits.total: 3 }
-
-  - length: { aggregations.str_terms.buckets: 2 }
-
-  - match: { aggregations.str_terms.buckets.0.key: "bcd" }
-
-  - is_false: aggregations.str_terms.buckets.0.key_as_string
-
-  - match: { aggregations.str_terms.buckets.0.doc_count: 1 }
-
-  - match: { aggregations.str_terms.buckets.1.key: "abc" }
-
-  - is_false: aggregations.str_terms.buckets.1.key_as_string
-
-  - match: { aggregations.str_terms.buckets.1.doc_count: 2 }
-
----
-"Global ordinals are not loaded with the map execution hint":
-  - do:
-      index:
-        refresh: true
-        index: test_1
-        id: 1
-        routing: 1
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        refresh: true
-        index: test_1
         id: 2
-        routing: 1
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        refresh: true
-        index: test_1
-        id: 3
-        routing: 1
-        body: { "str": "bcd" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        index: test_1
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "execution_hint" : "map" } } } }
-
-  - match: { hits.total.value: 3}
-  - length: { aggregations.str_terms.buckets: 2 }
-
-  - do:
-      indices.stats:
-        index: test_1
-        metric: fielddata
-        fielddata_fields: str
-
-  - match: { indices.test_1.total.fielddata.memory_size_in_bytes: 0}
-
 ---
-"Global ordinals are loaded with the global_ordinals execution hint":
-  - do:
       index:
-        refresh: true
-        index: test_1
-        id: 1
-        routing: 1
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        refresh: true
-        index: test_1
-        id: 2
-        routing: 1
-        body: { "str": "abc" }
-
-  - do:
-      index:
-        refresh: true
-        index: test_1
-        id: 3
-        routing: 1
-        body: { "str": "bcd" }
-
-  - do:
-      indices.refresh: {}
-
-  - do:
-      search:
-        index: test_1
-        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "execution_hint" : "global_ordinals" } } } }
-
-  - match: { hits.total.value: 3}
-  - length: { aggregations.str_terms.buckets: 2 }
-
-  - do:
-      indices.stats:
-        index: test_1
-        metric: fielddata
-        fielddata_fields: str
-
-  - gt: { indices.test_1.total.fielddata.memory_size_in_bytes: 0}
-
----
+  - match: { hits.total: 3 }
 "No field or script":
-
   - do:
-      catch: /Required one of fields \[field, script\], but none were specified/
+  - do:
+  - match: { hits.total: 3 }
+      index:
+  - match: { hits.total: 3 }
+---
+        index: test_1
+              properties:
+        body:
+      index:
+                max_number:
+        index: test_1
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
+        id: 3
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 1.0 }
+  - do:
+              properties:
+        index: test_1
+              terms:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+  - match: { hits.total: 3 }
+---
+  - do:
+        id: 1
+        routing: 1
+  - match: { aggregations.number_terms.buckets.1.doc_count: 2 }
+        index: test_1
+  - match: { aggregations.number_terms.buckets.2.doc_count: 1 }
+              terms:
+          aggs:
+      bulk:
+  - do:
+  - match: { aggregations.str_terms.buckets.1.key: sheep }
+        id: 2
       search:
+"Long test":
+  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_multi_valued_ords: 0 }
+            str_terms:
+              properties:
+      index:
+  - match: { hits.total: 3 }
+        index: test_2
+      search:
+        index: test_3
+      indices.refresh: {}
+  - match: { hits.total: 3 }
+        id: 2
+        index: test_1
+      index:
+        index: test_1
+  - length: { aggregations.unsigned_terms.buckets: 2 }
+            settings:
+  - match: { aggregations.str_terms.buckets.0.key: pig }
+      search:
+              type: unsigned_long
+        refresh: true
+      indices.refresh: {}
+      index:
+  - do:
+        body: { "size" : 0, "aggs" : { "ip_terms" : { "terms" : { "field" : "ip", "exclude" :  "127.*"  } } } }
+  - length: { aggregations.ip_terms.buckets: 1 }
+        id: 3
+  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
+        rest_total_hits_as_int: true
+      indices.refresh: {}
+          { "str": "sheep", "number": 1 }
+  - do:
+  - do:
+  - match: { aggregations.integer_terms.buckets.0.doc_count: 2 }
+  - do:
+        body: { "number": 4611686018427387903 }
+        body: { "size" : 0, "aggs" : { "number_terms" : { "terms" : { "field" : "number" } } } }
+  - do:
+        id: 1
+  - match: { aggregations.double_terms.buckets.1.doc_count: 1 }
+        index: test_1
+"Deprecated _term order":
+      index:
+  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str" } } } }
+      index:
+                  max:
+              number_of_shards: 1
+        refresh: true
+  - match: { aggregations.str_terms.buckets.1.doc_count: 2 }
+      search:
+      index:
+  - match: { aggregations.str_terms.buckets.0.key: sheep }
+"numeric profiler":
+      reason: broken in 7.9.1, not yet backported
+        index: test_1
+  - match: { aggregations.boolean_terms.buckets.0.key_as_string: "true" }
+      search:
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 100 }
+        body: |
+        body: {"number": 14.6}
+        index: test_1
+      search:
+  - skip:
+  - match: { aggregations.str_terms.buckets.0.key: "abc" }
+              fields: [str]
+  - do:
+  - match: { aggregations.long_terms.buckets.0.doc_count: 2 }
+  - do:
+        index: test_1
+                field: str
+  - match: { aggregations.boolean_terms.buckets.0.key_as_string: "true" }
+        id: 3
+        rest_total_hits_as_int: true
+          query:
+        id: 2
+          { "index": {} }
+        body: { "boolean": false }
+  - do:
+      index:
+"IP test":
+  - match: { aggregations.date_terms.buckets.0.doc_count: 1 }
+                    field: number
+      index:
+          { "str": "sheep", "number": 1 }
+  - length: { aggregations.ip_terms.buckets: 1 }
+        body: |
+        index: test_1
+        index: test_2
+                    field: number
+        index: test_1
+  - length: { aggregations.str_terms.buckets: 2 }
+"Unmapped longs":
+        rest_total_hits_as_int: true
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
+              number_of_replicas: 0
+  - match: { aggregations.date_terms.buckets.1.key_as_string: "2014-09-01T00:00:00.000Z" }
+      indices.refresh: {}
+                    field: number
+                min_doc_count: 1
+  - do:
+  - do:
+                    field: number
+                double:
+        index: test_1
+      search:
+        body: { "size" : 0, "aggs" : { "number_terms" : { "terms" : { "field" : "number" } } } }
+          size: 0
+        body: { "str": "abc" }
+          { "index": {} }
+                integer:
+        body: { "integer": 1234 }
+  - do:
+              aggs:
+                execution_hint: global_ordinals
+  - match: { aggregations.ip_terms.buckets.0.key: "::1" }
+  - do:
+        index: test_1
+        index: test_1
+                field: str
+      search:
+      indices.put_mapping:
+"min_doc_count":
+        index: test_1
+                  type: long
+        id: 1
+        id: 1
+  - match: { profile.shards.0.aggregations.0.type: GlobalOrdinalsStringTermsAggregator }
+  - match: { aggregations.str_terms.buckets.1.key: cow }
+          properties:
+                str:
+  - match: { aggregations.str_terms.buckets.1.key: "abc" }
+      indices.put_mapping:
+  - match: { aggregations.double_terms.buckets.0.doc_count: 1 }
+                  max:
+  - do:
+                field: number
+        body: { "boolean": true }
+      search:
+  - match: { aggregations.str_terms.buckets.0.key: 1234 }
+  - do:
+  - do:
+          profile: true
+      index:
+---
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
+          body:
+        index: test_1
+      index:
+      indices.create:
+  - do:
+"Global ordinals are not loaded with the map execution hint":
+                execution_hint: global_ordinals
+  - match: { aggregations.str_terms.buckets.0.key: "bcd" }
+          query:
+        index: test_2
+        rest_total_hits_as_int: true
+  - match: { aggregations.unsigned_terms.buckets.0.key: 18446744073709551615 }
+        body: { "str": "bcd" }
+      index:
+  - do:
+        body: { "str": "abc" }
+  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
+  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
+  - do:
+        rest_total_hits_as_int: true
+        routing: 1
+  - do:
+      search:
+  - is_false: aggregations.unsigned_terms.buckets.1.key_as_string
+  - do:
+  - match: { aggregations.date_terms.buckets.1.key: 1409529600000 }
+---
+  - do:
+        body: {}
+  - match: { aggregations.ip_terms.buckets.1.doc_count: 1 }
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "execution_hint" : "global_ordinals" } } } }
+  - match: { aggregations.number_terms.buckets.2.key: 14.6 }
+"Boolean test":
+      indices.refresh: {}
+          { "str": "sheep", "number": 3 }
+        index: test_1
+  - is_false: aggregations.ip_terms.buckets.0.key_as_string
+  - do:
+                  type: date
+            simple_query_string:
+---
+      indices.refresh: {}
+      search:
+      indices.refresh: {}
+            simple_query_string:
+        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "unmapped_double", "value_type" : "double", "missing": 3.5 } } } }
+  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
+  - match: { aggregations.n_terms.buckets.0.key: 1 }
+        rest_total_hits_as_int: true
+  - do:
+          size: 0
+      index:
+      bulk:
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+                field: str
+  - do:
+        index: test_1
+        body: {"number": 10}
+  - match: { aggregations.unsigned_terms.buckets.0.doc_count: 1 }
+        body: { "date": "2016-05-03" }
+          aggs:
+"Unmapped dates":
+  - match: { hits.total: 1 }
+        body: {"number": 100.0}
+      index:
+              aggs:
+  - do:
+  - match: { aggregations.boolean_terms.buckets.0.key: 1 }
+            simple_query_string:
+      indices.forcemerge:
+          size: 0
+  - match: { profile.shards.0.aggregations.0.type: MapStringTermsAggregator }
+        id: 1
+  - match: { aggregations.string_terms.buckets.0.key: "abc" }
+  - match: { aggregations.unsigned_terms.buckets.0.doc_count: 2 }
+        id: 3
+  - match: { aggregations.boolean_terms.buckets.0.doc_count: 2 }
+                collect_mode: breadth_first
+  - do:
+          { "index": {} }
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
+      index:
+      index:
+  - match: { profile.shards.0.aggregations.0.description: str_terms }
+  - match: { hits.total: 6 }
+        body: { "str" : "abc" }
+        index: test_1
+      index:
+  - do:
+      index:
+          body:
+                  max:
+      reason:  _term order deprecated in 6.0, replaced by _key
+        index: test_1
+        flush: true
+        body: { "size" : 0, "aggs" : { "double_terms" : { "terms" : { "field" : "double" } } } }
+  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
+        body: { "ip": "127.0.0.1" }
+  - do:
+        id: 1
+  - skip:
+              minimum_should_match: 1
+      search:
+      search:
+  - length: { aggregations.date_terms.buckets: 1 }
+  - match: { aggregations.boolean_terms.buckets.1.doc_count: 1 }
+          aggs:
+            str_terms:
+                execution_hint: map
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
+  - is_false: aggregations.str_terms.buckets.0.key_as_string
+  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
+        body: { "unsigned": 18446744073709551615 }
+  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_single_valued_ords: 0 }
+        index: test_1
+            settings:
+  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_single_valued_ords: 0 }
+  - match: { aggregations.boolean_terms.buckets.0.key: 1 }
         rest_total_hits_as_int: true
         index: test_1
-        body: { "size" : 0, "aggs" : { "no_field_terms" : { "terms" : { "size": 1 } } } }
-
----
-"string profiler via global ordinals":
-
-  - do:
-      bulk:
-        index: test_1
-        refresh: true
-        body: |
-          { "index": {} }
-          { "str": "sheep", "number": 1 }
-          { "index": {} }
-          { "str": "sheep", "number": 3 }
-          { "index": {} }
-          { "str": "cow", "number": 1 }
-          { "index": {} }
-          { "str": "pig", "number": 1 }
-  - do:
-      indices.forcemerge:
-        index: test_1
-        max_num_segments: 1
-        flush: true
-
-  - do:
-      search:
-        index: test_1
-        body:
-          profile: true
-          size: 0
-          aggs:
-            str_terms:
-              terms:
-                field: str
-                collect_mode: breadth_first
-                execution_hint: global_ordinals
-              aggs:
-                max_number:
-                  max:
-                    field: number
-  - match: { aggregations.str_terms.buckets.0.key: sheep }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-  - match: { aggregations.str_terms.buckets.1.key: cow }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
-  - match: { aggregations.str_terms.buckets.2.key: pig }
-  - match: { aggregations.str_terms.buckets.2.max_number.value: 1 }
-  - match: { profile.shards.0.aggregations.0.type: GlobalOrdinalsStringTermsAggregator }
-  - match: { profile.shards.0.aggregations.0.description: str_terms }
-  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
-  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
-  - match: { profile.shards.0.aggregations.0.debug.collection_strategy: dense }
-  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
-  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_single_valued_ords: 0 }
-  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_multi_valued_ords: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.has_filter: false }
-  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
-  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
-
-  - do:
-      indices.create:
-          index: test_3
-          body:
-            settings:
-              number_of_shards: 1
-              number_of_replicas: 0
             mappings:
-              properties:
-                str:
-                   type: keyword
-  - do:
-      bulk:
-        index: test_3
         refresh: true
-        body: |
-          { "index": {} }
-          { "str": ["pig", "sheep"], "number": 100 }
-
-  - do:
-      search:
-        index: test_3
-        body:
-          profile: true
-          size: 0
-          aggs:
-            str_terms:
-              terms:
+  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
                 field: str
-                collect_mode: breadth_first
-                execution_hint: global_ordinals
-              aggs:
-                max_number:
-                  max:
-                    field: number
-  - match: { aggregations.str_terms.buckets.0.key: pig }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 100 }
-  - match: { aggregations.str_terms.buckets.1.key: sheep }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 100 }
-  - match: { profile.shards.0.aggregations.0.type: GlobalOrdinalsStringTermsAggregator }
-  - match: { profile.shards.0.aggregations.0.description: str_terms }
-  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 1 }
-  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
-  - match: { profile.shards.0.aggregations.0.debug.collection_strategy: dense }
-  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
-  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_single_valued_ords: 0 }
-  - gte:   { profile.shards.0.aggregations.0.debug.segments_with_multi_valued_ords: 0 }
-  - match: { profile.shards.0.aggregations.0.debug.has_filter: false }
-  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
-  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
-
 ---
-"string profiler via map":
-
-  - do:
-      bulk:
-        index: test_1
-        refresh: true
-        body: |
-          { "index": {} }
-          { "str": "sheep", "number": 1 }
-          { "index": {} }
-          { "str": "sheep", "number": 3 }
-          { "index": {} }
-          { "str": "cow", "number": 1 }
-          { "index": {} }
-          { "str": "pig", "number": 1 }
-
-  - do:
-      search:
-        index: test_1
         body:
-          profile: true
-          size: 0
-          aggs:
-            str_terms:
-              terms:
-                field: str
-                collect_mode: breadth_first
-                execution_hint: map
-              aggs:
-                max_number:
-                  max:
-                    field: number
-  - match: { aggregations.str_terms.buckets.0.key: sheep }
+  - match: { hits.total: 3 }
+  - match: { aggregations.long_terms.buckets.1.doc_count: 1 }
+          body:
+        body:
+  - do:
+      indices.stats:
+      search:
+        body: { "str": "bcd" }
   - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-  - match: { aggregations.str_terms.buckets.1.key: cow }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
-  - match: { aggregations.str_terms.buckets.2.key: pig }
-  - match: { aggregations.str_terms.buckets.2.max_number.value: 1 }
-  - match: { profile.shards.0.aggregations.0.type: MapStringTermsAggregator }
-  - match: { profile.shards.0.aggregations.0.description: str_terms }
-  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
-  - match: { profile.shards.0.aggregations.0.debug.deferred_aggregators: [ max_number ] }
-  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
-  - match: { profile.shards.0.aggregations.0.children.0.type: MaxAggregator }
-  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
-
----
-"numeric profiler":
-
-  - do:
-      bulk:
+        id: 1
+      index:
+        body: {}
         index: test_1
-        refresh: true
-        body: |
-          { "index": {} }
-          { "number": 1 }
-          { "index": {} }
-          { "number": 3 }
-          { "index": {} }
-          { "number": 1 }
-          { "index": {} }
-          { "number": 1 }
-
-  - do:
-      search:
-        index: test_1
-        body:
-          profile: true
-          size: 0
-          aggs:
-            n_terms:
-              terms:
-                field: number
-  - match: { aggregations.n_terms.buckets.0.key: 1 }
-  - match: { aggregations.n_terms.buckets.1.key: 3 }
-  - match: { profile.shards.0.aggregations.0.type: NumericTermsAggregator }
-  - match: { profile.shards.0.aggregations.0.description: n_terms }
-  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
-  - match: { profile.shards.0.aggregations.0.debug.result_strategy: long_terms }
-  - gte:   { profile.shards.0.aggregations.0.debug.total_buckets: 1 }
-
----
-"min_doc_count":
-  - skip:
-      version: " - 7.99.99"
-      reason: broken in 7.9.1, not yet backported
-
-  - do:
-      bulk:
-        index: test_1
-        refresh: true
-        body: |
-          { "index": {} }
-          { "str": "sheep", "number": 1 }
-          { "index": {} }
-          { "str": "sheep", "number": 3 }
-          { "index": {} }
-          { "str": "cow", "number": 1 }
-          { "index": {} }
-          { "str": "pig", "number": 1 }
-
-  - do:
-      search:
-        index: test_1
-        body:
-          size: 0
-          query:
-            simple_query_string:
-              fields: [str]
-              query: sheep cow
-              minimum_should_match: 1
-          aggs:
-            str_terms:
-              terms:
-                field: str
-                min_doc_count: 2
-              aggs:
-                max_number:
-                  max:
+            mappings:
+          properties:
                     field: number
+  - match: { aggregations.date_terms.buckets.0.key: 1462233600000 }
+              fields: [str]
+---
+      search:
+        rest_total_hits_as_int: true
+          profile: true
+        body:
+  - match: { aggregations.str_terms.buckets.2.max_number.value: null }
+  - match: { aggregations.str_terms.buckets.1.key: "bcd" }
+  - match: { aggregations.boolean_terms.buckets.1.key_as_string: "false" }
+      features: "allowed_warnings"
+  - is_false: aggregations.ip_terms.buckets.1.key_as_string
+              terms:
+  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 1 }
+            unsigned:
+        id: 3
+  - length: { aggregations.string_terms.buckets: 1 }
+  - match: { profile.shards.0.aggregations.0.breakdown.collect_count: 4 }
+  - match: { hits.total: 1 }
+---
+  - do:
+  - do:
+          properties:
+      search:
+  - do:
+              minimum_should_match: 1
+  - length: { aggregations.str_terms.buckets: 1 }
+          { "index": {} }
+        routing: 1
+  - do:
+  - match: { aggregations.number_terms.buckets.0.key: 10.0 }
+---
+        index: test_1
+  - match: { aggregations.ip_terms.buckets.1.key: "127.0.0.1" }
+  - do:
+      indices.refresh: {}
+                max_number:
+        index: test_1
+      index:
+      bulk:
+  - do:
+  - do:
+          { "str": "sheep", "number": 1 }
+  - do:
+        body: { "unsigned": 18446744073709551615 }
+        index: test_1
+      reason: unsigned_long is not supported before 2.8.0
+          index: test_3
+        index: test_1
+      index:
+  - match: { aggregations.long_terms.buckets.0.key: 3 }
+  - do:
+                   type: keyword
+      indices.refresh: {}
+        index: test_1
+        body: {}
+        id: 1
+        metric: fielddata
+        metric: fielddata
+        id: 2
+      search:
+---
+      search:
+  - do:
+          { "index": {} }
+      catch: /Required one of fields \[field, script\], but none were specified/
+        rest_total_hits_as_int: true
+      index:
+  - match: { indices.test_1.total.fielddata.memory_size_in_bytes: 0}
+      index:
+        id: 3
+  - match: { profile.shards.0.aggregations.0.debug.has_filter: false }
+          { "index": {} }
+  - match: { hits.total: 3 }
+  - length: { aggregations.str_terms.buckets: 2 }
+          { "str": "cow", "number": 1 }
+  - do:
+          aggs:
+  - do:
+      indices.refresh: {}
+  - do:
+        index: test_1
+      index:
+        index: test_2
+  - is_false: aggregations.double_terms.buckets.1.key_as_string
+---
+        body: { "double": 1234.5 }
+"Mixing longs and doubles":
+      index:
+  - match: { aggregations.number_terms.buckets.0.doc_count: 2 }
+                collect_mode: breadth_first
+        id: 3
+  - match: { profile.shards.0.aggregations.0.debug.result_strategy: terms }
+      index:
+        body: { "size" : 0, "aggs" : { "str_terms" : { "terms" : { "field" : "str", "execution_hint" : "map" } } } }
+          { "index": {} }
+      reason: unsigned_long is not supported before 2.8.0
+        index: test_1
+      search:
+      search:
+        body: |
+          { "index": {} }
+        refresh: true
   - length: { aggregations.str_terms.buckets: 1 }
   - match: { aggregations.str_terms.buckets.0.key: sheep }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-
+  - match: { aggregations.double_terms.buckets.0.key: 3.5 }
+  - match: { aggregations.str_terms.buckets.0.key: "bcd" }
   - do:
-      search:
-        index: test_1
-        body:
-          size: 0
-          query:
-            simple_query_string:
-              fields: [str]
-              query: sheep cow
-              minimum_should_match: 1
-          aggs:
-            str_terms:
-              terms:
-                field: str
-                min_doc_count: 1
-              aggs:
-                max_number:
-                  max:
-                    field: number
-  - length: { aggregations.str_terms.buckets: 2 }
-  - match: { aggregations.str_terms.buckets.0.key: sheep }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-  - match: { aggregations.str_terms.buckets.1.key: cow }
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
-
+  - match: { aggregations.unsigned_terms.buckets.1.key: 10223372036854775807 }
+                  type: unsigned_long
+          { "index": {} }
+        id: 2
   - do:
+  - length: { aggregations.str_terms.buckets: 1 }
       search:
-        index: test_1
-        body:
-          size: 0
-          query:
-            simple_query_string:
-              fields: [str]
-              query: sheep cow
-              minimum_should_match: 1
-          aggs:
-            str_terms:
-              terms:
-                field: str
-              aggs:
+  - match: { profile.shards.0.aggregations.0.children.0.description: max_number }
+        body: {"number": 100}
+        body: {"number": 100.0}
+  - match: { aggregations.date_terms.buckets.1.doc_count: 1 }
                 max_number:
-                  max:
-                    field: number
-  - length: { aggregations.str_terms.buckets: 2 }
-  - match: { aggregations.str_terms.buckets.0.key: sheep }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-  - match: { aggregations.str_terms.buckets.1.key: cow }
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 1 }
-
+              aggs:
+        id: 2
   - do:
-      search:
-        index: test_1
-        body:
-          size: 0
-          query:
-            simple_query_string:
-              fields: [str]
-              query: sheep cow
-              minimum_should_match: 1
-          aggs:
-            str_terms:
+  - match: { hits.total: 1 }
               terms:
-                field: str
-                min_doc_count: 0
-              aggs:
-                max_number:
-                  max:
-                    field: number
-  - length: { aggregations.str_terms.buckets: 3 }
-  - match: { aggregations.str_terms.buckets.0.key: sheep }
-  - match: { aggregations.str_terms.buckets.0.doc_count: 2 }
-  - match: { aggregations.str_terms.buckets.0.max_number.value: 3 }
-  - match: { aggregations.str_terms.buckets.1.key: cow }
-  - match: { aggregations.str_terms.buckets.1.doc_count: 1 }
-  - match: { aggregations.str_terms.buckets.1.max_number.value: 1.0 }
-  - match: { aggregations.str_terms.buckets.2.key: pig }
-  - match: { aggregations.str_terms.buckets.2.doc_count: 0 }
-  - match: { aggregations.str_terms.buckets.2.max_number.value: null }
+          { "index": {} }
+  - match: { aggregations.number_terms.buckets.2.key: 14.6 }
+  - match: { aggregations.date_terms.buckets.0.doc_count: 2 }
+  - match: { aggregations.unsigned_terms.buckets.0.key: 3 }
+      search:
+"Date test":
+            settings:
+  - match: { hits.total: 3 }
+  - match: { hits.total: 3 }
+      index:
+      search:
+        body: { "ip": "::1" }
+  - do:
+  - do:
+  - skip:

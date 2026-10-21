@@ -1,586 +1,509 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.repositories.blobstore;
-
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;
-import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
-import org.opensearch.action.index.IndexRequestBuilder;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.common.SetOnce;
-import org.opensearch.common.blobstore.BlobContainer;
-import org.opensearch.common.blobstore.BlobMetadata;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.blobstore.BlobStore;
-import org.opensearch.common.io.Streams;
-import org.opensearch.common.settings.Settings;
+        for (int i = 0; i < numDocs; i++) {
+        Set<String> names = new HashSet<>();
 import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.compress.CompressorRegistry;
-import org.opensearch.repositories.IndexId;
-import org.opensearch.repositories.RepositoriesService;
-import org.opensearch.repositories.Repository;
-import org.opensearch.repositories.RepositoryData;
-import org.opensearch.snapshots.SnapshotMissingException;
-import org.opensearch.snapshots.SnapshotRestoreException;
-import org.opensearch.test.OpenSearchIntegTestCase;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
-import org.hamcrest.CoreMatchers;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.NoSuchFileException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-
-/**
- * Integration tests for {@link BlobStoreRepository} implementations.
- */
-public abstract class OpenSearchBlobStoreRepositoryIntegTestCase extends OpenSearchIntegTestCase {
-
-    public static RepositoryData getRepositoryData(Repository repository) {
-        return PlainActionFuture.get(repository::getRepositoryData);
-    }
-
-    protected abstract String repositoryType();
-
-    protected Settings repositorySettings() {
-        final boolean compress = randomBoolean();
-        final Settings.Builder builder = Settings.builder();
-        builder.put("compress", compress);
-        if (compress) {
-            builder.put("compression_type", randomFrom(CompressorRegistry.registeredCompressors().keySet()));
-        }
-        return builder.build();
-    }
-
-    protected final String createRepository(final String name) {
-        return createRepository(name, repositorySettings());
-    }
-
-    protected final String createRepository(final String name, final Settings settings) {
-        final boolean verify = randomBoolean();
-
-        logger.debug("-->  creating repository [name: {}, verify: {}, settings: {}]", name, verify, settings);
-        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), name, repositoryType(), verify, Settings.builder().put(settings));
-
-        internalCluster().getDataOrClusterManagerNodeInstances(RepositoriesService.class).forEach(repositories -> {
-            assertThat(repositories.repository(name), notNullValue());
-            assertThat(repositories.repository(name), instanceOf(BlobStoreRepository.class));
-            assertThat(repositories.repository(name).isReadOnly(), is(false));
-            BlobStore blobStore = ((BlobStoreRepository) repositories.repository(name)).getBlobStore();
-            assertThat("blob store has to be lazy initialized", blobStore, verify ? is(notNullValue()) : is(nullValue()));
-        });
-
-        return name;
-    }
-
-    public void testReadNonExistingPath() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final BlobContainer container = store.blobContainer(new BlobPath());
-            expectThrows(NoSuchFileException.class, () -> {
-                try (InputStream is = container.readBlob("non-existing")) {
-                    is.read();
-                }
-            });
-        }
-    }
-
-    public void testWriteRead() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final BlobContainer container = store.blobContainer(new BlobPath());
-            byte[] data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
-            writeBlob(container, "foobar", new BytesArray(data), randomBoolean());
-            if (randomBoolean()) {
-                // override file, to check if we get latest contents
-                data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
-                writeBlob(container, "foobar", new BytesArray(data), false);
-            }
-            try (InputStream stream = container.readBlob("foobar")) {
-                BytesRefBuilder target = new BytesRefBuilder();
-                while (target.length() < data.length) {
-                    byte[] buffer = new byte[scaledRandomIntBetween(1, data.length - target.length())];
-                    int offset = scaledRandomIntBetween(0, buffer.length - 1);
-                    int read = stream.read(buffer, offset, buffer.length - offset);
-                    if (read >= 0) {
-                        target.append(new BytesRef(buffer, offset, read));
-                    } else {
-                        fail("Expected [" + (data.length - target.length()) + "] more bytes to be readable but reached EOF");
                     }
-                }
-                assertEquals(data.length, target.length());
-                assertArrayEquals(data, Arrays.copyOfRange(target.bytes(), 0, target.length()));
-            }
-            container.delete();
-        }
-    }
-
-    public void testReadRange() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final BlobContainer container = store.blobContainer(new BlobPath());
-            final byte[] data = randomBytes(4096);
-
-            // Pick a subrange starting somewhere between position 100 and 1000
-            // and ending somewhere between 100 bytes past that position and
-            // 100 bytes before the end
-            final int startOffset = randomIntBetween(100, 1000);
-            final int endOffset = randomIntBetween(startOffset + 100, data.length - 100);
-            final byte[] subrangeData = Arrays.copyOfRange(data, startOffset, endOffset);
-
-            writeBlob(container, "foobar", new BytesArray(data), randomBoolean());
-            try (InputStream stream = container.readBlob("foobar", startOffset, subrangeData.length)) {
-                final byte[] actual = stream.readAllBytes();
-                assertArrayEquals(subrangeData, actual);
-            }
-            container.delete();
-        }
-    }
-
-    public void testList() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final BlobContainer container = store.blobContainer(new BlobPath());
-            assertThat(container.listBlobs().size(), CoreMatchers.equalTo(0));
-            int numberOfFooBlobs = randomIntBetween(0, 10);
-            int numberOfBarBlobs = randomIntBetween(3, 20);
-            Map<String, Long> generatedBlobs = new HashMap<>();
-            for (int i = 0; i < numberOfFooBlobs; i++) {
-                int length = randomIntBetween(10, 100);
-                String name = "foo-" + i + "-";
-                generatedBlobs.put(name, (long) length);
-                writeRandomBlob(container, name, length);
-            }
-            for (int i = 1; i < numberOfBarBlobs; i++) {
-                int length = randomIntBetween(10, 100);
-                String name = "bar-" + i + "-";
-                generatedBlobs.put(name, (long) length);
-                writeRandomBlob(container, name, length);
-            }
-            int length = randomIntBetween(10, 100);
-            String name = "bar-0-";
-            generatedBlobs.put(name, (long) length);
-            writeRandomBlob(container, name, length);
-
-            Map<String, BlobMetadata> blobs = container.listBlobs();
-            assertThat(blobs.size(), CoreMatchers.equalTo(numberOfFooBlobs + numberOfBarBlobs));
-            for (Map.Entry<String, Long> generated : generatedBlobs.entrySet()) {
-                BlobMetadata blobMetadata = blobs.get(generated.getKey());
-                assertThat(generated.getKey(), blobMetadata, CoreMatchers.notNullValue());
-                assertThat(blobMetadata.name(), CoreMatchers.equalTo(generated.getKey()));
-                assertThat(blobMetadata.length(), CoreMatchers.equalTo(generated.getValue()));
-            }
-
-            assertThat(container.listBlobsByPrefix("foo-").size(), CoreMatchers.equalTo(numberOfFooBlobs));
-            assertThat(container.listBlobsByPrefix("bar-").size(), CoreMatchers.equalTo(numberOfBarBlobs));
-            assertThat(container.listBlobsByPrefix("baz-").size(), CoreMatchers.equalTo(0));
-            container.delete();
-        }
-    }
-
-    public void testDeleteBlobs() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final List<String> blobNames = Arrays.asList("foobar", "barfoo");
-            final BlobContainer container = store.blobContainer(new BlobPath());
-            container.deleteBlobsIgnoringIfNotExists(blobNames); // does not raise when blobs don't exist
-            byte[] data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
-            final BytesArray bytesArray = new BytesArray(data);
-            for (String blobName : blobNames) {
-                writeBlob(container, blobName, bytesArray, randomBoolean());
-            }
-            assertEquals(container.listBlobs().size(), 2);
-            container.deleteBlobsIgnoringIfNotExists(blobNames);
+        RestoreSnapshotResponse response = requestBuilder.get();
+        logger.info("--> indexing some data");
+        for (int i = 20; i < 40; i++) {
             assertTrue(container.listBlobs().isEmpty());
-            container.deleteBlobsIgnoringIfNotExists(blobNames); // does not raise when blobs don't exist
-        }
-    }
-
-    public static void writeBlob(
-        final BlobContainer container,
-        final String blobName,
-        final BytesArray bytesArray,
-        boolean failIfAlreadyExists
-    ) throws IOException {
-        try (InputStream stream = bytesArray.streamInput()) {
-            if (randomBoolean()) {
-                container.writeBlob(blobName, stream, bytesArray.length(), failIfAlreadyExists);
-            } else {
-                container.writeBlobAtomic(blobName, stream, bytesArray.length(), failIfAlreadyExists);
-            }
-        }
-    }
-
-    public void testContainerCreationAndDeletion() throws IOException {
-        ensureGreen();
-
-        try (BlobStore store = newBlobStore()) {
-            final BlobContainer containerFoo = store.blobContainer(new BlobPath().add("foo"));
-            final BlobContainer containerBar = store.blobContainer(new BlobPath().add("bar"));
-            byte[] data1 = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
-            byte[] data2 = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
-            writeBlob(containerFoo, "test", new BytesArray(data1));
-            writeBlob(containerBar, "test", new BytesArray(data2));
-
-            assertArrayEquals(readBlobFully(containerFoo, "test", data1.length), data1);
-            assertArrayEquals(readBlobFully(containerBar, "test", data2.length), data2);
-
-            assertTrue(containerFoo.blobExists("test"));
-            assertTrue(containerBar.blobExists("test"));
-            containerBar.delete();
-            containerFoo.delete();
-        }
-    }
-
-    public static byte[] writeRandomBlob(BlobContainer container, String name, int length) throws IOException {
-        byte[] data = randomBytes(length);
-        writeBlob(container, name, new BytesArray(data));
-        return data;
-    }
-
-    public static byte[] readBlobFully(BlobContainer container, String name, int length) throws IOException {
-        byte[] data = new byte[length];
-        try (InputStream inputStream = container.readBlob(name)) {
-            assertThat(Streams.readFully(inputStream, data), CoreMatchers.equalTo(length));
-            assertThat(inputStream.read(), CoreMatchers.equalTo(-1));
-        }
-        return data;
-    }
-
-    public static byte[] randomBytes(int length) {
-        byte[] data = new byte[length];
-        for (int i = 0; i < data.length; i++) {
-            data[i] = (byte) randomInt();
-        }
-        return data;
-    }
-
-    protected static void writeBlob(BlobContainer container, String blobName, BytesArray bytesArray) throws IOException {
-        try (InputStream stream = bytesArray.streamInput()) {
-            container.writeBlob(blobName, stream, bytesArray.length(), true);
-        }
-    }
-
-    protected BlobStore newBlobStore() {
-        final String repository = createRepository(randomName());
-        final BlobStoreRepository blobStoreRepository = (BlobStoreRepository) internalCluster().getClusterManagerNodeInstance(
-            RepositoriesService.class
-        ).repository(repository);
-        return PlainActionFuture.get(
-            f -> blobStoreRepository.threadPool().generic().execute(ActionRunnable.supply(f, blobStoreRepository::blobStore))
-        );
-    }
-
-    public void testSnapshotAndRestore() throws Exception {
-        ensureGreen();
-
-        final String repoName = createRepository(randomName());
-        int indexCount = randomIntBetween(1, 5);
-        int[] docCounts = new int[indexCount];
-        String[] indexNames = generateRandomNames(indexCount);
-        for (int i = 0; i < indexCount; i++) {
-            docCounts[i] = iterations(10, 1000);
-            logger.info("-->  create random index {} with {} records", indexNames[i], docCounts[i]);
-            addRandomDocuments(indexNames[i], docCounts[i]);
-            assertHitCount(client().prepareSearch(indexNames[i]).setSize(0).get(), docCounts[i]);
-        }
-
-        final String snapshotName = randomName();
-        logger.info("-->  create snapshot {}:{}", repoName, snapshotName);
-        assertSuccessfulSnapshot(
-            client().admin().cluster().prepareCreateSnapshot(repoName, snapshotName).setWaitForCompletion(true).setIndices(indexNames)
-        );
-
-        List<String> deleteIndices = randomSubsetOf(randomIntBetween(0, indexCount), indexNames);
-        if (deleteIndices.size() > 0) {
-            logger.info("-->  delete indices {}", deleteIndices);
-            assertAcked(client().admin().indices().prepareDelete(deleteIndices.toArray(new String[0])));
-        }
-
-        Set<String> closeIndices = new HashSet<>(Arrays.asList(indexNames));
-        closeIndices.removeAll(deleteIndices);
-
-        if (closeIndices.size() > 0) {
-            for (String index : closeIndices) {
-                if (randomBoolean()) {
-                    logger.info("--> add random documents to {}", index);
-                    addRandomDocuments(index, randomIntBetween(10, 1000));
-                } else {
-                    int docCount = (int) client().prepareSearch(index).setSize(0).get().getHits().getTotalHits().value();
-                    int deleteCount = randomIntBetween(1, docCount);
-                    logger.info("--> delete {} random documents from {}", deleteCount, index);
-                    for (int i = 0; i < deleteCount; i++) {
-                        int doc = randomIntBetween(0, docCount - 1);
-                        client().prepareDelete(index, Integer.toString(doc)).get();
-                    }
-                    client().admin().indices().prepareRefresh(index).get();
-                }
-            }
-
-            // Wait for green so the close does not fail in the edge case of coinciding with a shard recovery that hasn't fully synced yet
-            ensureGreen();
-            logger.info("-->  close indices {}", closeIndices);
-            assertAcked(client().admin().indices().prepareClose(closeIndices.toArray(new String[0])));
-        }
-
-        logger.info("--> restore all indices from the snapshot");
-        assertSuccessfulRestore(client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(true));
-
-        // higher timeout since we can have quite a few shards and a little more data here
-        ensureGreen(TimeValue.timeValueSeconds(120));
-
-        for (int i = 0; i < indexCount; i++) {
-            assertHitCount(client().prepareSearch(indexNames[i]).setSize(0).get(), docCounts[i]);
-        }
-
-        logger.info("-->  delete snapshot {}:{}", repoName, snapshotName);
-        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).get());
-
-        expectThrows(
-            SnapshotMissingException.class,
-            () -> client().admin().cluster().prepareGetSnapshots(repoName).setSnapshots(snapshotName).get()
-        );
-
-        expectThrows(SnapshotMissingException.class, () -> client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).get());
-
-        expectThrows(
+import java.util.HashSet;
+        internalCluster().getDataOrClusterManagerNodeInstances(RepositoriesService.class).forEach(repositories -> {
+            container.delete();
             SnapshotRestoreException.class,
-            () -> client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(randomBoolean()).get()
-        );
-    }
-
-    public void testMultipleSnapshotAndRollback() throws Exception {
-        ensureGreen();
-
-        final String repoName = createRepository(randomName());
-        int iterationCount = randomIntBetween(2, 5);
-        int[] docCounts = new int[iterationCount];
-        String indexName = randomName();
-        String snapshotName = randomName();
-        assertAcked(client().admin().indices().prepareCreate(indexName).get());
-        for (int i = 0; i < iterationCount; i++) {
-            if (randomBoolean() && i > 0) { // don't delete on the first iteration
-                int docCount = docCounts[i - 1];
-                if (docCount > 0) {
-                    int deleteCount = randomIntBetween(1, docCount);
-                    logger.info("--> delete {} random documents from {}", deleteCount, indexName);
-                    for (int j = 0; j < deleteCount; j++) {
-                        int doc = randomIntBetween(0, docCount - 1);
-                        client().prepareDelete(indexName, Integer.toString(doc)).get();
-                    }
-                    client().admin().indices().prepareRefresh(indexName).get();
-                }
-            } else {
-                int docCount = randomIntBetween(10, 1000);
-                logger.info("--> add {} random documents to {}", docCount, indexName);
-                addRandomDocuments(indexName, docCount);
             }
-            // Check number of documents in this iteration
-            docCounts[i] = (int) client().prepareSearch(indexName).setSize(0).get().getHits().getTotalHits().value();
-            logger.info("-->  create snapshot {}:{} with {} documents", repoName, snapshotName + "-" + i, docCounts[i]);
-            assertSuccessfulSnapshot(
-                client().admin()
-                    .cluster()
-                    .prepareCreateSnapshot(repoName, snapshotName + "-" + i)
-                    .setWaitForCompletion(true)
-                    .setIndices(indexName)
-            );
-        }
-
-        int restoreOperations = randomIntBetween(1, 3);
-        for (int i = 0; i < restoreOperations; i++) {
-            int iterationToRestore = randomIntBetween(0, iterationCount - 1);
-            logger.info("-->  performing restore of the iteration {}", iterationToRestore);
-
-            // Wait for green so the close does not fail in the edge case of coinciding with a shard recovery that hasn't fully synced yet
-            ensureGreen();
-            logger.info("-->  close index");
-            assertAcked(client().admin().indices().prepareClose(indexName));
-
-            logger.info("--> restore index from the snapshot");
-            assertSuccessfulRestore(
-                client().admin()
-                    .cluster()
-                    .prepareRestoreSnapshot(repoName, snapshotName + "-" + iterationToRestore)
-                    .setWaitForCompletion(true)
-            );
-
-            ensureGreen();
-            assertHitCount(client().prepareSearch(indexName).setSize(0).get(), docCounts[iterationToRestore]);
-        }
-
+            .get();
+                try (InputStream is = container.readBlob("non-existing")) {
+        if (compress) {
         for (int i = 0; i < iterationCount; i++) {
-            logger.info("-->  delete snapshot {}:{}", repoName, snapshotName + "-" + i);
+            byte[] data1 = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
+        logger.debug("-->  creating repository [name: {}, verify: {}, settings: {}]", name, verify, settings);
+        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, "test-snap2").get());
+        writeBlob(container, name, new BytesArray(data));
+        refresh();
+            ensureGreen();
+            repository.getRepositoryData(repositoryData);
+            writeRandomBlob(container, name, length);
+import org.opensearch.common.blobstore.BlobStore;
+            assertAcked(client().admin().indices().prepareClose(indexName));
+            index("test-idx-2", "doc", Integer.toString(i), "foo", "baz" + i);
+    }
+            container.deleteBlobsIgnoringIfNotExists(blobNames);
+            byte[] data2 = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
+            String name = "bar-0-";
+            container.delete();
+            }
+        }
+                }
+    }
+                generatedBlobs.put(name, (long) length);
+            final BytesArray bytesArray = new BytesArray(data);
+            }
+                    .setIndices(indexName)
+            final BlobContainer container = store.blobContainer(new BlobPath());
+        assertThat(response.getSnapshotInfo().successfulShards(), greaterThan(0));
+                }
+import org.apache.lucene.util.BytesRef;
+    private String[] generateRandomNames(int num) {
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertAcked;
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+            container.writeBlob(blobName, stream, bytesArray.length(), true);
+    }
+        try (BlobStore store = newBlobStore()) {
+        return randomAlphaOfLength(randomIntBetween(5, 10)).toLowerCase(Locale.ROOT);
+/*
+            writeBlob(containerFoo, "test", new BytesArray(data1));
+        BlobStoreRepository repository = (BlobStoreRepository) repositoriesSvc.repository(repoName);
+        String indexName = randomName();
+    private static void assertSuccessfulSnapshot(CreateSnapshotResponse response) {
+                    .prepareCreateSnapshot(repoName, snapshotName + "-" + i)
+        assertThat(response.getSnapshotInfo().successfulShards(), equalTo(response.getSnapshotInfo().totalShards()));
+import org.opensearch.common.SetOnce;
+            assertHitCount(client().prepareSearch(indexNames[i]).setSize(0).get(), docCounts[i]);
+                .setSource("field", "value");
+        byte[] data = new byte[length];
+        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).get());
+        assertSuccessfulSnapshot(response);
+    public void testMultipleSnapshotAndRollback() throws Exception {
+import org.opensearch.transport.client.Client;
+        return name;
+        logger.info("-->  delete snapshot {}:{}", repoName, snapshotName);
+            assertThat(container.listBlobs().size(), CoreMatchers.equalTo(0));
+        closeIndices.removeAll(deleteIndices);
+                .setId(Integer.toString(i))
+ * not use this file except in compliance with the License.
+                writeBlob(container, blobName, bytesArray, randomBoolean());
+    public static RepositoryData getRepositoryData(Repository repository) {
+            container.deleteBlobsIgnoringIfNotExists(blobNames); // does not raise when blobs don't exist
+        ensureGreen();
+        return data;
+            assertThat(container.listBlobsByPrefix("baz-").size(), CoreMatchers.equalTo(0));
+                    .cluster()
+            assertArrayEquals(readBlobFully(containerBar, "test", data2.length), data2);
+    protected BlobStore newBlobStore() {
+                    .setWaitForCompletion(true)
+        ensureGreen();
+            builder.put("compression_type", randomFrom(CompressorRegistry.registeredCompressors().keySet()));
+        final Settings.Builder builder = Settings.builder();
+            assertThat(repositories.repository(name).isReadOnly(), is(false));
+import static org.hamcrest.Matchers.instanceOf;
+        return builder.build();
+            assertHitCount(client().prepareSearch(indexName).setSize(0).get(), docCounts[iterationToRestore]);
+        assertSuccessfulRestore(client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(true));
+        logger.info("--> take a snapshot");
+                        fail("Expected [" + (data.length - target.length()) + "] more bytes to be readable but reached EOF");
+        final String repoName = createRepository("test-repo-" + randomAlphaOfLength(8));
+    }
+                writeBlob(container, "foobar", new BytesArray(data), false);
+            index("test-idx-1", "doc", Integer.toString(i), "foo", "bar" + i);
+    protected final String createRepository(final String name) {
+        expectThrows(
+ * Licensed to Elasticsearch under one or more contributor
+    }
+import org.opensearch.test.OpenSearchIntegTestCase;
+        ).repository(repository);
+        }
+            for (Map.Entry<String, Long> generated : generatedBlobs.entrySet()) {
+import static org.hamcrest.Matchers.nullValue;
+import org.opensearch.snapshots.SnapshotRestoreException;
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertHitCount;
+        final String snapshotName = randomName();
+            final BlobContainer containerFoo = store.blobContainer(new BlobPath().add("foo"));
+                }
+            int length = randomIntBetween(10, 100);
+        }
+                data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
+            () -> client().admin().cluster().prepareGetSnapshots(repoName).setSnapshots(snapshotName).get()
+            expectThrows(NoSuchFileException.class, () -> {
+        }
+                        int doc = randomIntBetween(0, docCount - 1);
+            logger.info("--> restore index from the snapshot");
+                    } else {
+        }
+import org.opensearch.snapshots.SnapshotMissingException;
+            writeBlob(container, "foobar", new BytesArray(data), randomBoolean());
+        try (BlobStore store = newBlobStore()) {
+        logger.info("--> delete a snapshot");
+            for (int i = 1; i < numberOfBarBlobs; i++) {
+                final byte[] actual = stream.readAllBytes();
+import org.opensearch.action.index.IndexRequestBuilder;
+        for (int i = 0; i < restoreOperations; i++) {
+            assertHitCount(client().prepareSearch(indexNames[i]).setSize(0).get(), docCounts[i]);
+        try (InputStream stream = bytesArray.streamInput()) {
+        }
+        }
+                assertArrayEquals(subrangeData, actual);
+            try (InputStream stream = container.readBlob("foobar")) {
+            // Check number of documents in this iteration
+import java.util.Locale;
+                    client().admin().indices().prepareRefresh(indexName).get();
+        return PlainActionFuture.get(
+        CreateSnapshotResponse response = requestBuilder.get();
+    protected static void assertSuccessfulRestore(RestoreSnapshotRequestBuilder requestBuilder) {
+    public void testList() throws IOException {
+            container.delete();
+        for (int i = 0; i < iterationCount; i++) {
+            .setWaitForCompletion(true)
+            final BlobContainer container = store.blobContainer(new BlobPath());
+import static org.hamcrest.Matchers.notNullValue;
+                    }
+        RepositoriesService repositoriesSvc = internalCluster().getInstance(
+            if (randomBoolean()) {
+        assertSuccessfulRestore(response);
+                assertFalse(indicesBlobContainer.get().blobExists(indexId.getId())); // deleted index
+ * GitHub history for details.
+ * specific language governing permissions and limitations
+        }
+            final int startOffset = randomIntBetween(100, 1000);
+ * You may obtain a copy of the License at
+            );
+            assertEquals(container.listBlobs().size(), 2);
+        Set<String> closeIndices = new HashSet<>(Arrays.asList(indexNames));
+        });
+                    int read = stream.read(buffer, offset, buffer.length - offset);
+        CreateSnapshotResponse createSnapshotResponse = client.admin()
+        ThreadPool threadPool = internalCluster().getInstance(ThreadPool.class, internalCluster().getClusterManagerName());
+        }
+        int restoreOperations = randomIntBetween(1, 3);
+    public static void writeBlob(
             assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName + "-" + i).get());
         }
+        try (BlobStore store = newBlobStore()) {
     }
-
-    public void testIndicesDeletedFromRepository() throws Exception {
-        ensureGreen();
-
-        final String repoName = createRepository("test-repo-" + randomAlphaOfLength(8));
-        Client client = client();
-        createIndex("test-idx-1", "test-idx-2", "test-idx-3");
-        ensureGreen();
-
-        logger.info("--> indexing some data");
-        for (int i = 0; i < 20; i++) {
-            index("test-idx-1", "doc", Integer.toString(i), "foo", "bar" + i);
-            index("test-idx-2", "doc", Integer.toString(i), "foo", "baz" + i);
-            index("test-idx-3", "doc", Integer.toString(i), "foo", "baz" + i);
-        }
-        refresh();
-
-        logger.info("--> take a snapshot");
-        CreateSnapshotResponse createSnapshotResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, "test-snap")
-            .setWaitForCompletion(true)
-            .get();
-        assertEquals(createSnapshotResponse.getSnapshotInfo().successfulShards(), createSnapshotResponse.getSnapshotInfo().totalShards());
-
-        logger.info("--> indexing more data");
-        for (int i = 20; i < 40; i++) {
-            index("test-idx-1", "doc", Integer.toString(i), "foo", "bar" + i);
-            index("test-idx-2", "doc", Integer.toString(i), "foo", "baz" + i);
-            index("test-idx-3", "doc", Integer.toString(i), "foo", "baz" + i);
-        }
-
-        logger.info("--> take another snapshot with only 2 of the 3 indices");
-        createSnapshotResponse = client.admin()
-            .cluster()
-            .prepareCreateSnapshot(repoName, "test-snap2")
-            .setWaitForCompletion(true)
-            .setIndices("test-idx-1", "test-idx-2")
-            .get();
-        assertEquals(createSnapshotResponse.getSnapshotInfo().successfulShards(), createSnapshotResponse.getSnapshotInfo().totalShards());
-
-        logger.info("--> delete a snapshot");
-        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, "test-snap").get());
-
-        logger.info("--> verify index folder deleted from blob container");
-        RepositoriesService repositoriesSvc = internalCluster().getInstance(
-            RepositoriesService.class,
-            internalCluster().getClusterManagerName()
-        );
-        ThreadPool threadPool = internalCluster().getInstance(ThreadPool.class, internalCluster().getClusterManagerName());
-        BlobStoreRepository repository = (BlobStoreRepository) repositoriesSvc.repository(repoName);
-
-        final SetOnce<BlobContainer> indicesBlobContainer = new SetOnce<>();
-        final PlainActionFuture<RepositoryData> repositoryData = PlainActionFuture.newFuture();
-        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
-            indicesBlobContainer.set(repository.blobStore().blobContainer(repository.basePath().add("indices")));
-            repository.getRepositoryData(repositoryData);
-        });
-
-        for (IndexId indexId : repositoryData.actionGet().getIndices().values()) {
-            if (indexId.getName().equals("test-idx-3")) {
-                assertFalse(indicesBlobContainer.get().blobExists(indexId.getId())); // deleted index
-            }
-        }
-
-        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, "test-snap2").get());
-    }
-
-    protected void addRandomDocuments(String name, int numDocs) throws InterruptedException {
-        IndexRequestBuilder[] indexRequestBuilders = new IndexRequestBuilder[numDocs];
-        for (int i = 0; i < numDocs; i++) {
-            indexRequestBuilders[i] = client().prepareIndex(name)
-                .setId(Integer.toString(i))
-                .setRouting(randomAlphaOfLength(randomIntBetween(1, 10)))
-                .setSource("field", "value");
-        }
-        indexRandom(true, indexRequestBuilders);
-    }
-
-    private String[] generateRandomNames(int num) {
-        Set<String> names = new HashSet<>();
-        for (int i = 0; i < num; i++) {
-            String name;
-            do {
-                name = randomName();
-            } while (names.contains(name));
-            names.add(name);
-        }
-        return names.toArray(new String[num]);
-    }
-
-    protected static void assertSuccessfulSnapshot(CreateSnapshotRequestBuilder requestBuilder) {
-        CreateSnapshotResponse response = requestBuilder.get();
-        assertSuccessfulSnapshot(response);
-    }
-
-    private static void assertSuccessfulSnapshot(CreateSnapshotResponse response) {
-        assertThat(response.getSnapshotInfo().successfulShards(), greaterThan(0));
-        assertThat(response.getSnapshotInfo().successfulShards(), equalTo(response.getSnapshotInfo().totalShards()));
-    }
-
-    protected static void assertSuccessfulRestore(RestoreSnapshotRequestBuilder requestBuilder) {
-        RestoreSnapshotResponse response = requestBuilder.get();
-        assertSuccessfulRestore(response);
-    }
-
-    private static void assertSuccessfulRestore(RestoreSnapshotResponse response) {
-        assertThat(response.getRestoreInfo().successfulShards(), greaterThan(0));
+                    int deleteCount = randomIntBetween(1, docCount);
+            final BlobContainer container = store.blobContainer(new BlobPath());
+        int[] docCounts = new int[indexCount];
+    protected Settings repositorySettings() {
+    public void testReadNonExistingPath() throws IOException {
+ * compatible open source license.
         assertThat(response.getRestoreInfo().successfulShards(), equalTo(response.getRestoreInfo().totalShards()));
+            index("test-idx-1", "doc", Integer.toString(i), "foo", "bar" + i);
+        if (deleteIndices.size() > 0) {
+        ensureGreen();
+            .cluster()
+            SnapshotMissingException.class,
+        ensureGreen();
+        assertEquals(createSnapshotResponse.getSnapshotInfo().successfulShards(), createSnapshotResponse.getSnapshotInfo().totalShards());
+            assertThat(container.listBlobsByPrefix("bar-").size(), CoreMatchers.equalTo(numberOfBarBlobs));
+            final BlobContainer containerBar = store.blobContainer(new BlobPath().add("bar"));
+ * under the License.
+            assertThat(repositories.repository(name), notNullValue());
+            writeBlob(container, "foobar", new BytesArray(data), randomBoolean());
+ */
+            } else {
+                // override file, to check if we get latest contents
+import java.nio.file.NoSuchFileException;
+            logger.info("-->  create random index {} with {} records", indexNames[i], docCounts[i]);
+import org.opensearch.core.compress.CompressorRegistry;
+                }
     }
-
-    protected static String randomName() {
-        return randomAlphaOfLength(randomIntBetween(5, 10)).toLowerCase(Locale.ROOT);
+        ensureGreen();
+import org.opensearch.repositories.IndexId;
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+                    .prepareRestoreSnapshot(repoName, snapshotName + "-" + iterationToRestore)
+        }
+                writeRandomBlob(container, name, length);
+        for (int i = 0; i < num; i++) {
+                        target.append(new BytesRef(buffer, offset, read));
+            }
+            logger.info("-->  close index");
+        final String repoName = createRepository(randomName());
+            index("test-idx-3", "doc", Integer.toString(i), "foo", "baz" + i);
     }
+            String name;
+            indicesBlobContainer.set(repository.blobStore().blobContainer(repository.basePath().add("indices")));
+        byte[] data = new byte[length];
+            index("test-idx-3", "doc", Integer.toString(i), "foo", "baz" + i);
+ * The OpenSearch Contributors require contributions made to
+        ensureGreen();
+        }
+        logger.info("-->  create snapshot {}:{}", repoName, snapshotName);
+        }
+        if (closeIndices.size() > 0) {
+ * KIND, either express or implied.  See the License for the
+            final List<String> blobNames = Arrays.asList("foobar", "barfoo");
+        }
+                writeRandomBlob(container, name, length);
+import org.opensearch.core.common.bytes.BytesArray;
+        final BlobContainer container,
+                    if (read >= 0) {
+            // Wait for green so the close does not fail in the edge case of coinciding with a shard recovery that hasn't fully synced yet
+                int length = randomIntBetween(10, 100);
+import org.apache.lucene.util.BytesRefBuilder;
+import org.opensearch.action.ActionRunnable;
+        Client client = client();
+        boolean failIfAlreadyExists
+                logger.info("--> add {} random documents to {}", docCount, indexName);
 }
+                int docCount = docCounts[i - 1];
+            int numberOfFooBlobs = randomIntBetween(0, 10);
+        final BytesArray bytesArray,
+                client().admin()
+        // higher timeout since we can have quite a few shards and a little more data here
+ * Unless required by applicable law or agreed to in writing,
+        return createRepository(name, repositorySettings());
+        assertSuccessfulSnapshot(
+            });
+    }
+ */
+        for (int i = 0; i < indexCount; i++) {
+        final String repository = createRepository(randomName());
+                    logger.info("--> delete {} random documents from {}", deleteCount, index);
+        return data;
+    }
+    }
+        final String blobName,
+        );
+            }
+        final boolean verify = randomBoolean();
+import org.opensearch.repositories.Repository;
+            );
+            // Pick a subrange starting somewhere between position 100 and 1000
+        threadPool.executor(ThreadPool.Names.SNAPSHOT).execute(() -> {
+import java.io.InputStream;
+    }
+            RepositoriesService.class,
+        );
+            }
+                        client().prepareDelete(indexName, Integer.toString(doc)).get();
+            assertAcked(client().admin().indices().prepareClose(closeIndices.toArray(new String[0])));
+                assertThat(generated.getKey(), blobMetadata, CoreMatchers.notNullValue());
+import org.opensearch.common.settings.Settings;
+            .prepareCreateSnapshot(repoName, "test-snap2")
+    }
+        for (int i = 0; i < data.length; i++) {
+ *
+import org.opensearch.common.blobstore.BlobMetadata;
+            assertThat(blobs.size(), CoreMatchers.equalTo(numberOfFooBlobs + numberOfBarBlobs));
+        );
+            }
+            RepositoriesService.class
+        return PlainActionFuture.get(repository::getRepositoryData);
+        byte[] data = randomBytes(length);
+            docCounts[i] = (int) client().prepareSearch(indexName).setSize(0).get().getHits().getTotalHits().value();
+            try (InputStream stream = container.readBlob("foobar", startOffset, subrangeData.length)) {
+        ensureGreen();
+            () -> client().admin().cluster().prepareRestoreSnapshot(repoName, snapshotName).setWaitForCompletion(randomBoolean()).get()
+        try (BlobStore store = newBlobStore()) {
+            .setIndices("test-idx-1", "test-idx-2")
+        createSnapshotResponse = client.admin()
+        final String repoName = createRepository(randomName());
+    public void testDeleteBlobs() throws IOException {
+        logger.info("--> indexing more data");
+    protected static void writeBlob(BlobContainer container, String blobName, BytesArray bytesArray) throws IOException {
+import java.util.HashMap;
+import java.io.IOException;
+ */
+            final BlobContainer container = store.blobContainer(new BlobPath());
+        expectThrows(
+                generatedBlobs.put(name, (long) length);
+    protected static String randomName() {
+            logger.info("-->  performing restore of the iteration {}", iterationToRestore);
+ *
+            containerBar.delete();
+        try (BlobStore store = newBlobStore()) {
+            logger.info("-->  close indices {}", closeIndices);
+            for (String blobName : blobNames) {
+    public void testWriteRead() throws IOException {
+                container.writeBlobAtomic(blobName, stream, bytesArray.length(), failIfAlreadyExists);
+        });
+                        client().prepareDelete(index, Integer.toString(doc)).get();
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotRequestBuilder;
+            containerFoo.delete();
+        expectThrows(SnapshotMissingException.class, () -> client().admin().cluster().prepareDeleteSnapshot(repoName, snapshotName).get());
+                } else {
+                String name = "foo-" + i + "-";
+            Map<String, Long> generatedBlobs = new HashMap<>();
+                    }
+            generatedBlobs.put(name, (long) length);
+            assertArrayEquals(readBlobFully(containerFoo, "test", data1.length), data1);
+            byte[] data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
+ * license agreements. See the NOTICE file distributed with
+        String snapshotName = randomName();
+            if (indexId.getName().equals("test-idx-3")) {
+ */
+    private static void assertSuccessfulRestore(RestoreSnapshotResponse response) {
+                assertThat(blobMetadata.length(), CoreMatchers.equalTo(generated.getValue()));
+            final byte[] subrangeData = Arrays.copyOfRange(data, startOffset, endOffset);
+    public static byte[] randomBytes(int length) {
+    }
+                while (target.length() < data.length) {
+package org.opensearch.repositories.blobstore;
+                int docCount = randomIntBetween(10, 1000);
+ * SPDX-License-Identifier: Apache-2.0
+        return data;
+        assertThat(response.getRestoreInfo().successfulShards(), greaterThan(0));
+    }
+    }
+            int numberOfBarBlobs = randomIntBetween(3, 20);
+        ensureGreen();
+                assertThat(blobMetadata.name(), CoreMatchers.equalTo(generated.getKey()));
+ * this work for additional information regarding copyright
+                    is.read();
+import org.hamcrest.CoreMatchers;
+                    .setWaitForCompletion(true)
+                BytesRefBuilder target = new BytesRefBuilder();
+        }
+        }
+                        int doc = randomIntBetween(0, docCount - 1);
+ * Integration tests for {@link BlobStoreRepository} implementations.
+import java.util.List;
+    public static byte[] writeRandomBlob(BlobContainer container, String name, int length) throws IOException {
+            ensureGreen();
+                if (randomBoolean()) {
+import org.opensearch.action.admin.cluster.snapshots.create.CreateSnapshotResponse;
+        final PlainActionFuture<RepositoryData> repositoryData = PlainActionFuture.newFuture();
+ * ownership. Elasticsearch licenses this file to you under
+                    .cluster()
+            assertSuccessfulSnapshot(
+            .cluster()
+        logger.info("--> take another snapshot with only 2 of the 3 indices");
+                    for (int j = 0; j < deleteCount; j++) {
+        for (int i = 0; i < indexCount; i++) {
+            for (String index : closeIndices) {
+            logger.info("-->  delete snapshot {}:{}", repoName, snapshotName + "-" + i);
+            logger.info("-->  create snapshot {}:{} with {} documents", repoName, snapshotName + "-" + i, docCounts[i]);
+                String name = "bar-" + i + "-";
+            assertThat(inputStream.read(), CoreMatchers.equalTo(-1));
+import org.opensearch.common.blobstore.BlobPath;
+    }
+import org.opensearch.threadpool.ThreadPool;
+                BlobMetadata blobMetadata = blobs.get(generated.getKey());
+                container.writeBlob(blobName, stream, bytesArray.length(), failIfAlreadyExists);
+    }
+            container.deleteBlobsIgnoringIfNotExists(blobNames); // does not raise when blobs don't exist
+        String[] indexNames = generateRandomNames(indexCount);
+import java.util.Map;
+    }
+        ensureGreen();
+        int iterationCount = randomIntBetween(2, 5);
+                assertEquals(data.length, target.length());
+    }
+            }
+        final BlobStoreRepository blobStoreRepository = (BlobStoreRepository) internalCluster().getClusterManagerNodeInstance(
+            final int endOffset = randomIntBetween(startOffset + 100, data.length - 100);
+import org.opensearch.common.io.Streams;
+ * this file be licensed under the Apache-2.0 license or a
+    public static byte[] readBlobFully(BlobContainer container, String name, int length) throws IOException {
+ * software distributed under the License is distributed on an
+                    int offset = scaledRandomIntBetween(0, buffer.length - 1);
+            // 100 bytes before the end
+        }
+    ) throws IOException {
+        }
+                    for (int i = 0; i < deleteCount; i++) {
+            indexRequestBuilders[i] = client().prepareIndex(name)
+            addRandomDocuments(indexNames[i], docCounts[i]);
+                    byte[] buffer = new byte[scaledRandomIntBetween(1, data.length - target.length())];
+/*
+            Map<String, BlobMetadata> blobs = container.listBlobs();
+import org.opensearch.action.support.PlainActionFuture;
+        int indexCount = randomIntBetween(1, 5);
+            .prepareCreateSnapshot(repoName, "test-snap")
+            for (int i = 0; i < numberOfFooBlobs; i++) {
+        logger.info("--> verify index folder deleted from blob container");
+                client().admin()
+                assertArrayEquals(data, Arrays.copyOfRange(target.bytes(), 0, target.length()));
+        assertAcked(client().admin().indices().prepareCreate(indexName).get());
+    }
+    public void testContainerCreationAndDeletion() throws IOException {
+            assertSuccessfulRestore(
+            // and ending somewhere between 100 bytes past that position and
+            internalCluster().getClusterManagerName()
+    protected final String createRepository(final String name, final Settings settings) {
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
+            f -> blobStoreRepository.threadPool().generic().execute(ActionRunnable.supply(f, blobStoreRepository::blobStore))
+    }
+        assertEquals(createSnapshotResponse.getSnapshotInfo().successfulShards(), createSnapshotResponse.getSnapshotInfo().totalShards());
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.common.blobstore.BlobContainer;
+        try (InputStream stream = bytesArray.streamInput()) {
+    protected static void assertSuccessfulSnapshot(CreateSnapshotRequestBuilder requestBuilder) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        for (int i = 0; i < 20; i++) {
+            }
+        try (InputStream inputStream = container.readBlob(name)) {
+    public void testSnapshotAndRestore() throws Exception {
+        List<String> deleteIndices = randomSubsetOf(randomIntBetween(0, indexCount), indexNames);
+            data[i] = (byte) randomInt();
+            assertThat("blob store has to be lazy initialized", blobStore, verify ? is(notNullValue()) : is(nullValue()));
+import static org.hamcrest.Matchers.is;
+                int length = randomIntBetween(10, 100);
+            ensureGreen();
+        OpenSearchIntegTestCase.putRepository(client().admin().cluster(), name, repositoryType(), verify, Settings.builder().put(settings));
+            assertThat(Streams.readFully(inputStream, data), CoreMatchers.equalTo(length));
+                .setRouting(randomAlphaOfLength(randomIntBetween(1, 10)))
+    protected void addRandomDocuments(String name, int numDocs) throws InterruptedException {
+        indexRandom(true, indexRequestBuilders);
+            client().admin().cluster().prepareCreateSnapshot(repoName, snapshotName).setWaitForCompletion(true).setIndices(indexNames)
+        );
+    public void testReadRange() throws IOException {
+        ensureGreen();
+            // Wait for green so the close does not fail in the edge case of coinciding with a shard recovery that hasn't fully synced yet
+        }
+        int[] docCounts = new int[iterationCount];
+    }
+import org.opensearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequestBuilder;
+import java.util.Set;
+            names.add(name);
+            assertTrue(containerBar.blobExists("test"));
+            final byte[] data = randomBytes(4096);
+            docCounts[i] = iterations(10, 1000);
+                addRandomDocuments(indexName, docCount);
+            writeBlob(containerBar, "test", new BytesArray(data2));
+        );
+        return names.toArray(new String[num]);
+            int iterationToRestore = randomIntBetween(0, iterationCount - 1);
+ *
+            if (randomBoolean()) {
+        final SetOnce<BlobContainer> indicesBlobContainer = new SetOnce<>();
+import org.opensearch.repositories.RepositoryData;
+            assertTrue(containerFoo.blobExists("test"));
+import java.util.Arrays;
+            assertThat(repositories.repository(name), instanceOf(BlobStoreRepository.class));
+                    client().admin().indices().prepareRefresh(index).get();
+                    addRandomDocuments(index, randomIntBetween(10, 1000));
+            BlobStore blobStore = ((BlobStoreRepository) repositories.repository(name)).getBlobStore();
+        logger.info("--> restore all indices from the snapshot");
+            if (randomBoolean() && i > 0) { // don't delete on the first iteration
+    }
+/*
+            } while (names.contains(name));
+            assertThat(container.listBlobsByPrefix("foo-").size(), CoreMatchers.equalTo(numberOfFooBlobs));
+        }
+            .get();
+            index("test-idx-2", "doc", Integer.toString(i), "foo", "baz" + i);
+/**
+            byte[] data = randomBytes(randomIntBetween(10, scaledRandomIntBetween(1024, 1 << 16)));
+        builder.put("compress", compress);
+        }
+        }
+    }
+                name = randomName();
+    protected abstract String repositoryType();
+            }
+        assertAcked(client().admin().cluster().prepareDeleteSnapshot(repoName, "test-snap").get());
+        ensureGreen(TimeValue.timeValueSeconds(120));
+                    logger.info("--> delete {} random documents from {}", deleteCount, indexName);
+public abstract class OpenSearchBlobStoreRepositoryIntegTestCase extends OpenSearchIntegTestCase {
+        try (BlobStore store = newBlobStore()) {
+        IndexRequestBuilder[] indexRequestBuilders = new IndexRequestBuilder[numDocs];
+            assertAcked(client().admin().indices().prepareDelete(deleteIndices.toArray(new String[0])));
+                    int docCount = (int) client().prepareSearch(index).setSize(0).get().getHits().getTotalHits().value();
+            } else {
+        for (IndexId indexId : repositoryData.actionGet().getIndices().values()) {
+    public void testIndicesDeletedFromRepository() throws Exception {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                if (docCount > 0) {
+import org.opensearch.repositories.RepositoriesService;
+                    int deleteCount = randomIntBetween(1, docCount);
+        }
+        createIndex("test-idx-1", "test-idx-2", "test-idx-3");
+            .setWaitForCompletion(true)
+            do {
+                    logger.info("--> add random documents to {}", index);
+            logger.info("-->  delete indices {}", deleteIndices);
+            final BlobContainer container = store.blobContainer(new BlobPath());
+import static org.hamcrest.Matchers.greaterThan;
+        final boolean compress = randomBoolean();

@@ -1,134 +1,118 @@
+        );
+ */
+        expectThrows(AssertionError.class, () -> globalCM.reduce(collectorsList));
 /*
  * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.apache.lucene.search.Collector;
-import org.opensearch.search.aggregations.bucket.global.GlobalAggregator;
-import org.opensearch.search.profile.query.CollectorResult;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.mockito.Mockito.mock;
-
-public class AggregationCollectorManagerTests extends AggregationSetupTests {
-
-    public void testNonGlobalCollectorManagers() throws Exception {
+                || collectorManager instanceof NonGlobalAggCollectorManagerWithSingleCollector) {
+        expectThrows(AssertionError.class, () -> new NonGlobalAggCollectorManager(context));
         final AggregatorFactories aggregatorFactories = getAggregationFactories(multipleNonGlobalAggs);
-        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
+    public void testAssertionInSingleCollectorCMReduce() throws Exception {
+        SearchContextAggregations contextAggregations = new SearchContextAggregations(
             aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
-        );
-        context.aggregations(contextAggregations);
-        int expectedAggCount = 2;
-        final AggregationCollectorManager testAggCollectorManager = new NonGlobalAggCollectorManagerWithSingleCollector(context);
-        Collector aggCollector = testAggCollectorManager.newCollector();
-        assertTrue(aggCollector instanceof MultiBucketCollector);
+        AggregationCollectorManager nonGlobalCM = new NonGlobalAggCollectorManagerWithSingleCollector(context);
+            aggregatorFactories,
+        assertTrue(globalAggCollector instanceof BucketCollector);
+            aggregatorFactories,
+        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
+package org.opensearch.search.aggregations;
         assertEquals(expectedAggCount, ((MultiBucketCollector) aggCollector).getCollectors().length);
-        testCollectorManagerCommon(testAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
-
-        // test NonGlobalCollectorManager which will be used in concurrent segment search case
-        final NonGlobalAggCollectorManager testNonGlobalAggCollectorManager = new NonGlobalAggCollectorManager(context);
-        testCollectorManagerCommon(testNonGlobalAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
-    }
-
-    public void testGlobalCollectorManagers() throws Exception {
-        final AggregatorFactories aggregatorFactories = getAggregationFactories(globalAgg);
-        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
-            aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
-        );
-        context.aggregations(contextAggregations);
-        final AggregationCollectorManager testAggCollectorManager = new GlobalAggCollectorManagerWithSingleCollector(context);
-        testCollectorManagerCommon(testAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testAggCollectorManager.getCollectorReason());
-        Collector aggCollector = testAggCollectorManager.newCollector();
-        assertTrue(aggCollector instanceof BucketCollector);
-
-        // test GlobalAggCollectorManager which will be used in concurrent segment search case
+ * compatible open source license.
         final GlobalAggCollectorManager testGlobalAggCollectorManager = new GlobalAggCollectorManager(context);
-        testCollectorManagerCommon(testGlobalAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testAggCollectorManager.getCollectorReason());
-    }
-
+        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
+        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
+        List<Collector> collectorsList = new ArrayList<>();
+            aggregatorFactories,
+import org.opensearch.search.profile.query.CollectorResult;
+                assertNotSame(expectedCollector, newCollector);
+        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
+        final Collector expectedCollector = collectorManager.newCollector();
     public void testAggCollectorManagersWithBothGlobalNonGlobalAggregators() throws Exception {
         final AggregatorFactories aggregatorFactories = getAggregationFactories(globalNonGlobalAggs);
-        final SearchContextAggregations contextAggregations = new SearchContextAggregations(
-            aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
-        );
         context.aggregations(contextAggregations);
-        final AggregationCollectorManager testAggCollectorManager = new NonGlobalAggCollectorManagerWithSingleCollector(context);
-        Collector aggCollector = testAggCollectorManager.newCollector();
-        assertTrue(aggCollector instanceof BucketCollector);
-        assertFalse(aggCollector instanceof GlobalAggregator);
-
-        final AggregationCollectorManager testGlobalAggCollectorManager = new GlobalAggCollectorManagerWithSingleCollector(context);
-        Collector globalAggCollector = testGlobalAggCollectorManager.newCollector();
-        assertTrue(globalAggCollector instanceof BucketCollector);
-        assertTrue(globalAggCollector instanceof GlobalAggregator);
-
-        testCollectorManagerCommon(testAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
-        testCollectorManagerCommon(testGlobalAggCollectorManager);
-        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testGlobalAggCollectorManager.getCollectorReason());
-    }
-
-    public void testAssertionWhenCollectorManagerCreatesNoOPCollector() throws Exception {
         AggregatorFactories aggregatorFactories = getAggregationFactories(globalAgg);
-        SearchContextAggregations contextAggregations = new SearchContextAggregations(
-            aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
         );
+import org.opensearch.search.aggregations.bucket.global.GlobalAggregator;
+                // calling the newCollector multiple times should not return the same instance each time
+    }
+        final AggregationCollectorManager testGlobalAggCollectorManager = new GlobalAggCollectorManagerWithSingleCollector(context);
+            final Collector newCollector = collectorManager.newCollector();
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+            aggregatorFactories,
+        testCollectorManagerCommon(testAggCollectorManager);
+    public void testAssertionWhenCollectorManagerCreatesNoOPCollector() throws Exception {
+        expectThrows(AssertionError.class, () -> new GlobalAggCollectorManagerWithSingleCollector(context));
+        int expectedAggCount = 2;
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
+        );
+        collectorsList.add(mock(Collector.class));
+        assertTrue(aggCollector instanceof MultiBucketCollector);
+        context.aggregations(contextAggregations);
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+        final NonGlobalAggCollectorManager testNonGlobalAggCollectorManager = new NonGlobalAggCollectorManager(context);
+}
+                // calling the newCollector multiple times should return the same instance each time
+import java.util.ArrayList;
+        Collector globalAggCollector = testGlobalAggCollectorManager.newCollector();
+import java.util.List;
+        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testGlobalAggCollectorManager.getCollectorReason());
+            }
+        Collector aggCollector = testAggCollectorManager.newCollector();
+import static org.mockito.Mockito.mock;
+        expectThrows(AssertionError.class, () -> nonGlobalCM.reduce(collectorsList));
+public class AggregationCollectorManagerTests extends AggregationSetupTests {
+    }
+ * The OpenSearch Contributors require contributions made to
+        );
+        Collector aggCollector = testAggCollectorManager.newCollector();
+            } else if (collectorManager instanceof GlobalAggCollectorManager || collectorManager instanceof NonGlobalAggCollectorManager) {
+        testCollectorManagerCommon(testAggCollectorManager);
+                assertSame(expectedCollector, newCollector);
+        AggregationCollectorManager globalCM = new GlobalAggCollectorManagerWithSingleCollector(context);
+        AggregatorFactories aggregatorFactories = getAggregationFactories(globalNonGlobalAggs);
+        context.aggregations(contextAggregations);
+        }
+        testCollectorManagerCommon(testNonGlobalAggCollectorManager);
+    public void testGlobalCollectorManagers() throws Exception {
+    private void testCollectorManagerCommon(AggregationCollectorManager collectorManager) throws Exception {
+        contextAggregations = new SearchContextAggregations(
+        for (int i = 0; i < randomIntBetween(2, 5); ++i) {
+    }
+        testCollectorManagerCommon(testAggCollectorManager);
+            if (collectorManager instanceof GlobalAggCollectorManagerWithSingleCollector
+        assertTrue(globalAggCollector instanceof GlobalAggregator);
+        final AggregatorFactories aggregatorFactories = getAggregationFactories(globalAgg);
+    }
+        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testAggCollectorManager.getCollectorReason());
+    public void testNonGlobalCollectorManagers() throws Exception {
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+    }
+        testCollectorManagerCommon(testGlobalAggCollectorManager);
+        Collector aggCollector = testAggCollectorManager.newCollector();
+        SearchContextAggregations contextAggregations = new SearchContextAggregations(
+        final AggregationCollectorManager testAggCollectorManager = new NonGlobalAggCollectorManagerWithSingleCollector(context);
+        // test GlobalAggCollectorManager which will be used in concurrent segment search case
+        assertEquals(CollectorResult.REASON_AGGREGATION, testAggCollectorManager.getCollectorReason());
+        assertTrue(aggCollector instanceof BucketCollector);
         context.aggregations(contextAggregations);
         expectThrows(AssertionError.class, () -> new NonGlobalAggCollectorManagerWithSingleCollector(context));
-        expectThrows(AssertionError.class, () -> new NonGlobalAggCollectorManager(context));
-
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+        final AggregationCollectorManager testAggCollectorManager = new NonGlobalAggCollectorManagerWithSingleCollector(context);
+import org.apache.lucene.search.Collector;
+        );
+            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
+        final AggregationCollectorManager testAggCollectorManager = new GlobalAggCollectorManagerWithSingleCollector(context);
+    }
+        // test NonGlobalCollectorManager which will be used in concurrent segment search case
+        testCollectorManagerCommon(testGlobalAggCollectorManager);
+        );
+        assertEquals(CollectorResult.REASON_AGGREGATION_GLOBAL, testAggCollectorManager.getCollectorReason());
+            aggregatorFactories,
+ *
+        assertTrue(aggCollector instanceof BucketCollector);
         aggregatorFactories = getAggregationFactories(multipleNonGlobalAggs);
-        contextAggregations = new SearchContextAggregations(
-            aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
-        );
-        context.aggregations(contextAggregations);
-        expectThrows(AssertionError.class, () -> new GlobalAggCollectorManagerWithSingleCollector(context));
+        assertFalse(aggCollector instanceof GlobalAggregator);
         expectThrows(AssertionError.class, () -> new GlobalAggCollectorManager(context));
-    }
-
-    public void testAssertionInSingleCollectorCMReduce() throws Exception {
-        AggregatorFactories aggregatorFactories = getAggregationFactories(globalNonGlobalAggs);
-        SearchContextAggregations contextAggregations = new SearchContextAggregations(
-            aggregatorFactories,
-            mock(MultiBucketConsumerService.MultiBucketConsumer.class)
-        );
-        List<Collector> collectorsList = new ArrayList<>();
-        collectorsList.add(mock(Collector.class));
         context.aggregations(contextAggregations);
-        AggregationCollectorManager globalCM = new GlobalAggCollectorManagerWithSingleCollector(context);
-        AggregationCollectorManager nonGlobalCM = new NonGlobalAggCollectorManagerWithSingleCollector(context);
-        expectThrows(AssertionError.class, () -> globalCM.reduce(collectorsList));
-        expectThrows(AssertionError.class, () -> nonGlobalCM.reduce(collectorsList));
-    }
-
-    private void testCollectorManagerCommon(AggregationCollectorManager collectorManager) throws Exception {
-        final Collector expectedCollector = collectorManager.newCollector();
-        for (int i = 0; i < randomIntBetween(2, 5); ++i) {
-            final Collector newCollector = collectorManager.newCollector();
-            if (collectorManager instanceof GlobalAggCollectorManagerWithSingleCollector
-                || collectorManager instanceof NonGlobalAggCollectorManagerWithSingleCollector) {
-                // calling the newCollector multiple times should return the same instance each time
-                assertSame(expectedCollector, newCollector);
-            } else if (collectorManager instanceof GlobalAggCollectorManager || collectorManager instanceof NonGlobalAggCollectorManager) {
-                // calling the newCollector multiple times should not return the same instance each time
-                assertNotSame(expectedCollector, newCollector);
-            }
-        }
-    }
-}
+        context.aggregations(contextAggregations);
+ * this file be licensed under the Apache-2.0 license or a

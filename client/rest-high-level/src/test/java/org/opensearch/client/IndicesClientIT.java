@@ -1,2163 +1,1937 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client;
-
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.classic.methods.HttpPost;
-import org.apache.hc.client5.http.classic.methods.HttpPut;
-import org.opensearch.OpenSearchException;
-import org.opensearch.OpenSearchStatusException;
-import org.opensearch.action.admin.indices.alias.Alias;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
-import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
-import org.opensearch.action.admin.indices.alias.get.GetAliasesRequest;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
-import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
-import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.opensearch.action.admin.indices.flush.FlushRequest;
-import org.opensearch.action.admin.indices.flush.FlushResponse;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
-import org.opensearch.action.admin.indices.open.OpenIndexRequest;
-import org.opensearch.action.admin.indices.open.OpenIndexResponse;
-import org.opensearch.action.admin.indices.refresh.RefreshRequest;
-import org.opensearch.action.admin.indices.refresh.RefreshResponse;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;
-import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
-import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
-import org.opensearch.action.admin.indices.shrink.ResizeRequest;
-import org.opensearch.action.admin.indices.shrink.ResizeResponse;
-import org.opensearch.action.admin.indices.shrink.ResizeType;
-import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
-import org.opensearch.action.admin.indices.validate.query.ValidateQueryResponse;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.support.broadcast.BroadcastResponse;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.client.indices.AnalyzeRequest;
-import org.opensearch.client.indices.AnalyzeResponse;
-import org.opensearch.client.indices.CloseIndexRequest;
-import org.opensearch.client.indices.CloseIndexResponse;
-import org.opensearch.client.indices.ComposableIndexTemplateExistRequest;
-import org.opensearch.client.indices.CreateDataStreamRequest;
-import org.opensearch.client.indices.CreateIndexRequest;
-import org.opensearch.client.indices.CreateIndexResponse;
-import org.opensearch.client.indices.DataStream;
-import org.opensearch.client.indices.DataStreamsStatsRequest;
-import org.opensearch.client.indices.DataStreamsStatsResponse;
-import org.opensearch.client.indices.DataStreamsStatsResponse.DataStreamStats;
-import org.opensearch.client.indices.DeleteAliasRequest;
-import org.opensearch.client.indices.DeleteComposableIndexTemplateRequest;
-import org.opensearch.client.indices.DeleteDataStreamRequest;
-import org.opensearch.client.indices.GetComposableIndexTemplateRequest;
-import org.opensearch.client.indices.GetComposableIndexTemplatesResponse;
-import org.opensearch.client.indices.GetDataStreamRequest;
-import org.opensearch.client.indices.GetDataStreamResponse;
-import org.opensearch.client.indices.GetFieldMappingsRequest;
-import org.opensearch.client.indices.GetFieldMappingsResponse;
-import org.opensearch.client.indices.GetIndexRequest;
-import org.opensearch.client.indices.GetIndexResponse;
-import org.opensearch.client.indices.GetIndexTemplatesRequest;
-import org.opensearch.client.indices.GetIndexTemplatesResponse;
-import org.opensearch.client.indices.GetMappingsRequest;
-import org.opensearch.client.indices.GetMappingsResponse;
-import org.opensearch.client.indices.IndexTemplateMetadata;
-import org.opensearch.client.indices.IndexTemplatesExistRequest;
-import org.opensearch.client.indices.PutComposableIndexTemplateRequest;
-import org.opensearch.client.indices.PutIndexTemplateRequest;
-import org.opensearch.client.indices.PutMappingRequest;
-import org.opensearch.client.indices.SimulateIndexTemplateRequest;
-import org.opensearch.client.indices.SimulateIndexTemplateResponse;
-import org.opensearch.client.indices.rollover.RolloverRequest;
-import org.opensearch.client.indices.rollover.RolloverResponse;
-import org.opensearch.cluster.metadata.AliasMetadata;
-import org.opensearch.cluster.metadata.ComposableIndexTemplate;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.Template;
-import org.opensearch.common.ValidationException;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.json.JsonXContent;
-import org.opensearch.common.xcontent.support.XContentMapValues;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_CREATION_DATE;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
-import static org.opensearch.common.xcontent.support.XContentMapValues.extractRawValues;
-import static org.opensearch.common.xcontent.support.XContentMapValues.extractValue;
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.hamcrest.Matchers.arrayContainingInAnyOrder;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasItems;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.startsWith;
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
-
-public class IndicesClientIT extends OpenSearchRestHighLevelClientTestCase {
-
-    public void testIndicesExists() throws IOException {
-        // Index present
-        {
-            String indexName = "test_index_exists_index_present";
-            createIndex(indexName, Settings.EMPTY);
-
-            GetIndexRequest request = new GetIndexRequest(indexName);
-
-            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
-            assertTrue(response);
-        }
-
-        // Index doesn't exist
-        {
-            String indexName = "non_existent_index";
-
-            GetIndexRequest request = new GetIndexRequest(indexName);
-
-            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
-            assertFalse(response);
-        }
-
-        // One index exists, one doesn't
-        {
-            String existingIndex = "apples";
-            createIndex(existingIndex, Settings.EMPTY);
-
-            String nonExistentIndex = "oranges";
-
-            GetIndexRequest request = new GetIndexRequest(existingIndex, nonExistentIndex);
-
-            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
-            assertFalse(response);
-        }
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public void testCreateIndex() throws IOException {
-        {
-            // Create index
-            String indexName = "plain_index";
-            assertFalse(indexExists(indexName));
-
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
-
-            CreateIndexResponse createIndexResponse = execute(
-                createIndexRequest,
-                highLevelClient().indices()::create,
-                highLevelClient().indices()::createAsync
-            );
-            assertTrue(createIndexResponse.isAcknowledged());
-
-            assertTrue(indexExists(indexName));
-        }
-        {
-            // Create index with mappings, aliases and settings
-            String indexName = "rich_index";
-            assertFalse(indexExists(indexName));
-
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
-
-            Alias alias = new Alias("alias_name");
-            alias.filter("{\"term\":{\"year\":2016}}");
-            alias.routing("1");
-            createIndexRequest.alias(alias);
-
-            Settings.Builder settings = Settings.builder();
-            settings.put(SETTING_NUMBER_OF_REPLICAS, 2);
-            createIndexRequest.settings(settings);
-
-            XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
-            mappingBuilder.startObject().startObject("properties").startObject("field");
-            mappingBuilder.field("type", "text");
-            mappingBuilder.endObject().endObject().endObject();
-            createIndexRequest.mapping(mappingBuilder);
-
-            CreateIndexResponse createIndexResponse = execute(
-                createIndexRequest,
-                highLevelClient().indices()::create,
-                highLevelClient().indices()::createAsync
-            );
-            assertTrue(createIndexResponse.isAcknowledged());
-
-            Map<String, Object> getIndexResponse = getAsMap(indexName);
-            assertEquals("2", XContentMapValues.extractValue(indexName + ".settings.index.number_of_replicas", getIndexResponse));
-
-            Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue(
-                indexName + ".aliases.alias_name",
-                getIndexResponse
-            );
-            assertNotNull(aliasData);
-            assertEquals("1", aliasData.get("index_routing"));
-            Map<String, Object> filter = (Map) aliasData.get("filter");
-            Map<String, Object> term = (Map) filter.get("term");
-            assertEquals(2016, term.get("year"));
-
-            assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
-        }
-    }
-
-    public void testCreateIndexWithCreationDate() throws IOException {
-        {
-            // Create index with creation_date setting - should succeed now that it's not private
-            String indexName = "creation_date_index";
-            assertFalse(indexExists(indexName));
-
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
-
-            Settings.Builder settings = Settings.builder();
-            settings.put(SETTING_CREATION_DATE, 1234567890L);
-            createIndexRequest.settings(settings);
-
-            CreateIndexResponse createIndexResponse = execute(
-                createIndexRequest,
-                highLevelClient().indices()::create,
-                highLevelClient().indices()::createAsync
-            );
-            assertTrue(
-                "Index creation should be acknowledged when setting creation_date during index creation",
-                createIndexResponse.isAcknowledged()
-            );
-            assertTrue("Index should exist after creation with creation_date setting", indexExists(indexName));
-        }
-    }
-
-    public void testUpdateIndexSettingsFailFinalSetting() throws IOException {
-        {
-            // Create index and attempt to update creation_date - should fail as it's a final setting
-            String indexName = "final_setting_index";
-            createIndex(indexName, Settings.EMPTY);
-
-            UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(indexName);
-            Settings.Builder settings = Settings.builder();
-            settings.put(SETTING_CREATION_DATE, 9876543210L);
-            updateSettingsRequest.settings(settings);
-
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(
-                    updateSettingsRequest,
-                    highLevelClient().indices()::putSettings,
-                    highLevelClient().indices()::putSettingsAsync
-                )
-            );
-            assertTrue(
-                "Exception message should indicate that index.creation_date cannot be updated. Got: " + exception.getMessage(),
-                exception.getMessage().contains("Can't update non dynamic settings [[index.creation_date]]")
-            );
-        }
-    }
-
-    public void testGetSettings() throws IOException {
-        String indexName = "get_settings_index";
-        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-        createIndex(indexName, basicSettings);
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName);
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
-        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
-
-        updateIndexSettings(indexName, Settings.builder().put("refresh_interval", "30s"));
-
-        GetSettingsResponse updatedResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-        assertEquals("30s", updatedResponse.getSetting(indexName, "index.refresh_interval"));
-    }
-
-    public void testGetPrivateSettings() throws IOException {
-        String indexName = "get_settings_index";
-        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-
-        createIndex(indexName, basicSettings);
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName);
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
-        assertNotNull(getSettingsResponse.getSetting(indexName, "index.creation_date"));
-        assertNotNull(getSettingsResponse.getSetting(indexName, "index.uuid"));
-    }
-
-    public void testGetSettingsNonExistentIndex() throws IOException {
-        String nonExistentIndex = "index_that_doesnt_exist";
-        assertFalse(indexExists(nonExistentIndex));
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(nonExistentIndex);
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(getSettingsRequest, highLevelClient().indices()::getSettings, highLevelClient().indices()::getSettingsAsync)
-        );
-        assertEquals(RestStatus.NOT_FOUND, exception.status());
-    }
-
-    public void testGetSettingsFromMultipleIndices() throws IOException {
-        String indexName1 = "get_multiple_settings_one";
-        createIndex(indexName1, Settings.builder().put("number_of_shards", 2).build());
-
-        String indexName2 = "get_multiple_settings_two";
-        createIndex(indexName2, Settings.builder().put("number_of_shards", 3).build());
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices("get_multiple_settings*");
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertEquals("2", getSettingsResponse.getSetting(indexName1, "index.number_of_shards"));
-        assertEquals("3", getSettingsResponse.getSetting(indexName2, "index.number_of_shards"));
-    }
-
-    public void testGetSettingsFiltered() throws IOException {
-        String indexName = "get_settings_index";
-        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-        createIndex(indexName, basicSettings);
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName).names("index.number_of_shards");
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_replicas"));
-        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
-        assertEquals(1, getSettingsResponse.getIndexToSettings().get("get_settings_index").size());
-    }
-
-    public void testGetSettingsWithDefaults() throws IOException {
-        String indexName = "get_settings_index";
-        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-        createIndex(indexName, basicSettings);
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName).includeDefaults(true);
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertNotNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
-        assertEquals(
-            IndexSettings.DEFAULT_REFRESH_INTERVAL,
-            getSettingsResponse.getIndexToDefaultSettings().get("get_settings_index").getAsTime("index.refresh_interval", null)
-        );
-        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
-    }
-
-    public void testGetSettingsWithDefaultsFiltered() throws IOException {
-        String indexName = "get_settings_index";
-        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-        createIndex(indexName, basicSettings);
-
-        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName)
-            .names("index.refresh_interval")
-            .includeDefaults(true);
-        GetSettingsResponse getSettingsResponse = execute(
-            getSettingsRequest,
-            highLevelClient().indices()::getSettings,
-            highLevelClient().indices()::getSettingsAsync
-        );
-
-        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_replicas"));
-        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
-        assertEquals(0, getSettingsResponse.getIndexToSettings().get("get_settings_index").size());
-        assertEquals(1, getSettingsResponse.getIndexToDefaultSettings().get("get_settings_index").size());
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testGetIndex() throws IOException {
-        String indexName = "get_index_test";
-        Settings basicSettings = Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build();
-        String mappings = "\"properties\":{\"field-1\":{\"type\":\"integer\"}}";
-        createIndex(indexName, basicSettings, mappings);
-
-        GetIndexRequest getIndexRequest = new GetIndexRequest(indexName).includeDefaults(false);
-        GetIndexResponse getIndexResponse = execute(
-            getIndexRequest,
-            highLevelClient().indices()::get,
-            highLevelClient().indices()::getAsync
-        );
-
-        // default settings should be null
-        assertNull(getIndexResponse.getSetting(indexName, "index.refresh_interval"));
-        assertEquals("1", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_SHARDS));
-        assertEquals("0", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_REPLICAS));
-        assertNotNull(getIndexResponse.getMappings().get(indexName));
-        assertNotNull(getIndexResponse.getMappings().get(indexName));
-        MappingMetadata mappingMetadata = getIndexResponse.getMappings().get(indexName);
-        assertNotNull(mappingMetadata);
-        assertEquals("_doc", mappingMetadata.type());
-        assertEquals("{\"properties\":{\"field-1\":{\"type\":\"integer\"}}}", mappingMetadata.source().string());
-        Object o = mappingMetadata.getSourceAsMap().get("properties");
-        assertThat(o, instanceOf(Map.class));
-        // noinspection unchecked
-        assertThat(((Map<String, Object>) o).get("field-1"), instanceOf(Map.class));
-        // noinspection unchecked
-        Map<String, Object> fieldMapping = (Map<String, Object>) ((Map<String, Object>) o).get("field-1");
-        assertEquals("integer", fieldMapping.get("type"));
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testGetIndexWithDefaults() throws IOException {
-        String indexName = "get_index_test";
-        Settings basicSettings = Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build();
-        String mappings = "\"properties\":{\"field-1\":{\"type\":\"integer\"}}";
-        createIndex(indexName, basicSettings, mappings);
-
-        GetIndexRequest getIndexRequest = new GetIndexRequest(indexName).includeDefaults(true);
-        GetIndexResponse getIndexResponse = execute(
-            getIndexRequest,
-            highLevelClient().indices()::get,
-            highLevelClient().indices()::getAsync
-        );
-
-        assertNotNull(getIndexResponse.getSetting(indexName, "index.refresh_interval"));
-        assertEquals(
-            IndexSettings.DEFAULT_REFRESH_INTERVAL,
-            getIndexResponse.getDefaultSettings().get(indexName).getAsTime("index.refresh_interval", null)
-        );
-        assertEquals("1", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_SHARDS));
-        assertEquals("0", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_REPLICAS));
-        assertNotNull(getIndexResponse.getMappings().get(indexName));
-        assertNotNull(getIndexResponse.getMappings().get(indexName));
-        Object o = getIndexResponse.getMappings().get(indexName).getSourceAsMap().get("properties");
-        assertThat(o, instanceOf(Map.class));
-        assertThat(((Map<String, Object>) o).get("field-1"), instanceOf(Map.class));
-        Map<String, Object> fieldMapping = (Map<String, Object>) ((Map<String, Object>) o).get("field-1");
-        assertEquals("integer", fieldMapping.get("type"));
-    }
-
-    public void testGetIndexNonExistentIndex() throws IOException {
-        String nonExistentIndex = "index_that_doesnt_exist";
-        assertFalse(indexExists(nonExistentIndex));
-
-        GetIndexRequest getIndexRequest = new GetIndexRequest(nonExistentIndex);
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(getIndexRequest, highLevelClient().indices()::get, highLevelClient().indices()::getAsync)
-        );
-        assertEquals(RestStatus.NOT_FOUND, exception.status());
-    }
-
-    public void testPutMapping() throws IOException {
-        String indexName = "mapping_index";
-        createIndex(indexName, Settings.EMPTY);
-
-        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
-        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
-        mappingBuilder.startObject().startObject("properties").startObject("field");
-        mappingBuilder.field("type", "text");
-        mappingBuilder.endObject().endObject().endObject();
-        putMappingRequest.source(mappingBuilder);
-
-        AcknowledgedResponse putMappingResponse = execute(
-            putMappingRequest,
-            highLevelClient().indices()::putMapping,
-            highLevelClient().indices()::putMappingAsync
-        );
-        assertTrue(putMappingResponse.isAcknowledged());
-
-        Map<String, Object> getIndexResponse = getAsMap(indexName);
-        assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
-    }
-
-    public void testGetMapping() throws IOException {
-        String indexName = "test";
-        createIndex(indexName, Settings.EMPTY);
-
-        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
-        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
-        mappingBuilder.startObject().startObject("properties").startObject("field");
-        mappingBuilder.field("type", "text");
-        mappingBuilder.endObject().endObject().endObject();
-        putMappingRequest.source(mappingBuilder);
-
-        AcknowledgedResponse putMappingResponse = execute(
-            putMappingRequest,
-            highLevelClient().indices()::putMapping,
-            highLevelClient().indices()::putMappingAsync
-        );
-        assertTrue(putMappingResponse.isAcknowledged());
-
-        Map<String, Object> getIndexResponse = getAsMap(indexName);
-        assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
-
-        GetMappingsRequest request = new GetMappingsRequest().indices(indexName);
-
-        GetMappingsResponse getMappingsResponse = execute(
-            request,
-            highLevelClient().indices()::getMapping,
-            highLevelClient().indices()::getMappingAsync
-        );
-
-        Map<String, Object> mappings = getMappingsResponse.mappings().get(indexName).sourceAsMap();
-        Map<String, String> type = new HashMap<>();
-        type.put("type", "text");
-        Map<String, Object> field = new HashMap<>();
-        field.put("field", type);
-        Map<String, Object> expected = new HashMap<>();
-        expected.put("properties", field);
-        assertThat(mappings, equalTo(expected));
-    }
-
-    public void testGetFieldMapping() throws IOException {
-        String indexName = "test";
-        createIndex(indexName, Settings.EMPTY);
-
-        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
-        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
-        mappingBuilder.startObject().startObject("properties").startObject("field");
-        mappingBuilder.field("type", "text");
-        mappingBuilder.endObject().endObject().endObject();
-        putMappingRequest.source(mappingBuilder);
-
-        AcknowledgedResponse putMappingResponse = execute(
-            putMappingRequest,
-            highLevelClient().indices()::putMapping,
-            highLevelClient().indices()::putMappingAsync
-        );
-        assertTrue(putMappingResponse.isAcknowledged());
-
-        GetFieldMappingsRequest getFieldMappingsRequest = new GetFieldMappingsRequest().indices(indexName).fields("field");
-
-        GetFieldMappingsResponse getFieldMappingsResponse = execute(
-            getFieldMappingsRequest,
-            highLevelClient().indices()::getFieldMapping,
-            highLevelClient().indices()::getFieldMappingAsync
-        );
-
-        final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappingMap = getFieldMappingsResponse.mappings()
-            .get(indexName);
-
-        final GetFieldMappingsResponse.FieldMappingMetadata metadata = new GetFieldMappingsResponse.FieldMappingMetadata(
-            "field",
-            new BytesArray("{\"field\":{\"type\":\"text\"}}")
-        );
-        assertThat(fieldMappingMap, equalTo(Collections.singletonMap("field", metadata)));
-    }
-
-    public void testDeleteIndex() throws IOException {
-        {
-            // Delete index if exists
-            String indexName = "test_index";
-            createIndex(indexName, Settings.EMPTY);
-
-            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
-            AcknowledgedResponse deleteIndexResponse = execute(
-                deleteIndexRequest,
-                highLevelClient().indices()::delete,
-                highLevelClient().indices()::deleteAsync
-            );
-            assertTrue(deleteIndexResponse.isAcknowledged());
-
-            assertFalse(indexExists(indexName));
-        }
-        {
-            // Return 404 if index doesn't exist
-            String nonExistentIndex = "non_existent_index";
-            assertFalse(indexExists(nonExistentIndex));
-
-            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(nonExistentIndex);
-
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(deleteIndexRequest, highLevelClient().indices()::delete, highLevelClient().indices()::deleteAsync)
-            );
-            assertEquals(RestStatus.NOT_FOUND, exception.status());
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testUpdateAliases() throws IOException {
-        String index = "index";
-        String alias = "alias";
-
-        createIndex(index, Settings.EMPTY);
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(alias), equalTo(false));
-
-        IndicesAliasesRequest aliasesAddRequest = new IndicesAliasesRequest();
-        AliasActions addAction = new AliasActions(AliasActions.Type.ADD).index(index).aliases(alias);
-        if (randomBoolean()) {
-            addAction.writeIndex(randomBoolean());
-        }
-        addAction.routing("routing").searchRouting("search_routing").filter("{\"term\":{\"year\":2016}}");
-        aliasesAddRequest.addAliasAction(addAction);
-        AcknowledgedResponse aliasesAddResponse = execute(
-            aliasesAddRequest,
-            highLevelClient().indices()::updateAliases,
-            highLevelClient().indices()::updateAliasesAsync
-        );
-        assertTrue(aliasesAddResponse.isAcknowledged());
-        assertThat(aliasExists(alias), equalTo(true));
-        assertThat(aliasExists(index, alias), equalTo(true));
-        Map<String, Object> getAlias = getAlias(index, alias);
-        assertThat(getAlias.get("index_routing"), equalTo("routing"));
-        assertThat(getAlias.get("search_routing"), equalTo("search_routing"));
-        Map<String, Object> filter = (Map<String, Object>) getAlias.get("filter");
-        Map<String, Object> term = (Map<String, Object>) filter.get("term");
-        assertEquals(2016, term.get("year"));
-        Boolean isWriteIndex = (Boolean) getAlias.get("is_write_index");
-        assertThat(isWriteIndex, equalTo(addAction.writeIndex()));
-
-        String alias2 = "alias2";
-        IndicesAliasesRequest aliasesAddRemoveRequest = new IndicesAliasesRequest();
-        addAction = new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias2);
-        aliasesAddRemoveRequest.addAliasAction(addAction);
-        AliasActions removeAction = new AliasActions(AliasActions.Type.REMOVE).index(index).alias(alias);
-        aliasesAddRemoveRequest.addAliasAction(removeAction);
-        AcknowledgedResponse aliasesAddRemoveResponse = execute(
-            aliasesAddRemoveRequest,
-            highLevelClient().indices()::updateAliases,
-            highLevelClient().indices()::updateAliasesAsync
-        );
-        assertTrue(aliasesAddRemoveResponse.isAcknowledged());
-        assertThat(aliasExists(alias), equalTo(false));
-        assertThat(aliasExists(alias2), equalTo(true));
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(index, alias2), equalTo(true));
-
-        IndicesAliasesRequest aliasesRemoveIndexRequest = new IndicesAliasesRequest();
-        AliasActions removeIndexAction = new AliasActions(AliasActions.Type.REMOVE_INDEX).index(index);
-        aliasesRemoveIndexRequest.addAliasAction(removeIndexAction);
-        AcknowledgedResponse aliasesRemoveIndexResponse = execute(
-            aliasesRemoveIndexRequest,
-            highLevelClient().indices()::updateAliases,
-            highLevelClient().indices()::updateAliasesAsync
-        );
-        assertTrue(aliasesRemoveIndexResponse.isAcknowledged());
-        assertThat(aliasExists(alias), equalTo(false));
-        assertThat(aliasExists(alias2), equalTo(false));
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(index, alias2), equalTo(false));
-        assertThat(indexExists(index), equalTo(false));
-    }
-
-    public void testAliasesNonExistentIndex() throws IOException {
-        String index = "index";
-        String alias = "alias";
-        String nonExistentIndex = "non_existent_index";
-
-        IndicesAliasesRequest nonExistentIndexRequest = new IndicesAliasesRequest();
-        nonExistentIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).index(nonExistentIndex).alias(alias));
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(
-                nonExistentIndexRequest,
-                highLevelClient().indices()::updateAliases,
-                highLevelClient().indices()::updateAliasesAsync
-            )
-        );
-        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
-        assertThat(
-            exception.getMessage(),
-            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
-        );
-        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
-
-        createIndex(index, Settings.EMPTY);
-        IndicesAliasesRequest mixedRequest = new IndicesAliasesRequest();
-        mixedRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).aliases(alias));
-        mixedRequest.addAliasAction(new AliasActions(AliasActions.Type.REMOVE).indices(nonExistentIndex).alias(alias));
-        exception = expectThrows(
-            OpenSearchStatusException.class,
-            () -> execute(mixedRequest, highLevelClient().indices()::updateAliases, highLevelClient().indices()::updateAliasesAsync)
-        );
-        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
-        assertThat(
-            exception.getMessage(),
-            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
-        );
-        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
-        assertThat(exception.getMetadata("opensearch.index"), not(hasItem(index)));
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(alias), equalTo(false));
-
-        IndicesAliasesRequest removeIndexRequest = new IndicesAliasesRequest();
-        removeIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).index(nonExistentIndex).alias(alias));
-        removeIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.REMOVE_INDEX).indices(nonExistentIndex));
-        exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(removeIndexRequest, highLevelClient().indices()::updateAliases, highLevelClient().indices()::updateAliasesAsync)
-        );
-        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
-        assertThat(
-            exception.getMessage(),
-            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
-        );
-        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
-        assertThat(exception.getMetadata("opensearch.index"), not(hasItem(index)));
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(alias), equalTo(false));
-    }
-
-    public void testOpenExistingIndex() throws IOException {
-        String index = "index";
-        createIndex(index, Settings.EMPTY);
-        closeIndex(index);
-        ResponseException exception = expectThrows(
-            ResponseException.class,
-            () -> client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + index + "/_search"))
-        );
-        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.BAD_REQUEST.getStatus()));
-        assertThat(exception.getMessage().contains(index), equalTo(true));
-
-        OpenIndexRequest openIndexRequest = new OpenIndexRequest(index);
-        OpenIndexResponse openIndexResponse = execute(
-            openIndexRequest,
-            highLevelClient().indices()::open,
-            highLevelClient().indices()::openAsync
-        );
-        assertTrue(openIndexResponse.isAcknowledged());
-
-        Response response = client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + index + "/_search"));
-        assertThat(response.getStatusLine().getStatusCode(), equalTo(RestStatus.OK.getStatus()));
-    }
-
-    public void testOpenNonExistentIndex() throws IOException {
-        String nonExistentIndex = "non_existent_index";
-        assertFalse(indexExists(nonExistentIndex));
-
-        OpenIndexRequest openIndexRequest = new OpenIndexRequest(nonExistentIndex);
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(openIndexRequest, highLevelClient().indices()::open, highLevelClient().indices()::openAsync)
-        );
-        assertEquals(RestStatus.NOT_FOUND, exception.status());
-
-        OpenIndexRequest lenientOpenIndexRequest = new OpenIndexRequest(nonExistentIndex);
-        lenientOpenIndexRequest.indicesOptions(IndicesOptions.lenientExpandOpen());
-        OpenIndexResponse lenientOpenIndexResponse = execute(
-            lenientOpenIndexRequest,
-            highLevelClient().indices()::open,
-            highLevelClient().indices()::openAsync
-        );
-        assertThat(lenientOpenIndexResponse.isAcknowledged(), equalTo(true));
-
-        OpenIndexRequest strictOpenIndexRequest = new OpenIndexRequest(nonExistentIndex);
-        strictOpenIndexRequest.indicesOptions(IndicesOptions.strictExpandOpen());
-        OpenSearchException strictException = expectThrows(
-            OpenSearchException.class,
-            () -> execute(openIndexRequest, highLevelClient().indices()::open, highLevelClient().indices()::openAsync)
-        );
-        assertEquals(RestStatus.NOT_FOUND, strictException.status());
-    }
-
-    public void testCloseExistingIndex() throws IOException {
-        final String[] indices = new String[randomIntBetween(1, 5)];
-        for (int i = 0; i < indices.length; i++) {
-            String index = "index-" + i;
-            createIndex(index, Settings.EMPTY);
-            indices[i] = index;
-        }
-
-        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(indices);
-        CloseIndexResponse closeIndexResponse = execute(
-            closeIndexRequest,
-            highLevelClient().indices()::close,
-            highLevelClient().indices()::closeAsync
-        );
-        assertTrue(closeIndexResponse.isAcknowledged());
-        assertTrue(closeIndexResponse.isShardsAcknowledged());
-        assertThat(closeIndexResponse.getIndices(), notNullValue());
-        assertThat(closeIndexResponse.getIndices(), hasSize(indices.length));
-        closeIndexResponse.getIndices().forEach(indexResult -> {
-            assertThat(indexResult.getIndex(), startsWith("index-"));
-            assertThat(indexResult.hasFailures(), is(false));
-
-            ResponseException exception = expectThrows(
-                ResponseException.class,
-                () -> client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + indexResult.getIndex() + "/_search"))
-            );
-            assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.BAD_REQUEST.getStatus()));
-            assertThat(exception.getMessage().contains(indexResult.getIndex()), equalTo(true));
-        });
-    }
-
-    public void testCloseNonExistentIndex() throws IOException {
-        String nonExistentIndex = "non_existent_index";
-        assertFalse(indexExists(nonExistentIndex));
-
-        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(nonExistentIndex);
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(closeIndexRequest, highLevelClient().indices()::close, highLevelClient().indices()::closeAsync)
-        );
-        assertEquals(RestStatus.NOT_FOUND, exception.status());
-    }
-
-    public void testCloseEmptyOrNullIndex() {
-        String[] indices = randomBoolean() ? Strings.EMPTY_ARRAY : null;
-        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(indices);
-        org.opensearch.client.ValidationException exception = expectThrows(
-            org.opensearch.client.ValidationException.class,
-            () -> execute(closeIndexRequest, highLevelClient().indices()::close, highLevelClient().indices()::closeAsync)
-        );
-        assertThat(exception.validationErrors().get(0), equalTo("index is missing"));
-    }
-
-    public void testRefresh() throws IOException {
-        {
-            String index = "index";
-            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-            createIndex(index, settings);
-            RefreshRequest refreshRequest = new RefreshRequest(index);
-            RefreshResponse refreshResponse = execute(
-                refreshRequest,
-                highLevelClient().indices()::refresh,
-                highLevelClient().indices()::refreshAsync
-            );
-            assertThat(refreshResponse.getTotalShards(), equalTo(1));
-            assertThat(refreshResponse.getSuccessfulShards(), equalTo(1));
-            assertThat(refreshResponse.getFailedShards(), equalTo(0));
-            assertThat(refreshResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
-        }
-        {
-            String nonExistentIndex = "non_existent_index";
-            assertFalse(indexExists(nonExistentIndex));
-            RefreshRequest refreshRequest = new RefreshRequest(nonExistentIndex);
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(refreshRequest, highLevelClient().indices()::refresh, highLevelClient().indices()::refreshAsync)
-            );
-            assertEquals(RestStatus.NOT_FOUND, exception.status());
-        }
-    }
-
-    public void testFlush() throws IOException {
-        {
-            String index = "index";
-            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-            createIndex(index, settings);
-            FlushRequest flushRequest = new FlushRequest(index);
-            FlushResponse flushResponse = execute(
-                flushRequest,
-                highLevelClient().indices()::flush,
-                highLevelClient().indices()::flushAsync
-            );
-            assertThat(flushResponse.getTotalShards(), equalTo(1));
-            assertThat(flushResponse.getSuccessfulShards(), equalTo(1));
-            assertThat(flushResponse.getFailedShards(), equalTo(0));
-            assertThat(flushResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
-        }
-        {
-            String nonExistentIndex = "non_existent_index";
-            assertFalse(indexExists(nonExistentIndex));
-            FlushRequest flushRequest = new FlushRequest(nonExistentIndex);
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(flushRequest, highLevelClient().indices()::flush, highLevelClient().indices()::flushAsync)
-            );
-            assertEquals(RestStatus.NOT_FOUND, exception.status());
-        }
-    }
-
-    public void testClearCache() throws IOException {
-        {
-            String index = "index";
-            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-            createIndex(index, settings);
-            ClearIndicesCacheRequest clearCacheRequest = new ClearIndicesCacheRequest(index);
-            ClearIndicesCacheResponse clearCacheResponse = execute(
-                clearCacheRequest,
-                highLevelClient().indices()::clearCache,
-                highLevelClient().indices()::clearCacheAsync
-            );
-            assertThat(clearCacheResponse.getTotalShards(), equalTo(1));
-            assertThat(clearCacheResponse.getSuccessfulShards(), equalTo(1));
-            assertThat(clearCacheResponse.getFailedShards(), equalTo(0));
-            assertThat(clearCacheResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
-        }
-        {
-            String nonExistentIndex = "non_existent_index";
-            assertFalse(indexExists(nonExistentIndex));
-            ClearIndicesCacheRequest clearCacheRequest = new ClearIndicesCacheRequest(nonExistentIndex);
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(clearCacheRequest, highLevelClient().indices()::clearCache, highLevelClient().indices()::clearCacheAsync)
-            );
-            assertEquals(RestStatus.NOT_FOUND, exception.status());
-        }
-    }
-
-    public void testForceMerge() throws IOException {
-        {
-            String index = "index";
-            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
-            createIndex(index, settings);
-            ForceMergeRequest forceMergeRequest = new ForceMergeRequest(index);
-            ForceMergeResponse forceMergeResponse = execute(
-                forceMergeRequest,
-                highLevelClient().indices()::forcemerge,
-                highLevelClient().indices()::forcemergeAsync
-            );
-            assertThat(forceMergeResponse.getTotalShards(), equalTo(1));
-            assertThat(forceMergeResponse.getSuccessfulShards(), equalTo(1));
-            assertThat(forceMergeResponse.getFailedShards(), equalTo(0));
-            assertThat(forceMergeResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
-
-            assertThat(forceMergeRequest.getDescription(), containsString(index));
-        }
-        {
-            String nonExistentIndex = "non_existent_index";
-            assertFalse(indexExists(nonExistentIndex));
-            ForceMergeRequest forceMergeRequest = new ForceMergeRequest(nonExistentIndex);
-            OpenSearchException exception = expectThrows(
-                OpenSearchException.class,
-                () -> execute(forceMergeRequest, highLevelClient().indices()::forcemerge, highLevelClient().indices()::forcemergeAsync)
-            );
-            assertEquals(RestStatus.NOT_FOUND, exception.status());
-
-            assertThat(forceMergeRequest.getDescription(), containsString(nonExistentIndex));
-        }
-    }
-
-    public void testExistsAlias() throws IOException {
-        GetAliasesRequest getAliasesRequest = new GetAliasesRequest("alias");
-        assertFalse(execute(getAliasesRequest, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
-
-        createIndex("index", Settings.EMPTY);
-        client().performRequest(new Request(HttpPut.METHOD_NAME, "/index/_alias/alias"));
-        assertTrue(execute(getAliasesRequest, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
-
-        GetAliasesRequest getAliasesRequest2 = new GetAliasesRequest();
-        getAliasesRequest2.aliases("alias");
-        getAliasesRequest2.indices("index");
-        assertTrue(execute(getAliasesRequest2, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
-        getAliasesRequest2.indices("does_not_exist");
-        assertFalse(execute(getAliasesRequest2, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testShrink() throws IOException {
-        Map<String, Object> nodes = getAsMap("_nodes");
-        String firstNode = ((Map<String, Object>) nodes.get("nodes")).keySet().iterator().next();
-        createIndex("source", Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build());
-        updateIndexSettings(
-            "source",
-            Settings.builder().put("index.routing.allocation.require._name", firstNode).put("index.blocks.write", true)
-        );
-
-        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
-        resizeRequest.setResizeType(ResizeType.SHRINK);
-        Settings targetSettings = Settings.builder()
-            .put("index.number_of_shards", 2)
-            .put("index.number_of_replicas", 0)
-            .putNull("index.routing.allocation.require._name")
-            .build();
-        resizeRequest.setTargetIndex(
-            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
-        );
-        ResizeResponse resizeResponse = execute(
-            resizeRequest,
-            highLevelClient().indices()::shrink,
-            highLevelClient().indices()::shrinkAsync
-        );
-        assertTrue(resizeResponse.isAcknowledged());
-        assertTrue(resizeResponse.isShardsAcknowledged());
-        Map<String, Object> getIndexResponse = getAsMap("target");
-        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
-        assertNotNull(indexSettings);
-        assertEquals("2", indexSettings.get("number_of_shards"));
-        assertEquals("0", indexSettings.get("number_of_replicas"));
-        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
-        assertNotNull(aliasData);
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testSplit() throws IOException {
-        createIndex(
-            "source",
-            Settings.builder()
-                .put("index.number_of_shards", 2)
-                .put("index.number_of_replicas", 0)
-                .put("index.number_of_routing_shards", 4)
-                .build()
-        );
-        updateIndexSettings("source", Settings.builder().put("index.blocks.write", true));
-
-        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
-        resizeRequest.setResizeType(ResizeType.SPLIT);
-        Settings targetSettings = Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build();
-        resizeRequest.setTargetIndex(
-            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
-        );
-        ResizeResponse resizeResponse = execute(resizeRequest, highLevelClient().indices()::split, highLevelClient().indices()::splitAsync);
-        assertTrue(resizeResponse.isAcknowledged());
-        assertTrue(resizeResponse.isShardsAcknowledged());
-        Map<String, Object> getIndexResponse = getAsMap("target");
-        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
-        assertNotNull(indexSettings);
-        assertEquals("4", indexSettings.get("number_of_shards"));
-        assertEquals("0", indexSettings.get("number_of_replicas"));
-        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
-        assertNotNull(aliasData);
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testClone() throws IOException {
-        createIndex(
-            "source",
-            Settings.builder()
-                .put("index.number_of_shards", 2)
-                .put("index.number_of_replicas", 0)
-                .put("index.number_of_routing_shards", 4)
-                .build()
-        );
-        updateIndexSettings("source", Settings.builder().put("index.blocks.write", true));
-
-        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
-        resizeRequest.setResizeType(ResizeType.CLONE);
-        Settings targetSettings = Settings.builder().put("index.number_of_shards", 2).put("index.number_of_replicas", 0).build();
-        resizeRequest.setTargetIndex(
-            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
-        );
-        ResizeResponse resizeResponse = execute(resizeRequest, highLevelClient().indices()::clone, highLevelClient().indices()::cloneAsync);
-        assertTrue(resizeResponse.isAcknowledged());
-        assertTrue(resizeResponse.isShardsAcknowledged());
-        Map<String, Object> getIndexResponse = getAsMap("target");
-        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
-        assertNotNull(indexSettings);
-        assertEquals("2", indexSettings.get("number_of_shards"));
-        assertEquals("0", indexSettings.get("number_of_replicas"));
-        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
-        assertNotNull(aliasData);
-    }
-
-    public void testRollover() throws IOException {
-        highLevelClient().indices().create(new CreateIndexRequest("test").alias(new Alias("alias")), RequestOptions.DEFAULT);
-        RolloverRequest rolloverRequest = new RolloverRequest("alias", "test_new");
-        rolloverRequest.addMaxIndexDocsCondition(1);
-
-        {
-            RolloverResponse rolloverResponse = execute(
-                rolloverRequest,
-                highLevelClient().indices()::rollover,
-                highLevelClient().indices()::rolloverAsync
-            );
-            assertFalse(rolloverResponse.isRolledOver());
-            assertFalse(rolloverResponse.isDryRun());
-            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
-            assertEquals(1, conditionStatus.size());
-            assertFalse(conditionStatus.get("[max_docs: 1]"));
-            assertEquals("test", rolloverResponse.getOldIndex());
-            assertEquals("test_new", rolloverResponse.getNewIndex());
-        }
-
-        highLevelClient().index(new IndexRequest("test").id("1").source("field", "value"), RequestOptions.DEFAULT);
-        highLevelClient().index(
-            new IndexRequest("test").id("2").source("field", "value").setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL),
-            RequestOptions.DEFAULT
-        );
-        // without the refresh the rollover may not happen as the number of docs seen may be off
-
-        {
-            rolloverRequest.addMaxIndexAgeCondition(new TimeValue(1));
-            rolloverRequest.dryRun(true);
-            RolloverResponse rolloverResponse = execute(
-                rolloverRequest,
-                highLevelClient().indices()::rollover,
-                highLevelClient().indices()::rolloverAsync
-            );
-            assertFalse(rolloverResponse.isRolledOver());
-            assertTrue(rolloverResponse.isDryRun());
-            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
-            assertEquals(2, conditionStatus.size());
-            assertTrue(conditionStatus.get("[max_docs: 1]"));
-            assertTrue(conditionStatus.get("[max_age: 1ms]"));
-            assertEquals("test", rolloverResponse.getOldIndex());
-            assertEquals("test_new", rolloverResponse.getNewIndex());
-        }
-        {
-            String mappings = "{\"properties\":{\"field2\":{\"type\":\"keyword\"}}}";
-            rolloverRequest.getCreateIndexRequest().mapping(mappings, MediaTypeRegistry.JSON);
-            rolloverRequest.dryRun(false);
-            rolloverRequest.addMaxIndexSizeCondition(new ByteSizeValue(1, ByteSizeUnit.MB));
-            RolloverResponse rolloverResponse = execute(
-                rolloverRequest,
-                highLevelClient().indices()::rollover,
-                highLevelClient().indices()::rolloverAsync
-            );
-            assertTrue(rolloverResponse.isRolledOver());
-            assertFalse(rolloverResponse.isDryRun());
-            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
-            assertEquals(3, conditionStatus.size());
-            assertTrue(conditionStatus.get("[max_docs: 1]"));
-            assertTrue(conditionStatus.get("[max_age: 1ms]"));
-            assertFalse(conditionStatus.get("[max_size: 1mb]"));
-            assertEquals("test", rolloverResponse.getOldIndex());
-            assertEquals("test_new", rolloverResponse.getNewIndex());
-        }
-    }
-
-    public void testGetAlias() throws IOException {
-        {
-            createIndex("index1", Settings.EMPTY);
-            client().performRequest(new Request(HttpPut.METHOD_NAME, "/index1/_alias/alias1"));
-
-            createIndex("index2", Settings.EMPTY);
-            client().performRequest(new Request(HttpPut.METHOD_NAME, "/index2/_alias/alias2"));
-
-            createIndex("index3", Settings.EMPTY);
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("alias1");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(1));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata, notNullValue());
-            assertThat(aliasMetadata.alias(), equalTo("alias1"));
-            assertThat(aliasMetadata.getFilter(), nullValue());
-            assertThat(aliasMetadata.getIndexRouting(), nullValue());
-            assertThat(aliasMetadata.getSearchRouting(), nullValue());
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("alias*");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("_all");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("*");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("_all");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(
-                "Unexpected number of aliases, got: " + getAliasesResponse.getAliases().toString(),
-                getAliasesResponse.getAliases().size(),
-                equalTo(3)
-            );
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("ind*");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(3));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest();
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(3));
-            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
-            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
-            assertThat(aliasMetadata1, notNullValue());
-            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
-            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
-            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
-            assertThat(aliasMetadata2, notNullValue());
-            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
-            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
-        }
-    }
-
-    public void testGetAliasesNonExistentIndexOrAlias() throws IOException {
-        /*
-         * This test is quite extensive as this is the only way we can check that we haven't slid out of sync with the server
-         * because the server renders the xcontent in a spot that is difficult for us to access in a unit test.
-         */
-        String alias = "alias";
-        String index = "index";
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index);
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
-            assertThat(
-                getAliasesResponse.getException().getMessage(),
-                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [index]]")
-            );
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest(alias);
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
-            assertThat(getAliasesResponse.getError(), equalTo("alias [" + alias + "] missing"));
-            assertThat(getAliasesResponse.getException(), nullValue());
-        }
-        createIndex(index, Settings.EMPTY);
-        client().performRequest(new Request(HttpPut.METHOD_NAME, "/" + index + "/_alias/" + alias));
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index, "non_existent_index");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
-            assertThat(getAliasesResponse.getError(), nullValue());
-            assertThat(
-                getAliasesResponse.getException().getMessage(),
-                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
-            );
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index, "non_existent_index").aliases(alias);
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
-            assertThat(
-                getAliasesResponse.getException().getMessage(),
-                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
-            );
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("non_existent_index*");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.OK));
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
-            assertThat(getAliasesResponse.getException(), nullValue());
-            assertThat(getAliasesResponse.getError(), nullValue());
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index).aliases(alias, "non_existent_alias");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
-            assertThat(getAliasesResponse.getError(), equalTo("alias [non_existent_alias] missing"));
-
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(1));
-            assertThat(getAliasesResponse.getAliases().get(index).size(), equalTo(1));
-            AliasMetadata aliasMetadata = getAliasesResponse.getAliases().get(index).iterator().next();
-            assertThat(aliasMetadata, notNullValue());
-            assertThat(aliasMetadata.alias(), equalTo(alias));
-            /*
-            This is the above response in json format:
-            {
-             "error": "alias [something] missing",
-             "status": 404,
-             "index": {
-               "aliases": {
-                 "alias": {}
-               }
-             }
-            }
-            */
-        }
-        {
-            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("non_existent_alias*");
-            GetAliasesResponse getAliasesResponse = execute(
-                getAliasesRequest,
-                highLevelClient().indices()::getAlias,
-                highLevelClient().indices()::getAliasAsync
-            );
-            assertThat(getAliasesResponse.status(), equalTo(RestStatus.OK));
-            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
-        }
-    }
-
-    public void testIndexPutSettings() throws IOException {
-
-        final Setting<Integer> dynamicSetting = IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING;
-        final String dynamicSettingKey = IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
-        final int dynamicSettingValue = 0;
-
-        final Setting<String> staticSetting = IndexSettings.INDEX_CHECK_ON_STARTUP;
-        final String staticSettingKey = IndexSettings.INDEX_CHECK_ON_STARTUP.getKey();
-        final String staticSettingValue = "true";
-
-        final Setting<Integer> unmodifiableSetting = IndexMetadata.INDEX_NUMBER_OF_SHARDS_SETTING;
-        final String unmodifiableSettingKey = IndexMetadata.SETTING_NUMBER_OF_SHARDS;
-        final int unmodifiableSettingValue = 3;
-
-        String index = "index";
-        createIndex(index, Settings.EMPTY);
-
-        assertThat(dynamicSetting.getDefault(Settings.EMPTY), not(dynamicSettingValue));
-        UpdateSettingsRequest dynamicSettingRequest = new UpdateSettingsRequest(index);
-        dynamicSettingRequest.settings(Settings.builder().put(dynamicSettingKey, dynamicSettingValue).build());
-        AcknowledgedResponse response = execute(
-            dynamicSettingRequest,
-            highLevelClient().indices()::putSettings,
-            highLevelClient().indices()::putSettingsAsync
-        );
-
-        assertTrue(response.isAcknowledged());
-        Map<String, Object> indexSettingsAsMap = getIndexSettingsAsMap(index);
-        assertThat(indexSettingsAsMap.get(dynamicSettingKey), equalTo(String.valueOf(dynamicSettingValue)));
-
-        assertThat(staticSetting.getDefault(Settings.EMPTY), not(staticSettingValue));
-        UpdateSettingsRequest staticSettingRequest = new UpdateSettingsRequest(index);
-        staticSettingRequest.settings(Settings.builder().put(staticSettingKey, staticSettingValue).build());
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(staticSettingRequest, highLevelClient().indices()::putSettings, highLevelClient().indices()::putSettingsAsync)
-        );
-        assertThat(
-            exception.getMessage(),
-            startsWith(
-                "OpenSearch exception [type=illegal_argument_exception, "
-                    + "reason=Can't update non dynamic settings [[index.shard.check_on_startup]] for open indices [[index/"
-            )
-        );
-
-        indexSettingsAsMap = getIndexSettingsAsMap(index);
-        assertNull(indexSettingsAsMap.get(staticSettingKey));
-
-        closeIndex(index);
-        response = execute(staticSettingRequest, highLevelClient().indices()::putSettings, highLevelClient().indices()::putSettingsAsync);
-        assertTrue(response.isAcknowledged());
-        openIndex(index);
-        indexSettingsAsMap = getIndexSettingsAsMap(index);
-        assertThat(indexSettingsAsMap.get(staticSettingKey), equalTo(staticSettingValue));
-
-        assertThat(unmodifiableSetting.getDefault(Settings.EMPTY), not(unmodifiableSettingValue));
-        UpdateSettingsRequest unmodifiableSettingRequest = new UpdateSettingsRequest(index);
-        unmodifiableSettingRequest.settings(Settings.builder().put(unmodifiableSettingKey, unmodifiableSettingValue).build());
-        exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(
-                unmodifiableSettingRequest,
-                highLevelClient().indices()::putSettings,
-                highLevelClient().indices()::putSettingsAsync
-            )
-        );
-        assertThat(
-            exception.getMessage(),
-            startsWith(
-                "OpenSearch exception [type=illegal_argument_exception, "
-                    + "reason=Can't update non dynamic settings [[index.number_of_shards]] for open indices [[index/"
-            )
-        );
-        closeIndex(index);
-        exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(
-                unmodifiableSettingRequest,
-                highLevelClient().indices()::putSettings,
-                highLevelClient().indices()::putSettingsAsync
-            )
-        );
-        assertThat(
-            exception.getMessage(),
-            startsWith(
-                "OpenSearch exception [type=settings_exception, " + "reason=final index setting [index.number_of_shards], not updateable"
-            )
-        );
-    }
-
-    public void testIndexPutSettingNonExistent() throws IOException {
-
-        String index = "index";
-        UpdateSettingsRequest indexUpdateSettingsRequest = new UpdateSettingsRequest(index);
-        String setting = "no_idea_what_you_are_talking_about";
-        int value = 10;
-        indexUpdateSettingsRequest.settings(Settings.builder().put(setting, value).build());
-
-        OpenSearchException exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(
-                indexUpdateSettingsRequest,
-                highLevelClient().indices()::putSettings,
-                highLevelClient().indices()::putSettingsAsync
-            )
-        );
-        assertEquals(RestStatus.NOT_FOUND, exception.status());
-        assertThat(exception.getMessage(), equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [index]]"));
-
-        createIndex(index, Settings.EMPTY);
-        exception = expectThrows(
-            OpenSearchException.class,
-            () -> execute(
-                indexUpdateSettingsRequest,
-                highLevelClient().indices()::putSettings,
-                highLevelClient().indices()::putSettingsAsync
-            )
-        );
-        assertThat(exception.status(), equalTo(RestStatus.BAD_REQUEST));
-        assertThat(
-            exception.getMessage(),
-            equalTo(
-                "OpenSearch exception [type=settings_exception, "
-                    + "reason=unknown setting [index.no_idea_what_you_are_talking_about] please check that any required plugins are installed, "
-                    + "or check the breaking changes documentation for removed settings]"
-            )
-        );
-    }
-
-    @SuppressWarnings("unchecked")
-    public void testPutTemplate() throws Exception {
-        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").patterns(
-            Arrays.asList("pattern-1", "name-*")
-        )
-            .order(10)
-            .create(randomBoolean())
-            .settings(Settings.builder().put("number_of_shards", "3").put("number_of_replicas", "0"))
-            .mapping("{ \"properties\": { \"host_name\": { \"type\": \"keyword\" } } }", MediaTypeRegistry.JSON)
-            .alias(new Alias("alias-1").indexRouting("abc"))
-            .alias(new Alias("alias-1").indexRouting("abc"))
-            .alias(new Alias("{index}-write").searchRouting("xyz"));
-
-        AcknowledgedResponse putTemplateResponse = execute(
-            putTemplateRequest,
-            highLevelClient().indices()::putTemplate,
-            highLevelClient().indices()::putTemplateAsync
-        );
-        assertThat(putTemplateResponse.isAcknowledged(), equalTo(true));
-
-        Map<String, Object> templates = getAsMap("/_template/my-template");
-        assertThat(templates.keySet(), hasSize(1));
-        assertThat(extractValue("my-template.order", templates), equalTo(10));
-        assertThat(extractRawValues("my-template.index_patterns", templates), contains("pattern-1", "name-*"));
-        assertThat(extractValue("my-template.settings.index.number_of_shards", templates), equalTo("3"));
-        assertThat(extractValue("my-template.settings.index.number_of_replicas", templates), equalTo("0"));
-        assertThat(extractValue("my-template.mappings.properties.host_name.type", templates), equalTo("keyword"));
-        assertThat((Map<String, String>) extractValue("my-template.aliases.alias-1", templates), hasEntry("index_routing", "abc"));
-        assertThat((Map<String, String>) extractValue("my-template.aliases.{index}-write", templates), hasEntry("search_routing", "xyz"));
-    }
-
-    public void testPutTemplateWithDeprecatedTemplateField() throws Exception {
-        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").source(
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .field("template", "name-*")
-                .field("order", 10)
-                .startObject("settings")
-                .field("number_of_shards", 3)
-                .field("number_of_replicas", 0)
-                .endObject()
-                .endObject()
-        );
-
-        AcknowledgedResponse putTemplateResponse = execute(
-            putTemplateRequest,
-            highLevelClient().indices()::putTemplate,
-            highLevelClient().indices()::putTemplateAsync,
-            expectWarningsOnce("Deprecated field [template] used, replaced by [index_patterns]")
-        );
-        assertThat(putTemplateResponse.isAcknowledged(), equalTo(true));
-
-        Map<String, Object> templates = getAsMap("/_template/my-template");
-        assertThat(templates.keySet(), hasSize(1));
-        assertThat(extractValue("my-template.order", templates), equalTo(10));
-        assertThat(extractRawValues("my-template.index_patterns", templates), contains("name-*"));
-        assertThat(extractValue("my-template.settings.index.number_of_shards", templates), equalTo("3"));
-        assertThat(extractValue("my-template.settings.index.number_of_replicas", templates), equalTo("0"));
-    }
-
-    public void testPutTemplateWithTypesUsingUntypedAPI() throws Exception {
-        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").patterns(
-            Arrays.asList("pattern-1", "name-*")
-        )
-            .order(10)
-            .create(randomBoolean())
-            .settings(Settings.builder().put("number_of_shards", "3").put("number_of_replicas", "0"))
-            .mapping(
-                "{"
-                    + "  \"my_doc_type\": {"
-                    + "    \"properties\": {"
-                    + "      \"host_name\": {"
-                    + "        \"type\": \"keyword\""
-                    + "      }"
-                    + "    }"
-                    + "  }"
-                    + "}",
-                MediaTypeRegistry.JSON
-            )
-            .alias(new Alias("alias-1").indexRouting("abc"))
-            .alias(new Alias("{index}-write").searchRouting("xyz"));
-
-        OpenSearchStatusException badMappingError = expectThrows(
-            OpenSearchStatusException.class,
-            () -> execute(putTemplateRequest, highLevelClient().indices()::putTemplate, highLevelClient().indices()::putTemplateAsync)
-        );
-        assertThat(
-            badMappingError.getDetailedMessage(),
-            containsString("Root mapping definition has unsupported parameters:  [my_doc_type")
-        );
-    }
-
-    public void testPutTemplateBadRequests() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        // Failed to validate because index patterns are missing
-        PutIndexTemplateRequest withoutPattern = new PutIndexTemplateRequest("t1");
-        ValidationException withoutPatternError = expectThrows(
-            ValidationException.class,
-            () -> execute(withoutPattern, client.indices()::putTemplate, client.indices()::putTemplateAsync)
+        DeleteDataStreamRequest deleteDataStreamRequest = new DeleteDataStreamRequest(dataStreamName);
         );
         assertThat(withoutPatternError.validationErrors(), contains("index patterns are missing"));
-
-        // Create-only specified but an template exists already
-        PutIndexTemplateRequest goodTemplate = new PutIndexTemplateRequest("t2").patterns(Arrays.asList("qa-*", "prod-*"));
-        assertTrue(execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
-        goodTemplate.create(true);
-        OpenSearchException alreadyExistsError = expectThrows(
-            OpenSearchException.class,
-            () -> execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync)
-        );
-        assertThat(
-            alreadyExistsError.getDetailedMessage(),
-            containsString("[type=illegal_argument_exception, reason=index_template [t2] already exists]")
-        );
-        goodTemplate.create(false);
-        assertTrue(execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
-
-        // Rejected due to unknown settings
-        PutIndexTemplateRequest unknownSettingTemplate = new PutIndexTemplateRequest("t3").patterns(Collections.singletonList("any"))
-            .settings(Settings.builder().put("this-setting-does-not-exist", 100));
-        OpenSearchStatusException unknownSettingError = expectThrows(
-            OpenSearchStatusException.class,
-            () -> execute(unknownSettingTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync)
-        );
+            )
+        assertThat(aliasExists(alias2), equalTo(true));
+        assertEquals("2", indexSettings.get("number_of_shards"));
+        createIndex(index, Settings.EMPTY);
         assertThat(unknownSettingError.getDetailedMessage(), containsString("unknown setting [index.this-setting-does-not-exist]"));
-    }
-
-    public void testValidateQuery() throws IOException {
-        String index = "some_index";
-        createIndex(index, Settings.EMPTY);
-        QueryBuilder builder = QueryBuilders.boolQuery()
-            .must(QueryBuilders.queryStringQuery("*:*"))
-            .filter(QueryBuilders.termQuery("user", "foobar"));
-        ValidateQueryRequest request = new ValidateQueryRequest(index).query(builder);
-        request.explain(randomBoolean());
-        ValidateQueryResponse response = execute(
-            request,
-            highLevelClient().indices()::validateQuery,
-            highLevelClient().indices()::validateQueryAsync
+        assertThat(backingIndices, equalTo(1));
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
+        OpenIndexResponse lenientOpenIndexResponse = execute(
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
+            () -> execute(
+        }
         );
-        assertTrue(response.isValid());
-    }
-
-    public void testInvalidValidateQuery() throws IOException {
-        String index = "shakespeare";
-
-        createIndex(index, Settings.EMPTY);
-        Request postDoc = new Request(HttpPost.METHOD_NAME, "/" + index + "/_doc");
-        postDoc.setJsonEntity(
-            "{"
-                + "  \"type\": \"act\","
-                + "  \"line_id\": 1,"
-                + "  \"play_name\": \"Henry IV\","
-                + "  \"speech_number\": \"\","
-                + "  \"line_number\": \"\","
-                + "  \"speaker\": \"\","
-                + "  \"text_entry\": \"ACT I\""
-                + "}"
         );
-        assertOK(client().performRequest(postDoc));
-
-        QueryBuilder builder = QueryBuilders.queryStringQuery("line_id:foo").lenient(false);
-        ValidateQueryRequest request = new ValidateQueryRequest(index).query(builder);
-        request.explain(true);
-        ValidateQueryResponse response = execute(
-            request,
-            highLevelClient().indices()::validateQuery,
-            highLevelClient().indices()::validateQueryAsync
-        );
-        assertFalse(response.isValid());
-    }
-
-    public void testCRUDIndexTemplate() throws Exception {
-        RestHighLevelClient client = highLevelClient();
-
-        PutIndexTemplateRequest putTemplate1 = new PutIndexTemplateRequest("template-1").patterns(Arrays.asList("pattern-1", "name-1"))
-            .alias(new Alias("alias-1"));
-        assertThat(
-            execute(putTemplate1, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged(),
-            equalTo(true)
-        );
-        PutIndexTemplateRequest putTemplate2 = new PutIndexTemplateRequest("template-2").patterns(Arrays.asList("pattern-2", "name-2"))
-            .mapping("{\"properties\": { \"name\": { \"type\": \"text\" }}}", MediaTypeRegistry.JSON)
-            .settings(Settings.builder().put("number_of_shards", "2").put("number_of_replicas", "0"));
-        assertThat(
-            execute(putTemplate2, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged(),
-            equalTo(true)
-        );
-
-        GetIndexTemplatesResponse getTemplate1 = execute(
-            new GetIndexTemplatesRequest("template-1"),
-            client.indices()::getIndexTemplate,
-            client.indices()::getIndexTemplateAsync
-        );
-        assertThat(getTemplate1.getIndexTemplates(), hasSize(1));
-        IndexTemplateMetadata template1 = getTemplate1.getIndexTemplates().get(0);
-        assertThat(template1.name(), equalTo("template-1"));
-        assertThat(template1.patterns(), contains("pattern-1", "name-1"));
-        assertTrue(template1.aliases().containsKey("alias-1"));
-
         GetIndexTemplatesResponse getTemplate2 = execute(
-            new GetIndexTemplatesRequest("template-2"),
-            client.indices()::getIndexTemplate,
-            client.indices()::getIndexTemplateAsync
-        );
-        assertThat(getTemplate2.getIndexTemplates(), hasSize(1));
-        IndexTemplateMetadata template2 = getTemplate2.getIndexTemplates().get(0);
-        assertThat(template2.name(), equalTo("template-2"));
-        assertThat(template2.patterns(), contains("pattern-2", "name-2"));
-        assertTrue(template2.aliases().isEmpty());
-        assertThat(template2.settings().get("index.number_of_shards"), equalTo("2"));
-        assertThat(template2.settings().get("index.number_of_replicas"), equalTo("0"));
-        // New API returns a MappingMetadata class rather than CompressedXContent for the mapping
-        assertTrue(template2.mappings().sourceAsMap().containsKey("properties"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> props = (Map<String, Object>) template2.mappings().sourceAsMap().get("properties");
-        assertTrue(props.containsKey("name"));
-
+            () -> execute(getIndexRequest, highLevelClient().indices()::get, highLevelClient().indices()::getAsync)
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(3));
+            GetAliasesResponse getAliasesResponse = execute(
         List<String> names = randomBoolean() ? Arrays.asList("*plate-1", "template-2") : Arrays.asList("template-*");
-        GetIndexTemplatesRequest getBothRequest = new GetIndexTemplatesRequest(names);
-        GetIndexTemplatesResponse getBoth = execute(
-            getBothRequest,
-            client.indices()::getIndexTemplate,
-            client.indices()::getIndexTemplateAsync
+        Map<String, Object> props = (Map<String, Object>) template2.mappings().sourceAsMap().get("properties");
         );
-        assertThat(getBoth.getIndexTemplates(), hasSize(2));
-        assertThat(
-            getBoth.getIndexTemplates().stream().map(IndexTemplateMetadata::name).toArray(),
-            arrayContainingInAnyOrder("template-1", "template-2")
-        );
-
-        GetIndexTemplatesRequest getAllRequest = new GetIndexTemplatesRequest();
-        GetIndexTemplatesResponse getAll = execute(
-            getAllRequest,
-            client.indices()::getIndexTemplate,
-            client.indices()::getIndexTemplateAsync
-        );
-        assertThat(getAll.getIndexTemplates().size(), greaterThanOrEqualTo(2));
-        assertThat(
-            getAll.getIndexTemplates().stream().map(IndexTemplateMetadata::name).collect(Collectors.toList()),
-            hasItems("template-1", "template-2")
-        );
-
-        assertTrue(
-            execute(new DeleteIndexTemplateRequest("template-1"), client.indices()::deleteTemplate, client.indices()::deleteTemplateAsync)
-                .isAcknowledged()
-        );
-        assertThat(
-            expectThrows(
-                OpenSearchException.class,
-                () -> execute(
-                    new GetIndexTemplatesRequest("template-1"),
-                    client.indices()::getIndexTemplate,
-                    client.indices()::getIndexTemplateAsync
-                )
-            ).status(),
-            equalTo(RestStatus.NOT_FOUND)
-        );
-        assertThat(
-            expectThrows(
-                OpenSearchException.class,
-                () -> execute(
-                    new DeleteIndexTemplateRequest("template-1"),
-                    client.indices()::deleteTemplate,
-                    client.indices()::deleteTemplateAsync
-                )
-            ).status(),
-            equalTo(RestStatus.NOT_FOUND)
-        );
-
-        assertThat(
-            execute(new GetIndexTemplatesRequest("template-*"), client.indices()::getIndexTemplate, client.indices()::getIndexTemplateAsync)
-                .getIndexTemplates(),
-            hasSize(1)
-        );
-        assertThat(
-            execute(new GetIndexTemplatesRequest("template-*"), client.indices()::getIndexTemplate, client.indices()::getIndexTemplateAsync)
-                .getIndexTemplates()
-                .get(0)
-                .name(),
-            equalTo("template-2")
-        );
-
-        assertTrue(
-            execute(new DeleteIndexTemplateRequest("template-*"), client.indices()::deleteTemplate, client.indices()::deleteTemplateAsync)
-                .isAcknowledged()
-        );
-        assertThat(
-            expectThrows(
-                OpenSearchException.class,
-                () -> execute(
-                    new GetIndexTemplatesRequest("template-*"),
-                    client.indices()::getIndexTemplate,
-                    client.indices()::getIndexTemplateAsync
-                )
-            ).status(),
-            equalTo(RestStatus.NOT_FOUND)
-        );
-    }
-
-    public void testIndexTemplatesExist() throws Exception {
-        final RestHighLevelClient client = highLevelClient();
-
+        assertThat(extractRawValues("my-template.index_patterns", templates), contains("name-*"));
         {
-            for (String suffix : Arrays.asList("1", "2")) {
-
-                final PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("template-" + suffix).patterns(
-                    Arrays.asList("pattern-" + suffix, "name-" + suffix)
-                ).alias(new Alias("alias-" + suffix));
-                assertTrue(execute(putRequest, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
-
-                final IndexTemplatesExistRequest existsRequest = new IndexTemplatesExistRequest("template-" + suffix);
+        {
+            assertThat(getAliasesResponse.getError(), nullValue());
+        assertTrue(closeIndexResponse.isShardsAcknowledged());
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
                 assertTrue(execute(existsRequest, client.indices()::existsTemplate, client.indices()::existsTemplateAsync));
-            }
-        }
-
-        {
-            final List<String> templateNames = randomBoolean() ? Arrays.asList("*plate-1", "template-2") : Arrays.asList("template-*");
-
-            final IndexTemplatesExistRequest bothRequest = new IndexTemplatesExistRequest(templateNames);
-            assertTrue(execute(bothRequest, client.indices()::existsTemplate, client.indices()::existsTemplateAsync));
-        }
-
-        {
-            final IndexTemplatesExistRequest neitherRequest = new IndexTemplatesExistRequest("neither-*");
-            assertFalse(execute(neitherRequest, client.indices()::existsTemplate, client.indices()::existsTemplateAsync));
-        }
-    }
-
-    public void testAnalyze() throws Exception {
-
-        RestHighLevelClient client = highLevelClient();
-
-        AnalyzeRequest noindexRequest = AnalyzeRequest.withGlobalAnalyzer("english", "One two three");
-        AnalyzeResponse noindexResponse = execute(noindexRequest, client.indices()::analyze, client.indices()::analyzeAsync);
-
-        assertThat(noindexResponse.getTokens(), hasSize(3));
-
-        AnalyzeRequest detailsRequest = AnalyzeRequest.withGlobalAnalyzer("english", "One two three").explain(true);
-        AnalyzeResponse detailsResponse = execute(detailsRequest, client.indices()::analyze, client.indices()::analyzeAsync);
-
-        assertNotNull(detailsResponse.detail());
-    }
-
-    public void testDeleteAlias() throws IOException {
-        String index = "test";
+             "index": {
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+import org.opensearch.client.indices.SimulateIndexTemplateResponse;
+                    new DeleteIndexTemplateRequest("template-1"),
+        assertEquals(1, getSettingsResponse.getIndexToDefaultSettings().get("get_settings_index").size());
+    public void testGetAliasesNonExistentIndexOrAlias() throws IOException {
+            highLevelClient().indices()::getSettingsAsync
         createIndex(index, Settings.EMPTY);
-
-        String alias = "alias";
-        String alias2 = "alias2";
-        IndicesAliasesRequest aliasesAddRemoveRequest = new IndicesAliasesRequest();
-        aliasesAddRemoveRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias));
-        aliasesAddRemoveRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias + "2"));
-        AcknowledgedResponse aliasResponse = execute(
-            aliasesAddRemoveRequest,
-            highLevelClient().indices()::updateAliases,
-            highLevelClient().indices()::updateAliasesAsync
-        );
-        assertTrue(aliasResponse.isAcknowledged());
-        assertThat(aliasExists(alias), equalTo(true));
-        assertThat(aliasExists(alias2), equalTo(true));
-        assertThat(aliasExists(index, alias), equalTo(true));
-        assertThat(aliasExists(index, alias2), equalTo(true));
-
-        DeleteAliasRequest request = new DeleteAliasRequest(index, alias);
-        org.opensearch.client.core.AcknowledgedResponse aliasDeleteResponse = execute(
-            request,
-            highLevelClient().indices()::deleteAlias,
-            highLevelClient().indices()::deleteAliasAsync
-        );
-
-        assertThat(aliasExists(alias), equalTo(false));
-        assertThat(aliasExists(alias2), equalTo(true));
-        assertThat(aliasExists(index, alias), equalTo(false));
-        assertThat(aliasExists(index, alias2), equalTo(true));
-    }
-
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/60461")
-    public void testDataStreams() throws Exception {
-        String dataStreamName = "data-stream";
-
-        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"@timestamp\":{\"type\":\"date\"}}}");
-        Template template = new Template(null, mappings, null);
-        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
-            Collections.singletonList(dataStreamName),
-            template,
+    public void testSimulateIndexTemplate() throws Exception {
             Collections.emptyList(),
-            1L,
-            1L,
-            new HashMap<>(),
-            new ComposableIndexTemplate.DataStreamTemplate()
+            assertThat(forceMergeResponse.getFailedShards(), equalTo(0));
+                highLevelClient().indices()::flushAsync
+        assertFalse(response.isValid());
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("non_existent_alias*");
+        createIndex(indexName, basicSettings, mappings);
+            .includeDefaults(true);
+        assertThat(
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions;
+        OpenSearchStatusException e = expectThrows(
+        assertThat(
+import org.opensearch.client.indices.CreateIndexResponse;
+               }
+            assertTrue(conditionStatus.get("[max_age: 1ms]"));
         );
+            .alias(new Alias("alias-1").indexRouting("abc"))
+    public void testGetFieldMapping() throws IOException {
+                MediaTypeRegistry.JSON
+        Object o = mappingMetadata.getSourceAsMap().get("properties");
+            execute(new GetIndexTemplatesRequest("template-*"), client.indices()::getIndexTemplate, client.indices()::getIndexTemplateAsync)
+        OpenIndexResponse openIndexResponse = execute(
+        assertNotNull(aliasData);
+        updateIndexSettings(indexName, Settings.builder().put("refresh_interval", "30s"));
+        indexUpdateSettingsRequest.settings(Settings.builder().put(setting, value).build());
+                highLevelClient().indices()::create,
+        DataStreamsStatsRequest dataStreamsStatsRequest = new DataStreamsStatsRequest();
+        OpenSearchException exception = expectThrows(
+            String index = "index";
+            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
+        String alias = "alias";
+                    highLevelClient().indices()::putSettingsAsync
+        PutComposableIndexTemplateRequest newIndexTemplateReq = new PutComposableIndexTemplateRequest().name("used-for-simulation")
+        GetDataStreamResponse getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
+        Settings basicSettings = Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build();
+            highLevelClient().indices()::putTemplate,
+        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(indices);
+            ForceMergeRequest forceMergeRequest = new ForceMergeRequest(index);
+            client.indices()::getIndexTemplate,
+                nonExistentIndexRequest,
+        postDoc.setJsonEntity(
+        assertThat(indexSettingsAsMap.get(staticSettingKey), equalTo(staticSettingValue));
+            ).status(),
+        Template template = new Template(settings, mappings, Collections.singletonMap("alias", alias));
+            .mapping("{\"properties\": { \"name\": { \"type\": \"text\" }}}", MediaTypeRegistry.JSON)
+        assertTrue(resizeResponse.isShardsAcknowledged());
+        assertThat(dataStream.getGeneration(), equalTo(1L));
+        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(indices);
+                .get(0)
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+            assertThat(refreshResponse.getFailedShards(), equalTo(0));
+        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").source(
+            assertThat(aliasMetadata1, notNullValue());
+            .settings(Settings.builder().put("number_of_shards", "3").put("number_of_replicas", "0"))
+                highLevelClient().indices()::createAsync
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+            assertThat(aliasMetadata2, notNullValue());
+            )
+        }
+        Map<String, String> type = new HashMap<>();
+        GetSettingsResponse getSettingsResponse = execute(
+    }
+        }
+import org.opensearch.action.admin.indices.refresh.RefreshResponse;
+        assertThat(indexExists(index), equalTo(false));
+            Collections.emptyList(),
+        getAliasesRequest2.aliases("alias");
+            highLevelClient().indices()::updateAliasesAsync
+        }
+        assertThat(dataStream.getTimeStampField(), equalTo("@timestamp"));
+        assertEquals(0, getSettingsResponse.getIndexToSettings().get("get_settings_index").size());
+        assertTrue(template2.mappings().sourceAsMap().containsKey("properties"));
+import org.opensearch.client.indices.GetDataStreamRequest;
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
+    }
+        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_replicas"));
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest();
+            highLevelClient().indices()::close,
+        assertThat(extractValue("my-template.settings.index.number_of_replicas", templates), equalTo("0"));
+        }
+        final int dynamicSettingValue = 0;
+    }
+        assertFalse(execute(getAliasesRequest, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
+        );
+    public void testGetSettingsWithDefaults() throws IOException {
+                .put("index.number_of_replicas", 0)
+        );
+            assertEquals(2016, term.get("year"));
+        Map<String, Object> getIndexResponse = getAsMap("target");
+            rolloverRequest.dryRun(true);
+            highLevelClient().indices()::openAsync
+        }
+                highLevelClient().indices()::delete,
+            for (String suffix : Arrays.asList("1", "2")) {
+        String indexName = "get_settings_index";
+            assertThat(forceMergeResponse.getTotalShards(), equalTo(1));
+        assertFalse(execute(getAliasesRequest2, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
+        addAction = new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias2);
+            openIndexRequest,
+            highLevelClient().indices()::shrink,
+        CloseIndexRequest closeIndexRequest = new CloseIndexRequest(nonExistentIndex);
+            assertThat(clearCacheResponse.getSuccessfulShards(), equalTo(1));
+        );
+        ResizeResponse resizeResponse = execute(resizeRequest, highLevelClient().indices()::split, highLevelClient().indices()::splitAsync);
+            RolloverResponse rolloverResponse = execute(
+                getIndexResponse
+        );
+            highLevelClient().indices()::getSettings,
+            );
+        assertEquals(RestStatus.NOT_FOUND, strictException.status());
+            assertThat(
+                () -> execute(
+                .isAcknowledged()
+        ResponseException exception = expectThrows(
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+        assertThat(exception.getMessage(), equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [index]]"));
+        )
+            highLevelClient().indices()::validateQueryAsync
+        }
+            XContentFactory.jsonBuilder()
+            aliasesAddRemoveRequest,
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+            createIndexRequest.mapping(mappingBuilder);
+        exist = execute(
+            createIndex(index, settings);
+        assertNotNull(getSettingsResponse.getSetting(indexName, "index.creation_date"));
+            );
+            assertTrue(createIndexResponse.isAcknowledged());
+            .create(true)
+            highLevelClient().indices()::get,
+            .alias(new Alias("{index}-write").searchRouting("xyz"));
+        mappingBuilder.endObject().endObject().endObject();
+            GetAliasesResponse getAliasesResponse = execute(
+ * KIND, either express or implied.  See the License for the
+        assertThat(aliasExists(alias), equalTo(false));
+        assertThat(response.isAcknowledged(), equalTo(true));
+ *
+        assertNotNull(getIndexResponse.getMappings().get(indexName));
+            assertFalse(indexExists(nonExistentIndex));
+            putTemplateRequest,
+            assertFalse(execute(neitherRequest, client.indices()::existsTemplate, client.indices()::existsTemplateAsync));
+            // Create index and attempt to update creation_date - should fail as it's a final setting
+        assertThat(mappings, equalTo(expected));
+        assertTrue(aliasResponse.isAcknowledged());
+            client.indices()::getIndexTemplate,
+                )
+        lenientOpenIndexRequest.indicesOptions(IndicesOptions.lenientExpandOpen());
+            () -> execute(openIndexRequest, highLevelClient().indices()::open, highLevelClient().indices()::openAsync)
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
+            assertThat(aliasMetadata.getFilter(), nullValue());
+import org.opensearch.common.settings.Settings;
+            assertTrue(conditionStatus.get("[max_docs: 1]"));
+import org.opensearch.client.indices.GetIndexTemplatesRequest;
+            aliasesRemoveIndexRequest,
+            simulateIndexTemplateRequest,
+        DataStreamStats dataStreamStat = dataStreamsStats.get(dataStreamName);
+    }
+            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(indexName);
         PutComposableIndexTemplateRequest putComposableIndexTemplateRequest = new PutComposableIndexTemplateRequest().name("ds-template")
             .create(true)
-            .indexTemplate(indexTemplate);
-        AcknowledgedResponse response = execute(
-            putComposableIndexTemplateRequest,
-            highLevelClient().indices()::putIndexTemplate,
-            highLevelClient().indices()::putIndexTemplateAsync
+        assertThat(aliasExists(alias), equalTo(false));
+        type.put("type", "text");
+        assertThat(aliasExists(alias), equalTo(true));
+/*
+        IndicesAliasesRequest aliasesAddRequest = new IndicesAliasesRequest();
+                .endObject()
+                rolloverRequest,
+            );
+                () -> execute(deleteIndexRequest, highLevelClient().indices()::delete, highLevelClient().indices()::deleteAsync)
+            );
         );
-        assertThat(response.isAcknowledged(), equalTo(true));
-
-        CreateDataStreamRequest createDataStreamRequest = new CreateDataStreamRequest(dataStreamName);
-        IndicesClient indices = highLevelClient().indices();
-        response = execute(createDataStreamRequest, indices::createDataStream, indices::createDataStreamAsync);
-        assertThat(response.isAcknowledged(), equalTo(true));
-        ensureHealth(dataStreamName, (request -> { request.addParameter("wait_for_status", "yellow"); }));
-
-        GetDataStreamRequest getDataStreamRequest = new GetDataStreamRequest(dataStreamName);
-        GetDataStreamResponse getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
-        List<DataStream> dataStreams = getDataStreamResponse.getDataStreams();
-        assertThat(dataStreams, hasSize(1));
-        DataStream dataStream = dataStreams.get(0);
-        assertThat(dataStream.getName(), equalTo(dataStreamName));
-        assertThat(dataStream.getGeneration(), equalTo(1L));
-        assertThat(dataStream.getTimeStampField(), equalTo("@timestamp"));
-        assertThat(dataStream.getIndices(), hasSize(1));
-
-        getDataStreamRequest = new GetDataStreamRequest(null);
-        getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
-        dataStreams = getDataStreamResponse.getDataStreams();
-        assertThat(dataStreams, hasSize(1));
-        dataStream = dataStreams.get(0);
-        assertThat(dataStream.getName(), equalTo(dataStreamName));
-        assertThat(dataStream.getGeneration(), equalTo(1L));
-        assertThat(dataStream.getTimeStampField(), equalTo("@timestamp"));
-        assertThat(dataStream.getIndices(), hasSize(1));
-
-        DataStreamsStatsRequest dataStreamsStatsRequest = new DataStreamsStatsRequest();
-        DataStreamsStatsResponse dataStreamsStatsResponse = execute(
-            dataStreamsStatsRequest,
-            indices::dataStreamsStats,
-            indices::dataStreamsStatsAsync
-        );
-        int dataStreamsCount = dataStreamsStatsResponse.getDataStreamCount();
-        assertThat(dataStreamsCount, equalTo(1));
-        int backingIndices = dataStreamsStatsResponse.getBackingIndices();
-        assertThat(backingIndices, equalTo(1));
-        ByteSizeValue byteSizeValue = dataStreamsStatsResponse.getTotalStoreSize();
-        assertThat(byteSizeValue, notNullValue());
-        assertThat(byteSizeValue.getBytes(), not(equalTo(0L)));
-        Map<String, DataStreamStats> dataStreamsStats = dataStreamsStatsResponse.getDataStreams();
-        assertThat(dataStreamsStats, notNullValue());
-        assertThat(dataStreamsStats.size(), equalTo(1));
-        DataStreamStats dataStreamStat = dataStreamsStats.get(dataStreamName);
-        assertThat(dataStreamStat, notNullValue());
-        assertThat(dataStreamStat.getDataStream(), equalTo(dataStreamName));
-        assertThat(dataStreamStat.getBackingIndices(), equalTo(1));
-        assertThat(dataStreamStat.getMaximumTimestamp(), equalTo(0L)); // No data in here
-        assertThat(dataStreamStat.getStoreSize().getBytes(), not(equalTo(0L))); // but still takes up some space on disk
-
-        DeleteDataStreamRequest deleteDataStreamRequest = new DeleteDataStreamRequest(dataStreamName);
-        response = execute(deleteDataStreamRequest, indices::deleteDataStream, indices::deleteDataStreamAsync);
-        assertThat(response.isAcknowledged(), equalTo(true));
-
-        getDataStreamRequest = new GetDataStreamRequest(null);
-        getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
-        dataStreams = getDataStreamResponse.getDataStreams();
-        assertThat(dataStreams, hasSize(0));
-
-        getDataStreamRequest = new GetDataStreamRequest(dataStreamName);
-        GetDataStreamRequest finalGetDataStreamRequest = getDataStreamRequest;
-        OpenSearchStatusException e = expectThrows(
-            OpenSearchStatusException.class,
-            () -> execute(finalGetDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync)
-        );
-        assertThat(e.status(), equalTo(RestStatus.NOT_FOUND));
+            // Delete index if exists
     }
-
-    public void testIndexTemplates() throws Exception {
-        String templateName = "my-template";
-        Settings settings = Settings.builder().put("index.number_of_shards", 1).build();
-        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"host_name\":{\"type\":\"keyword\"}}}");
-        AliasMetadata alias = AliasMetadata.builder("alias").writeIndex(true).build();
-        Template template = new Template(settings, mappings, Collections.singletonMap("alias", alias));
-        List<String> pattern = Collections.singletonList("pattern");
-        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
-            pattern,
-            template,
-            Collections.emptyList(),
-            1L,
-            1L,
-            new HashMap<>(),
-            null
+                    client.indices()::getIndexTemplateAsync
         );
-        PutComposableIndexTemplateRequest putComposableIndexTemplateRequest = new PutComposableIndexTemplateRequest().name(templateName)
-            .create(true)
-            .indexTemplate(indexTemplate);
-
-        AcknowledgedResponse response = execute(
-            putComposableIndexTemplateRequest,
-            highLevelClient().indices()::putIndexTemplate,
-            highLevelClient().indices()::putIndexTemplateAsync
-        );
-        assertThat(response.isAcknowledged(), equalTo(true));
-
-        ComposableIndexTemplateExistRequest composableIndexTemplateExistRequest = new ComposableIndexTemplateExistRequest(templateName);
-        boolean exist = execute(
-            composableIndexTemplateExistRequest,
-            highLevelClient().indices()::existsIndexTemplate,
-            highLevelClient().indices()::existsIndexTemplateAsync
-        );
-
-        assertTrue(exist);
-
-        GetComposableIndexTemplateRequest getComposableIndexTemplateRequest = new GetComposableIndexTemplateRequest(templateName);
-        GetComposableIndexTemplatesResponse getResponse = execute(
-            getComposableIndexTemplateRequest,
-            highLevelClient().indices()::getIndexTemplate,
-            highLevelClient().indices()::getIndexTemplateAsync
-        );
-
-        assertThat(getResponse.getIndexTemplates().size(), equalTo(1));
-        assertThat(getResponse.getIndexTemplates().containsKey(templateName), equalTo(true));
-        assertThat(getResponse.getIndexTemplates().get(templateName), equalTo(indexTemplate));
-
-        DeleteComposableIndexTemplateRequest deleteComposableIndexTemplateRequest = new DeleteComposableIndexTemplateRequest(templateName);
-        response = execute(
-            deleteComposableIndexTemplateRequest,
-            highLevelClient().indices()::deleteIndexTemplate,
-            highLevelClient().indices()::deleteIndexTemplateAsync
-        );
-        assertThat(response.isAcknowledged(), equalTo(true));
-
-        OpenSearchStatusException statusException = expectThrows(
-            OpenSearchStatusException.class,
-            () -> execute(
-                getComposableIndexTemplateRequest,
-                highLevelClient().indices()::getIndexTemplate,
-                highLevelClient().indices()::getIndexTemplateAsync
+import static org.opensearch.common.xcontent.support.XContentMapValues.extractValue;
+            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
+        AcknowledgedResponse putMappingResponse = execute(
+                .getIndexTemplates(),
+            );
+import org.opensearch.client.indices.CreateDataStreamRequest;
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+        assertThat(aliasExists(index, alias), equalTo(false));
             )
-        );
-
-        assertThat(statusException.status(), equalTo(RestStatus.NOT_FOUND));
-
-        exist = execute(
-            composableIndexTemplateExistRequest,
-            highLevelClient().indices()::existsIndexTemplate,
-            highLevelClient().indices()::existsIndexTemplateAsync
-        );
-
-        assertFalse(exist);
-    }
-
-    public void testSimulateIndexTemplate() throws Exception {
-        String templateName = "my-template";
-        Settings settings = Settings.builder().put("index.number_of_shards", 1).build();
-        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"host_name\":{\"type\":\"keyword\"}}}");
-        AliasMetadata alias = AliasMetadata.builder("alias").writeIndex(true).build();
-        Template template = new Template(settings, mappings, Map.of("alias", alias));
-        List<String> pattern = List.of("pattern");
-        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
-            pattern,
-            template,
-            Collections.emptyList(),
-            1L,
-            1L,
-            new HashMap<>(),
-            null
-        );
-        PutComposableIndexTemplateRequest putComposableIndexTemplateRequest = new PutComposableIndexTemplateRequest().name(templateName)
-            .create(true)
-            .indexTemplate(indexTemplate);
-
-        AcknowledgedResponse response = execute(
-            putComposableIndexTemplateRequest,
-            highLevelClient().indices()::putIndexTemplate,
+    public void testGetSettingsNonExistentIndex() throws IOException {
+            String nonExistentIndex = "non_existent_index";
             highLevelClient().indices()::putIndexTemplateAsync
+        AcknowledgedResponse response = execute(
+            resizeRequest,
+        String alias = "alias";
+        String indexName = "test";
+            "source",
+        Request postDoc = new Request(HttpPost.METHOD_NAME, "/" + index + "/_doc");
+        resizeRequest.setResizeType(ResizeType.SHRINK);
         );
-        assertThat(response.isAcknowledged(), equalTo(true));
-
-        SimulateIndexTemplateRequest simulateIndexTemplateRequest = new SimulateIndexTemplateRequest("pattern");
-        AliasMetadata simulationAlias = AliasMetadata.builder("simulation-alias").writeIndex(true).build();
-        ComposableIndexTemplate simulationTemplate = new ComposableIndexTemplate(
-            pattern,
-            new Template(null, null, Map.of("simulation-alias", simulationAlias)),
-            Collections.emptyList(),
-            2L,
-            1L,
-            new HashMap<>(),
-            null
-        );
-        PutComposableIndexTemplateRequest newIndexTemplateReq = new PutComposableIndexTemplateRequest().name("used-for-simulation")
-            .create(true)
-            .indexTemplate(indexTemplate);
-        newIndexTemplateReq.indexTemplate(simulationTemplate);
-        simulateIndexTemplateRequest.indexTemplateV2Request(newIndexTemplateReq);
-
-        SimulateIndexTemplateResponse simulateResponse = execute(
-            simulateIndexTemplateRequest,
-            highLevelClient().indices()::simulateIndexTemplate,
-            highLevelClient().indices()::simulateIndexTemplateAsync
-        );
-
-        Map<String, AliasMetadata> aliases = simulateResponse.resolvedTemplate().aliases();
-        assertThat(aliases, is(notNullValue()));
+                .name(),
+        String index = "shakespeare";
+        createIndex(
+            OpenSearchException exception = expectThrows(
+    }
         assertThat(
-            "the template we provided for the simulation has a higher priority than the one in the system",
-            aliases.get("simulation-alias"),
-            is(notNullValue())
+        assertEquals(RestStatus.NOT_FOUND, exception.status());
+        createIndex(index, Settings.EMPTY);
+            equalTo(true)
+            RolloverResponse rolloverResponse = execute(
+/*
+                getAliasesResponse.getException().getMessage(),
+        assertEquals(2016, term.get("year"));
+        OpenSearchException exception = expectThrows(
+        AnalyzeResponse detailsResponse = execute(detailsRequest, client.indices()::analyze, client.indices()::analyzeAsync);
+            createIndex(indexName, Settings.EMPTY);
+        closeIndex(index);
+            highLevelClient().indices()::updateAliasesAsync
+            RequestOptions.DEFAULT
+        assertThat(exception.getMessage().contains(index), equalTo(true));
+            );
+import org.opensearch.core.rest.RestStatus;
+            String nonExistentIndex = "non_existent_index";
+            highLevelClient().indices()::getMapping,
+        unmodifiableSettingRequest.settings(Settings.builder().put(unmodifiableSettingKey, unmodifiableSettingValue).build());
+            UpdateSettingsRequest updateSettingsRequest = new UpdateSettingsRequest(indexName);
+                    + "  }"
         );
-        assertThat(aliases.get("simulation-alias").getAlias(), is("simulation-alias"));
+        );
+            template,
+        dataStreams = getDataStreamResponse.getDataStreams();
+                .put("index.number_of_routing_shards", 4)
+ * this file be licensed under the Apache-2.0 license or a
+        assertThat(putTemplateResponse.isAcknowledged(), equalTo(true));
+        Map<String, Object> mappings = getMappingsResponse.mappings().get(indexName).sourceAsMap();
+    @SuppressWarnings("unchecked")
+        assertTrue(aliasesRemoveIndexResponse.isAcknowledged());
+            createIndex(existingIndex, Settings.EMPTY);
+            assertThat(aliasMetadata1, notNullValue());
+        Map<String, Object> field = new HashMap<>();
+            assertThat(flushResponse.getSuccessfulShards(), equalTo(1));
+        }
         assertThat(
-            "existing template overlaps the higher priority template we provided for the simulation",
-            simulateResponse.overlappingTemplates().get("my-template").get(0),
-            is("pattern")
+        mappingBuilder.field("type", "text");
+import org.opensearch.action.admin.indices.shrink.ResizeRequest;
+        assertThat(getAlias.get("search_routing"), equalTo("search_routing"));
+        Map<String, Object> term = (Map<String, Object>) filter.get("term");
+            assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.BAD_REQUEST.getStatus()));
+        assertThat(noindexResponse.getTokens(), hasSize(3));
         );
+        closeIndexResponse.getIndices().forEach(indexResult -> {
+        AcknowledgedResponse response = execute(
+        assertThat(templates.keySet(), hasSize(1));
+        assertEquals("1", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_SHARDS));
+                highLevelClient().indices()::getAlias,
+            addAction.writeIndex(randomBoolean());
+        assertThat(aliasExists(index, alias), equalTo(false));
+        );
+import java.io.IOException;
+        assertThat(aliasExists(index, alias), equalTo(false));
+        String alias = "alias";
+        assertThat(getResponse.getIndexTemplates().size(), equalTo(1));
+import org.opensearch.action.admin.indices.shrink.ResizeType;
     }
 }
+            OpenSearchException.class,
+import org.opensearch.action.admin.indices.delete.DeleteIndexRequest;
+                + "  \"speech_number\": \"\","
+import org.opensearch.common.xcontent.json.JsonXContent;
+import org.opensearch.cluster.metadata.AliasMetadata;
+         * because the server renders the xcontent in a spot that is difficult for us to access in a unit test.
+import org.opensearch.client.indices.DeleteDataStreamRequest;
+        IndicesAliasesRequest aliasesAddRemoveRequest = new IndicesAliasesRequest();
+                highLevelClient().indices()::getAlias,
+            )
+                    + "}",
+        );
+        AnalyzeRequest detailsRequest = AnalyzeRequest.withGlobalAnalyzer("english", "One two three").explain(true);
+        ValidateQueryResponse response = execute(
+            OpenSearchStatusException.class,
+            mappingBuilder.startObject().startObject("properties").startObject("field");
+ * Licensed to Elasticsearch under one or more contributor
+        String indexName = "get_settings_index";
+            AliasMetadata aliasMetadata = getAliasesResponse.getAliases().get("index1").iterator().next();
+        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("_all");
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(nonExistentIndex);
+        {
+        removeIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).index(nonExistentIndex).alias(alias));
+            new IndexRequest("test").id("2").source("field", "value").setRefreshPolicy(WriteRequest.RefreshPolicy.WAIT_UNTIL),
+import org.opensearch.core.common.unit.ByteSizeUnit;
+                    updateSettingsRequest,
+        Map<String, Object> fieldMapping = (Map<String, Object>) ((Map<String, Object>) o).get("field-1");
+        RestHighLevelClient client = highLevelClient();
+                rolloverRequest,
+            GetAliasesResponse getAliasesResponse = execute(
+        AliasMetadata simulationAlias = AliasMetadata.builder("simulation-alias").writeIndex(true).build();
+        mappingBuilder.startObject().startObject("properties").startObject("field");
+        );
+import org.opensearch.action.admin.indices.shrink.ResizeResponse;
+    }
+import static org.opensearch.common.xcontent.support.XContentMapValues.extractRawValues;
+        assertFalse(indexExists(nonExistentIndex));
+                highLevelClient().indices()::rollover,
+            highLevelClient().indices()::getSettings,
+    public void testPutTemplateBadRequests() throws Exception {
+            assertThat(refreshResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
+        assertThat(exception.getMetadata("opensearch.index"), not(hasItem(index)));
+        assertThat(extractValue("my-template.settings.index.number_of_replicas", templates), equalTo("0"));
+        closeIndex(index);
+        assertEquals("0", indexSettings.get("number_of_replicas"));
+    }
+            aliasesAddRequest,
+            assertEquals("2", XContentMapValues.extractValue(indexName + ".settings.index.number_of_replicas", getIndexResponse));
+        assertEquals("30s", updatedResponse.getSetting(indexName, "index.refresh_interval"));
+        createIndex(
+                getAliasesResponse.getAliases().size(),
+        }
+        openIndex(index);
+            RefreshRequest refreshRequest = new RefreshRequest(index);
+import org.opensearch.index.query.QueryBuilders;
+            }
+            assertThat(
+                highLevelClient().indices()::putSettings,
+            ResponseException.class,
+            assertFalse(indexExists(indexName));
+        {
+            assertFalse(rolloverResponse.isRolledOver());
+                    highLevelClient().indices()::putSettings,
+        );
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+        createIndex(indexName, basicSettings, mappings);
+import org.opensearch.index.query.QueryBuilder;
+            client.indices()::getIndexTemplate,
+    }
+            assertThat(indexResult.hasFailures(), is(false));
+                () -> execute(
+                final PutIndexTemplateRequest putRequest = new PutIndexTemplateRequest("template-" + suffix).patterns(
+        GetIndexResponse getIndexResponse = execute(
+        );
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+            RefreshRequest refreshRequest = new RefreshRequest(nonExistentIndex);
+    public void testGetPrivateSettings() throws IOException {
+        assertFalse(exist);
+            createIndexRequest.alias(alias);
+        highLevelClient().index(new IndexRequest("test").id("1").source("field", "value"), RequestOptions.DEFAULT);
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+        ResizeResponse resizeResponse = execute(resizeRequest, highLevelClient().indices()::clone, highLevelClient().indices()::cloneAsync);
+import java.util.stream.Collectors;
+        UpdateSettingsRequest unmodifiableSettingRequest = new UpdateSettingsRequest(index);
+        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
+            composableIndexTemplateExistRequest,
+import static org.hamcrest.Matchers.not;
+        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
+    }
+        simulateIndexTemplateRequest.indexTemplateV2Request(newIndexTemplateReq);
+        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
+        // Index present
+                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [index]]")
+            client.indices()::getIndexTemplateAsync
+    }
+        UpdateSettingsRequest dynamicSettingRequest = new UpdateSettingsRequest(index);
+                getAliasesResponse.getException().getMessage(),
+            assertThat(refreshResponse.getSuccessfulShards(), equalTo(1));
+                highLevelClient().indices()::getAliasAsync
+         * This test is quite extensive as this is the only way we can check that we haven't slid out of sync with the server
+            String indexName = "test_index";
+            GetAliasesResponse getAliasesResponse = execute(
+        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
+import org.opensearch.action.admin.indices.flush.FlushResponse;
+        final String staticSettingKey = IndexSettings.INDEX_CHECK_ON_STARTUP.getKey();
+import org.opensearch.cluster.metadata.ComposableIndexTemplate;
+        AliasActions removeIndexAction = new AliasActions(AliasActions.Type.REMOVE_INDEX).index(index);
+            highLevelClient().indices()::existsIndexTemplate,
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index, "non_existent_index");
+        assertTrue(resizeResponse.isShardsAcknowledged());
+    }
+            highLevelClient().indices()::putSettings,
+        AcknowledgedResponse response = execute(
+        assertThat(aliasExists(index, alias), equalTo(true));
+            highLevelClient().indices()::get,
+        );
+            1L,
+        org.opensearch.client.ValidationException exception = expectThrows(
+        createIndex(index, Settings.EMPTY);
+            .settings(Settings.builder().put("number_of_shards", "3").put("number_of_replicas", "0"))
+    }
+        );
+            String index = "index";
+        mappingBuilder.startObject().startObject("properties").startObject("field");
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(3));
+            ForceMergeResponse forceMergeResponse = execute(
+                getAliasesRequest,
+                highLevelClient().indices()::getAliasAsync
+        Settings targetSettings = Settings.builder().put("index.number_of_shards", 2).put("index.number_of_replicas", 0).build();
+        OpenSearchException exception = expectThrows(
+                highLevelClient().indices()::putSettings,
+import org.opensearch.action.support.IndicesOptions;
+            CreateIndexResponse createIndexResponse = execute(
+        createIndex(indexName2, Settings.builder().put("number_of_shards", 3).build());
+            assertThat(clearCacheResponse.getFailedShards(), equalTo(0));
+            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
+        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+            () -> execute(
+            GetIndexRequest request = new GetIndexRequest(indexName);
+        }
+    }
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+        if (randomBoolean()) {
+        GetFieldMappingsResponse getFieldMappingsResponse = execute(
+        assertThat(extractValue("my-template.settings.index.number_of_shards", templates), equalTo("3"));
+            badMappingError.getDetailedMessage(),
+    }
+            Map<String, Object> term = (Map) filter.get("term");
+        String indexName = "get_settings_index";
+import org.opensearch.action.admin.indices.alias.Alias;
+            .indexTemplate(indexTemplate);
+                indexName + ".aliases.alias_name",
+        AcknowledgedResponse putTemplateResponse = execute(
+                createIndexResponse.isAcknowledged()
+        for (int i = 0; i < indices.length; i++) {
+            GetAliasesResponse getAliasesResponse = execute(
+                getAliasesRequest,
+        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+import org.opensearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;
+        {
+            assertThat(getAliasesResponse.getError(), equalTo("alias [non_existent_alias] missing"));
+        Map<String, Object> getIndexResponse = getAsMap("target");
+            1L,
+            new Template(null, null, Map.of("simulation-alias", simulationAlias)),
+        assertTrue(openIndexResponse.isAcknowledged());
+            "the template we provided for the simulation has a higher priority than the one in the system",
+        response = execute(staticSettingRequest, highLevelClient().indices()::putSettings, highLevelClient().indices()::putSettingsAsync);
+import static org.hamcrest.Matchers.is;
+import org.opensearch.core.common.bytes.BytesArray;
+    public void testCreateIndex() throws IOException {
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices("get_multiple_settings*");
+        );
+            String nonExistentIndex = "non_existent_index";
+            highLevelClient().indices()::openAsync
+            assertTrue(
+        assertThat(
+        );
+        {
+                highLevelClient().indices()::createAsync
+ */
+            Settings.Builder settings = Settings.builder();
+        String templateName = "my-template";
+        String indexName = "mapping_index";
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.OK));
+        assertTrue(exist);
+        assertNotNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
+        assertNotNull(mappingMetadata);
+            assertThat(getAliasesResponse.getException(), nullValue());
+        // without the refresh the rollover may not happen as the number of docs seen may be off
+            new HashMap<>(),
+        );
+    }
+            );
+    public void testRefresh() throws IOException {
+                    + "    }"
+        updateIndexSettings("source", Settings.builder().put("index.blocks.write", true));
+            ).status(),
+        DeleteComposableIndexTemplateRequest deleteComposableIndexTemplateRequest = new DeleteComposableIndexTemplateRequest(templateName);
+            new HashMap<>(),
+        Map<String, Object> getIndexResponse = getAsMap(indexName);
+                highLevelClient().indices()::putSettings,
+        );
+        assertThat(template2.name(), equalTo("template-2"));
+    }
+            client().performRequest(new Request(HttpPut.METHOD_NAME, "/index1/_alias/alias1"));
+    }
+        assertThat(aliasExists(index, alias2), equalTo(true));
+            .names("index.refresh_interval")
+        String mappings = "\"properties\":{\"field-1\":{\"type\":\"integer\"}}";
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+        assertEquals("0", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_REPLICAS));
+ * ownership. Elasticsearch licenses this file to you under
+            highLevelClient().indices()::closeAsync
+            String index = "index";
+        getDataStreamRequest = new GetDataStreamRequest(null);
+            assertFalse(rolloverResponse.isDryRun());
+        AliasMetadata alias = AliasMetadata.builder("alias").writeIndex(true).build();
+/*
+        List<DataStream> dataStreams = getDataStreamResponse.getDataStreams();
+            getBothRequest,
+                forceMergeRequest,
+        DataStream dataStream = dataStreams.get(0);
+            client.indices()::getIndexTemplateAsync
+            () -> execute(staticSettingRequest, highLevelClient().indices()::putSettings, highLevelClient().indices()::putSettingsAsync)
+        OpenSearchStatusException badMappingError = expectThrows(
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeRequest;
+import org.opensearch.client.indices.DeleteComposableIndexTemplateRequest;
+        PutIndexTemplateRequest withoutPattern = new PutIndexTemplateRequest("t1");
+            startsWith(
+            () -> execute(openIndexRequest, highLevelClient().indices()::open, highLevelClient().indices()::openAsync)
+            )
+    }
+            );
+                getAliasesRequest,
+            OpenSearchException.class,
+        );
+        staticSettingRequest.settings(Settings.builder().put(staticSettingKey, staticSettingValue).build());
+    @SuppressWarnings("unchecked")
+import org.opensearch.client.indices.ComposableIndexTemplateExistRequest;
+    public void testForceMerge() throws IOException {
+            "{"
+        ensureHealth(dataStreamName, (request -> { request.addParameter("wait_for_status", "yellow"); }));
+        );
+import static org.hamcrest.CoreMatchers.hasItem;
+                    Arrays.asList("pattern-" + suffix, "name-" + suffix)
+            assertTrue(
+                OpenSearchException.class,
+            assertThat(clearCacheResponse.getTotalShards(), equalTo(1));
+        GetComposableIndexTemplateRequest getComposableIndexTemplateRequest = new GetComposableIndexTemplateRequest(templateName);
+            ResponseException exception = expectThrows(
+            settings.put(SETTING_CREATION_DATE, 9876543210L);
+        GetSettingsResponse updatedResponse = execute(
+    public void testIndexTemplates() throws Exception {
+            getComposableIndexTemplateRequest,
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
+            new ComposableIndexTemplate.DataStreamTemplate()
+            .create(true)
+    public void testAnalyze() throws Exception {
+        assertThat(aliasExists(index, alias), equalTo(true));
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+    }
+import org.opensearch.client.indices.GetFieldMappingsResponse;
+        Map<String, DataStreamStats> dataStreamsStats = dataStreamsStatsResponse.getDataStreams();
+                highLevelClient().indices()::getAliasAsync
+import org.opensearch.client.indices.PutComposableIndexTemplateRequest;
+                highLevelClient().indices()::putSettings,
+        assertThat(aliasExists(index, alias), equalTo(false));
+        }
+                .build()
+        AcknowledgedResponse response = execute(
+        SimulateIndexTemplateRequest simulateIndexTemplateRequest = new SimulateIndexTemplateRequest("pattern");
+            createIndex(index, Settings.EMPTY);
+            template,
+                equalTo(3)
+        assertThat(response.isAcknowledged(), equalTo(true));
+        );
+        removeIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.REMOVE_INDEX).indices(nonExistentIndex));
+        IndicesAliasesRequest removeIndexRequest = new IndicesAliasesRequest();
+        assertThat(dataStream.getIndices(), hasSize(1));
+            );
+        createIndex(indexName, Settings.EMPTY);
+    public void testGetSettings() throws IOException {
+    public void testInvalidValidateQuery() throws IOException {
+            assertEquals("test", rolloverResponse.getOldIndex());
+        Boolean isWriteIndex = (Boolean) getAlias.get("is_write_index");
+                highLevelClient().indices()::rolloverAsync
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
+        {
+                ResponseException.class,
+            highLevelClient().indices()::open,
+            GetAliasesResponse getAliasesResponse = execute(
+import static org.hamcrest.Matchers.contains;
+        assertThat(template2.settings().get("index.number_of_replicas"), equalTo("0"));
+        );
+        closeIndex(index);
+        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
+        assertThat((Map<String, String>) extractValue("my-template.aliases.alias-1", templates), hasEntry("index_routing", "abc"));
+                    + "reason=Can't update non dynamic settings [[index.number_of_shards]] for open indices [[index/"
+        aliasesAddRemoveRequest.addAliasAction(addAction);
+                createIndexRequest,
+        );
+        String indexName = "get_index_test";
+    }
+import java.util.HashMap;
+                .getIndexTemplates()
+            );
+        createIndex(indexName, Settings.EMPTY);
+            highLevelClient().indices()::updateAliases,
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryRequest;
+        AcknowledgedResponse aliasResponse = execute(
+        String indexName = "get_settings_index";
+        }
+        );
+        int value = 10;
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+            exception.getMessage(),
+    public void testOpenNonExistentIndex() throws IOException {
+        createIndex(indexName, basicSettings);
+    public void testGetIndexNonExistentIndex() throws IOException {
+import org.opensearch.client.indices.DataStream;
+            assertEquals("test_new", rolloverResponse.getNewIndex());
+            .order(10)
+        {
+    public void testGetSettingsFiltered() throws IOException {
+                + "}"
+ * SPDX-License-Identifier: Apache-2.0
+        assertThat(exception.status(), equalTo(RestStatus.BAD_REQUEST));
+                highLevelClient().indices()::getAlias,
+                highLevelClient().indices()::getAlias,
+        OpenSearchException exception = expectThrows(
+            String index = "index-" + i;
+            expectThrows(
+        assertTrue(execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
+            "source",
+        assertTrue(response.isAcknowledged());
+            putComposableIndexTemplateRequest,
+        assertThat(response.isAcknowledged(), equalTo(true));
+ *
+            assertEquals("1", aliasData.get("index_routing"));
+            createIndex(index, settings);
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+        {
+            );
+            assertThat(refreshResponse.getTotalShards(), equalTo(1));
+            GetAliasesResponse getAliasesResponse = execute(
+        AcknowledgedResponse aliasesAddResponse = execute(
+            RefreshResponse refreshResponse = execute(
+                () -> execute(
+import org.opensearch.client.indices.GetFieldMappingsRequest;
+                )
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
+        );
+        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
+    public void testFlush() throws IOException {
+        assertThat(extractRawValues("my-template.index_patterns", templates), contains("pattern-1", "name-*"));
+        DataStreamsStatsResponse dataStreamsStatsResponse = execute(
+            assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
+        IndicesAliasesRequest aliasesAddRemoveRequest = new IndicesAliasesRequest();
+            assertTrue(conditionStatus.get("[max_age: 1ms]"));
+        }
+        assertThat(
+        );
+    public void testGetAlias() throws IOException {
+import org.opensearch.client.indices.DataStreamsStatsResponse;
+            () -> execute(
+            assertEquals(1, conditionStatus.size());
+            arrayContainingInAnyOrder("template-1", "template-2")
+        }
+        assertThat(statusException.status(), equalTo(RestStatus.NOT_FOUND));
+            // Create index with mappings, aliases and settings
+            createIndex(indexName, Settings.EMPTY);
+            getAllRequest,
+        }
+        assertEquals("4", indexSettings.get("number_of_shards"));
+        createIndex(indexName, basicSettings);
+        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+                highLevelClient().indices()::getAlias,
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
+            () -> client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + index + "/_search"))
+                highLevelClient().indices()::getAliasAsync
+            assertThat(aliasMetadata.alias(), equalTo(alias));
+        assertTrue(resizeResponse.isShardsAcknowledged());
+        String index = "index";
+            */
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName).includeDefaults(true);
+        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
+        assertThat(aliasExists(alias2), equalTo(true));
+            assertEquals(RestStatus.NOT_FOUND, exception.status());
+        createIndex(indexName1, Settings.builder().put("number_of_shards", 2).build());
+            () -> execute(
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("alias*");
+        assertThat(aliasExists(alias), equalTo(false));
+                highLevelClient().indices()::updateAliases,
+        OpenSearchException alreadyExistsError = expectThrows(
+                highLevelClient().indices()::putSettingsAsync
+        );
+        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
+        String firstNode = ((Map<String, Object>) nodes.get("nodes")).keySet().iterator().next();
+        assertThat(isWriteIndex, equalTo(addAction.writeIndex()));
+        );
+        assertNotNull(getSettingsResponse.getSetting(indexName, "index.uuid"));
+        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"host_name\":{\"type\":\"keyword\"}}}");
+        assertThat(o, instanceOf(Map.class));
+            () -> execute(getSettingsRequest, highLevelClient().indices()::getSettings, highLevelClient().indices()::getSettingsAsync)
+import org.opensearch.client.indices.rollover.RolloverResponse;
+        {
+        Map<String, AliasMetadata> aliases = simulateResponse.resolvedTemplate().aliases();
+            simulateResponse.overlappingTemplates().get("my-template").get(0),
+ * software distributed under the License is distributed on an
+            closeIndexRequest,
+            );
+            RolloverResponse rolloverResponse = execute(
+            execute(putTemplate2, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged(),
+        assertEquals("1", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_SHARDS));
+        Map<String, Object> getAlias = getAlias(index, alias);
+        ValidateQueryRequest request = new ValidateQueryRequest(index).query(builder);
+        RolloverRequest rolloverRequest = new RolloverRequest("alias", "test_new");
+        );
+            getSettingsRequest,
+            assertThat(exception.getMessage().contains(indexResult.getIndex()), equalTo(true));
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName);
+            ValidationException.class,
+        );
+            highLevelClient().indices()::validateQueryAsync
+                highLevelClient().indices()::getAliasAsync
+        assertTrue(resizeResponse.isAcknowledged());
+            () -> execute(mixedRequest, highLevelClient().indices()::updateAliases, highLevelClient().indices()::updateAliasesAsync)
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+            );
+                highLevelClient().indices()::getIndexTemplateAsync
+        assertNotNull(getIndexResponse.getMappings().get(indexName));
+                "Unexpected number of aliases, got: " + getAliasesResponse.getAliases().toString(),
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+                highLevelClient().indices()::getAliasAsync
+            pattern,
+    }
+        assertTrue(
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+        );
+        );
+        GetMappingsResponse getMappingsResponse = execute(
+        GetIndexRequest getIndexRequest = new GetIndexRequest(nonExistentIndex);
+            assertThat(forceMergeResponse.getSuccessfulShards(), equalTo(1));
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index).aliases(alias, "non_existent_alias");
+        assertThat(getResponse.getIndexTemplates().containsKey(templateName), equalTo(true));
+            highLevelClient().indices()::open,
+import org.opensearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
+import java.util.Collections;
+        UpdateSettingsRequest staticSettingRequest = new UpdateSettingsRequest(index);
+    public void testGetIndex() throws IOException {
+    }
+        final GetFieldMappingsResponse.FieldMappingMetadata metadata = new GetFieldMappingsResponse.FieldMappingMetadata(
+            Map<String, Object> getIndexResponse = getAsMap(indexName);
+                highLevelClient().indices()::getAliasAsync
+            final IndexTemplatesExistRequest bothRequest = new IndexTemplatesExistRequest(templateNames);
+        Template template = new Template(null, mappings, null);
+            rolloverRequest.addMaxIndexSizeCondition(new ByteSizeValue(1, ByteSizeUnit.MB));
+                highLevelClient().indices()::refreshAsync
+                () -> execute(flushRequest, highLevelClient().indices()::flush, highLevelClient().indices()::flushAsync)
+        GetFieldMappingsRequest getFieldMappingsRequest = new GetFieldMappingsRequest().indices(indexName).fields("field");
+            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
+                + "  \"line_number\": \"\","
+        assertThat(templates.keySet(), hasSize(1));
+                unmodifiableSettingRequest,
+import org.opensearch.common.settings.Setting;
+            );
+        mappingBuilder.startObject().startObject("properties").startObject("field");
+        @SuppressWarnings("unchecked")
+import static org.hamcrest.Matchers.containsString;
+        );
+        GetSettingsResponse getSettingsResponse = execute(
+        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.BAD_REQUEST.getStatus()));
+            client.indices()::getIndexTemplateAsync
+        assertThat(dataStream.getGeneration(), equalTo(1L));
+import java.util.List;
+        AcknowledgedResponse putTemplateResponse = execute(
+        PutIndexTemplateRequest goodTemplate = new PutIndexTemplateRequest("t2").patterns(Arrays.asList("qa-*", "prod-*"));
+            pattern,
+            rolloverRequest.addMaxIndexAgeCondition(new TimeValue(1));
+            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
+            highLevelClient().indices()::getSettings,
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+        assertThat(byteSizeValue.getBytes(), not(equalTo(0L)));
+    public void testDataStreams() throws Exception {
+ * not use this file except in compliance with the License.
+            assertFalse(indexExists(nonExistentIndex));
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
+        );
+        aliasesAddRemoveRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias));
+        String dataStreamName = "data-stream";
+            settings.put(SETTING_CREATION_DATE, 1234567890L);
+    }
+        assertTrue(template2.aliases().isEmpty());
+             "error": "alias [something] missing",
+        String index = "some_index";
+        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
+        assertThat(getTemplate1.getIndexTemplates(), hasSize(1));
+        assertThat(aliasExists(alias2), equalTo(false));
+            execute(putTemplate1, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged(),
+            request,
+        Map<String, Object> templates = getAsMap("/_template/my-template");
+        OpenSearchException strictException = expectThrows(
+                () -> client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + indexResult.getIndex() + "/_search"))
+import org.opensearch.client.indices.GetDataStreamResponse;
+        assertThat(
+            dynamicSettingRequest,
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
+        field.put("field", type);
+                    + "or check the breaking changes documentation for removed settings]"
+        Settings targetSettings = Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build();
+            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+            highLevelClient().indices()::getFieldMappingAsync
+                highLevelClient().indices()::getAlias,
+import org.opensearch.client.indices.GetIndexTemplatesResponse;
+                highLevelClient().indices()::rollover,
+import org.opensearch.index.IndexSettings;
+            )
+            indices::dataStreamsStatsAsync
+        assertTrue(resizeResponse.isAcknowledged());
+    public void testClone() throws IOException {
+                getAliasesRequest,
+        assertThat(template2.patterns(), contains("pattern-2", "name-2"));
+            // Return 404 if index doesn't exist
+        Map<String, Object> getIndexResponse = getAsMap("target");
+                highLevelClient().indices()::forcemerge,
+ * specific language governing permissions and limitations
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+            String indexName = "non_existent_index";
+            Collections.emptyList(),
+        );
+        exception = expectThrows(
+            assertFalse(indexExists(indexName));
+        });
+        final Setting<String> staticSetting = IndexSettings.INDEX_CHECK_ON_STARTUP;
+            highLevelClient().indices()::getSettingsAsync
+            String nonExistentIndex = "oranges";
+            is(notNullValue())
+        getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
+        assertEquals(
+            exception.getMessage(),
+        GetIndexRequest getIndexRequest = new GetIndexRequest(indexName).includeDefaults(true);
+                highLevelClient().indices()::getAlias,
+            highLevelClient().indices()::putTemplate,
+            final IndexTemplatesExistRequest neitherRequest = new IndexTemplatesExistRequest("neither-*");
+                () -> execute(
+        AliasActions addAction = new AliasActions(AliasActions.Type.ADD).index(index).aliases(alias);
+        goodTemplate.create(true);
+            // Create index
+        String index = "index";
+            org.opensearch.client.ValidationException.class,
+                "Exception message should indicate that index.creation_date cannot be updated. Got: " + exception.getMessage(),
+ *
+                highLevelClient().indices()::putSettingsAsync
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index);
+            assertEquals(2, conditionStatus.size());
+            assertFalse(response);
+            getSettingsRequest,
+            );
+                rolloverRequest,
+                highLevelClient().indices()::clearCacheAsync
+        exception = expectThrows(
+                indexUpdateSettingsRequest,
+        }
+            execute(new DeleteIndexTemplateRequest("template-1"), client.indices()::deleteTemplate, client.indices()::deleteTemplateAsync)
+            OpenSearchException exception = expectThrows(
+        dataStreams = getDataStreamResponse.getDataStreams();
+        goodTemplate.create(false);
+        assertThat(
+    public void testIndexPutSettingNonExistent() throws IOException {
+    public void testCRUDIndexTemplate() throws Exception {
+        );
+            highLevelClient().indices()::updateAliasesAsync
+        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+            assertThat(aliasMetadata2, notNullValue());
+        assertFalse(indexExists(nonExistentIndex));
+        QueryBuilder builder = QueryBuilders.boolQuery()
+        AcknowledgedResponse aliasesAddRemoveResponse = execute(
+            .build();
+            highLevelClient().indices()::simulateIndexTemplateAsync
+    public void testShrink() throws IOException {
+            Arrays.asList("pattern-1", "name-*")
+        createIndex(indexName, basicSettings);
+        expected.put("properties", field);
+        final int unmodifiableSettingValue = 3;
+        assertThat(
+                highLevelClient().indices()::forcemergeAsync
+             "status": 404,
+        String indexName = "get_index_test";
+                + "  \"text_entry\": \"ACT I\""
+        strictOpenIndexRequest.indicesOptions(IndicesOptions.strictExpandOpen());
+        {
+            template,
+            highLevelClient().indices()::putIndexTemplateAsync
+import org.opensearch.cluster.metadata.MappingMetadata;
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("*");
+            new org.opensearch.action.admin.indices.create.CreateIndexRequest("target").settings(targetSettings).alias(new Alias("alias"))
+            getFieldMappingsRequest,
+        );
+            highLevelClient().indices()::getSettingsAsync
+        assertThat(
+        OpenSearchException exception = expectThrows(
+        GetIndexTemplatesRequest getBothRequest = new GetIndexTemplatesRequest(names);
+        );
+        );
+        assertTrue(response.isValid());
+        assertTrue(putMappingResponse.isAcknowledged());
+        );
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+        assertThat(dataStreamStat.getBackingIndices(), equalTo(1));
+                createIndexRequest,
+                "OpenSearch exception [type=settings_exception, "
+        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
+            OpenSearchException.class,
+    @SuppressWarnings("unchecked")
+            GetAliasesResponse getAliasesResponse = execute(
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("ind*");
+            OpenSearchException.class,
+        assertFalse(indexExists(nonExistentIndex));
+            .create(randomBoolean())
+        );
+import static org.hamcrest.core.IsInstanceOf.instanceOf;
+            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
+            String indexName = "creation_date_index";
+        }
+            updateSettingsRequest.settings(settings);
+            null
+            assertThat(forceMergeResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
+        SimulateIndexTemplateResponse simulateResponse = execute(
+            ClearIndicesCacheRequest clearCacheRequest = new ClearIndicesCacheRequest(index);
+        }
+            /*
+                + "  \"line_id\": 1,"
+            .create(randomBoolean())
+            .alias(new Alias("alias-1").indexRouting("abc"))
+    @SuppressWarnings("unchecked")
+                highLevelClient().indices()::rollover,
+            GetAliasesResponse getAliasesResponse = execute(
+        {
+        putMappingRequest.source(mappingBuilder);
+            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
+            );
+            );
+        PutIndexTemplateRequest unknownSettingTemplate = new PutIndexTemplateRequest("t3").patterns(Collections.singletonList("any"))
+            highLevelClient().indices()::putMapping,
+        assertThat(dataStreamStat.getMaximumTimestamp(), equalTo(0L)); // No data in here
+        // Rejected due to unknown settings
+            exception.getMessage(),
+            () -> execute(removeIndexRequest, highLevelClient().indices()::updateAliases, highLevelClient().indices()::updateAliasesAsync)
+            IndexSettings.DEFAULT_REFRESH_INTERVAL,
+        mappingBuilder.endObject().endObject().endObject();
+        );
+            highLevelClient().indices()::getSettingsAsync
+        assertThat(
+        List<String> pattern = Collections.singletonList("pattern");
+        putMappingRequest.source(mappingBuilder);
+            String nonExistentIndex = "non_existent_index";
+        RestHighLevelClient client = highLevelClient();
+            putComposableIndexTemplateRequest,
+                    client.indices()::getIndexTemplate,
+            hasSize(1)
+import org.opensearch.client.indices.CloseIndexRequest;
+            OpenSearchStatusException.class,
+    public void testIndexPutSettings() throws IOException {
+            )
+        {
+        );
+        {
+            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
+        GetIndexRequest getIndexRequest = new GetIndexRequest(indexName).includeDefaults(false);
+    }
+        dynamicSettingRequest.settings(Settings.builder().put(dynamicSettingKey, dynamicSettingValue).build());
+            assertEquals(3, conditionStatus.size());
+            1L,
+        getAliasesRequest2.indices("index");
+            assertThat(getAliasesResponse.getAliases().get(index).size(), equalTo(1));
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+        AcknowledgedResponse putMappingResponse = execute(
+        );
+        GetSettingsResponse getSettingsResponse = execute(
+            () -> execute(withoutPattern, client.indices()::putTemplate, client.indices()::putTemplateAsync)
+            GetAliasesResponse getAliasesResponse = execute(
+                clearCacheRequest,
+                highLevelClient().indices()::getAlias,
+    @SuppressWarnings("unchecked")
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(2));
+        assertTrue(
+            .put("index.number_of_replicas", 0)
+    public void testPutTemplate() throws Exception {
+        }
+        assertThat(template1.name(), equalTo("template-1"));
+            assertTrue(rolloverResponse.isRolledOver());
+            highLevelClient().indices()::updateAliases,
+            assertThat(aliasMetadata1, notNullValue());
+                getAliasesRequest,
+            assertNotNull(aliasData);
+        resizeRequest.setResizeType(ResizeType.CLONE);
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
+                ).alias(new Alias("alias-" + suffix));
+            highLevelClient().indices()::deleteIndexTemplate,
+    }
+        assertTrue(template1.aliases().containsKey("alias-1"));
+        assertNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
+        assertThat(aliasExists(alias2), equalTo(true));
+            () -> execute(unknownSettingTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync)
+            putComposableIndexTemplateRequest,
+        {
+        );
+        assertEquals("0", indexSettings.get("number_of_replicas"));
+            new HashMap<>(),
+        assertThat(dataStreamsStats.size(), equalTo(1));
+            createIndexRequest.settings(settings);
+                highLevelClient().indices()::getAlias,
+        mixedRequest.addAliasAction(new AliasActions(AliasActions.Type.REMOVE).indices(nonExistentIndex).alias(alias));
+        );
+                    + "      }"
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
+        String alias2 = "alias2";
+        assertEquals("2", indexSettings.get("number_of_shards"));
+        {
+        getDataStreamRequest = new GetDataStreamRequest(dataStreamName);
+                highLevelClient().indices()::getAlias,
+            OpenSearchStatusException.class,
+                OpenSearchException.class,
+                    + "        \"type\": \"keyword\""
+            );
+import org.opensearch.client.indices.PutIndexTemplateRequest;
+            );
+            .put("index.number_of_shards", 2)
+        indexSettingsAsMap = getIndexSettingsAsMap(index);
+import org.opensearch.action.support.broadcast.BroadcastResponse;
+                highLevelClient().indices()::getAliasAsync
+            alreadyExistsError.getDetailedMessage(),
+            containsString("Root mapping definition has unsupported parameters:  [my_doc_type")
+import org.opensearch.client.indices.DataStreamsStatsRequest;
+package org.opensearch.client;
+        IndicesAliasesRequest mixedRequest = new IndicesAliasesRequest();
+        }
+                highLevelClient().indices()::getAliasAsync
+            getIndexRequest,
+        assertTrue(execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
+        {
+        // One index exists, one doesn't
+        assertThat(dataStream.getName(), equalTo(dataStreamName));
+            settings.put(SETTING_NUMBER_OF_REPLICAS, 2);
+        IndicesAliasesRequest nonExistentIndexRequest = new IndicesAliasesRequest();
+        createIndex(index, Settings.EMPTY);
+        );
+                .field("template", "name-*")
+            );
+                    + "      \"host_name\": {"
+                getAliasesRequest,
+            mappingBuilder.endObject().endObject().endObject();
+import org.opensearch.action.admin.indices.settings.get.GetSettingsRequest;
+import org.opensearch.common.compress.CompressedXContent;
+        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
+        PutIndexTemplateRequest putTemplate1 = new PutIndexTemplateRequest("template-1").patterns(Arrays.asList("pattern-1", "name-1"))
+                highLevelClient().indices()::getAliasAsync
+ * Unless required by applicable law or agreed to in writing,
+        );
+            mappingBuilder.field("type", "text");
+    public void testDeleteAlias() throws IOException {
+        createIndex(index, Settings.EMPTY);
+import org.opensearch.action.admin.indices.alias.IndicesAliasesRequest;
+            String mappings = "{\"properties\":{\"field2\":{\"type\":\"keyword\"}}}";
+            Arrays.asList("pattern-1", "name-*")
+        assertThat(((Map<String, Object>) o).get("field-1"), instanceOf(Map.class));
+        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").patterns(
+                highLevelClient().indices()::getAliasAsync
+            rolloverRequest.getCreateIndexRequest().mapping(mappings, MediaTypeRegistry.JSON);
+            highLevelClient().indices()::putIndexTemplate,
+                .startObject()
+            client.indices()::getIndexTemplate,
+        assertThat(dataStreamStat.getStoreSize().getBytes(), not(equalTo(0L))); // but still takes up some space on disk
+            OpenSearchStatusException.class,
+        assertNotNull(getIndexResponse.getMappings().get(indexName));
+        Map<String, Object> fieldMapping = (Map<String, Object>) ((Map<String, Object>) o).get("field-1");
+            Settings.builder().put("index.routing.allocation.require._name", firstNode).put("index.blocks.write", true)
+            highLevelClient().indices()::updateAliasesAsync
+            );
+        createIndex(index, Settings.EMPTY);
+        response = execute(deleteDataStreamRequest, indices::deleteDataStream, indices::deleteDataStreamAsync);
+            ClearIndicesCacheRequest clearCacheRequest = new ClearIndicesCacheRequest(nonExistentIndex);
+            Map<String, Boolean> conditionStatus = rolloverResponse.getConditionStatus();
+            assertThat(getAliasesResponse.getException(), nullValue());
+            startsWith(
+            highLevelClient().indices()::simulateIndexTemplate,
+            OpenSearchException.class,
+        );
+                .build()
+            () -> execute(closeIndexRequest, highLevelClient().indices()::close, highLevelClient().indices()::closeAsync)
+            composableIndexTemplateExistRequest,
+        assertEquals(RestStatus.NOT_FOUND, exception.status());
+    public void testValidateQuery() throws IOException {
+        assertThat(exception.getMetadata("opensearch.index"), not(hasItem(index)));
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(1));
+        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
+        putMappingRequest.source(mappingBuilder);
+            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+            {
+        assertThat(
+        }
+               "aliases": {
+        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
+        assertNotNull(indexSettings);
+            equalTo("template-2")
+        {
+            assertTrue(rolloverResponse.isDryRun());
+        Map<String, Object> indexSettings = (Map<String, Object>) XContentMapValues.extractValue("target.settings.index", getIndexResponse);
+        {
+            assertFalse(indexExists(nonExistentIndex));
+    public void testPutMapping() throws IOException {
+            }
+        OpenSearchException exception = expectThrows(
+        String[] indices = randomBoolean() ? Strings.EMPTY_ARRAY : null;
+            );
+            IndexSettings.DEFAULT_REFRESH_INTERVAL,
+import org.opensearch.client.indices.PutMappingRequest;
+            getBoth.getIndexTemplates().stream().map(IndexTemplateMetadata::name).toArray(),
+            OpenSearchException exception = expectThrows(
+            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+ * this work for additional information regarding copyright
+            OpenSearchException.class,
+import org.opensearch.OpenSearchException;
+            getSettingsRequest,
+            highLevelClient().indices()::putIndexTemplate,
+            1L,
+            // Create index with creation_date setting - should succeed now that it's not private
+            assertEquals(RestStatus.NOT_FOUND, exception.status());
+import org.opensearch.client.indices.GetComposableIndexTemplatesResponse;
+                getAliasesRequest,
+        aliasesAddRequest.addAliasAction(addAction);
+import org.opensearch.action.admin.indices.flush.FlushRequest;
+        );
+                highLevelClient().indices()::rolloverAsync
+import org.opensearch.action.index.IndexRequest;
+        IndexTemplateMetadata template1 = getTemplate1.getIndexTemplates().get(0);
+        assertEquals("2", getSettingsResponse.getSetting(indexName1, "index.number_of_shards"));
+            OpenSearchException exception = expectThrows(
+        // noinspection unchecked
+            Settings.builder()
+                getAliasesRequest,
+        aliasesAddRemoveRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).alias(alias + "2"));
+        assertEquals(1, getSettingsResponse.getIndexToSettings().get("get_settings_index").size());
+            assertThat(aliasMetadata1, notNullValue());
+            assertThat(aliasMetadata2, notNullValue());
+import org.opensearch.common.xcontent.support.XContentMapValues;
+        assertNotNull(aliasData);
+        );
+        assertThat(dataStreamStat, notNullValue());
+        aliasesRemoveIndexRequest.addAliasAction(removeIndexAction);
+            deleteComposableIndexTemplateRequest,
+        assertThat(((Map<String, Object>) o).get("field-1"), instanceOf(Map.class));
+                    new GetIndexTemplatesRequest("template-*"),
+        getAliasesRequest2.indices("does_not_exist");
+            highLevelClient().indices()::deleteAliasAsync
+    }
+                    client.indices()::getIndexTemplate,
+        {
+            assertThat(flushResponse.getFailedShards(), equalTo(0));
+        );
+            () -> execute(
+            highLevelClient().indices()::validateQuery,
+import org.opensearch.client.indices.SimulateIndexTemplateRequest;
+            1L,
+    }
+            assertThat(aliasMetadata, notNullValue());
+import java.util.Map;
+        String indexName2 = "get_multiple_settings_two";
+        {
+            putTemplateRequest,
+            null
+            Map<String, Object> filter = (Map) aliasData.get("filter");
+            assertThat(aliasMetadata2, notNullValue());
+                .put("index.number_of_routing_shards", 4)
+        assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
+ * compatible open source license.
+    }
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("_all");
+        String alias = "alias";
+            );
+        GetAliasesRequest getAliasesRequest = new GetAliasesRequest("alias");
+            );
+                getAliasesRequest,
+        OpenIndexRequest strictOpenIndexRequest = new OpenIndexRequest(nonExistentIndex);
+            getSettingsRequest,
+            GetAliasesResponse getAliasesResponse = execute(
+                createIndexRequest,
+        // Create-only specified but an template exists already
+        assertThat(e.status(), equalTo(RestStatus.NOT_FOUND));
+        Settings targetSettings = Settings.builder()
+            .indexTemplate(indexTemplate);
+        {
+            highLevelClient().indices()::validateQuery,
+            client().performRequest(new Request(HttpPut.METHOD_NAME, "/index2/_alias/alias2"));
+        }
+import org.opensearch.core.common.Strings;
+            exception.getMessage(),
+                "Index creation should be acknowledged when setting creation_date during index creation",
+        GetIndexTemplatesResponse getBoth = execute(
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName);
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+        {
+                highLevelClient().indices()::putSettingsAsync
+        aliasesAddRemoveRequest.addAliasAction(removeAction);
+            FlushRequest flushRequest = new FlushRequest(nonExistentIndex);
+    }
+        {
+                    new GetIndexTemplatesRequest("template-1"),
+        assertThat(getBoth.getIndexTemplates(), hasSize(2));
+            highLevelClient().indices()::putTemplateAsync
+        CloseIndexResponse closeIndexResponse = execute(
+        assertEquals(RestStatus.NOT_FOUND, exception.status());
+            This is the above response in json format:
+        int dataStreamsCount = dataStreamsStatsResponse.getDataStreamCount();
+import static org.hamcrest.Matchers.notNullValue;
+            expectThrows(
+        );
+        assertTrue(putMappingResponse.isAcknowledged());
+        );
+        );
+            AcknowledgedResponse deleteIndexResponse = execute(
+            hasItems("template-1", "template-2")
+            request,
+    public void testGetSettingsFromMultipleIndices() throws IOException {
+        assertEquals("0", getIndexResponse.getSetting(indexName, SETTING_NUMBER_OF_REPLICAS));
+ * You may obtain a copy of the License at
+            GetAliasesResponse getAliasesResponse = execute(
+        newIndexTemplateReq.indexTemplate(simulationTemplate);
+        assertThat(
+        );
+             }
+            getSettingsRequest,
+    }
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(1));
+    public void testSplit() throws IOException {
+        String alias2 = "alias2";
+            () -> execute(closeIndexRequest, highLevelClient().indices()::close, highLevelClient().indices()::closeAsync)
+        assertNull(indexSettingsAsMap.get(staticSettingKey));
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
+        assertThat(aliasExists(index, alias), equalTo(false));
+        );
+                .endObject()
+import org.opensearch.cluster.metadata.IndexMetadata;
+            dataStreamsStatsRequest,
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+            );
+        String mappings = "\"properties\":{\"field-1\":{\"type\":\"integer\"}}";
+            GetIndexRequest request = new GetIndexRequest(existingIndex, nonExistentIndex);
+        );
+        );
+            () -> execute(putTemplateRequest, highLevelClient().indices()::putTemplate, highLevelClient().indices()::putTemplateAsync)
+        DeleteAliasRequest request = new DeleteAliasRequest(index, alias);
+                .field("number_of_replicas", 0)
+            assertThat(getAliasesResponse.getError(), nullValue());
+            request,
+        GetIndexTemplatesResponse getAll = execute(
+    }
+    public void testAliasesNonExistentIndex() throws IOException {
+        assertEquals("3", getSettingsResponse.getSetting(indexName2, "index.number_of_shards"));
+                highLevelClient().indices()::create,
+        assertThat(
+            );
+        assertOK(client().performRequest(postDoc));
+        assertThat(response.isAcknowledged(), equalTo(true));
+        ValidationException withoutPatternError = expectThrows(
+        PutMappingRequest putMappingRequest = new PutMappingRequest(indexName);
+            );
+                OpenSearchException.class,
+            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
+import org.opensearch.client.indices.IndexTemplatesExistRequest;
+        final String staticSettingValue = "true";
+            highLevelClient().indices()::getIndexTemplateAsync
+            indices::dataStreamsStats,
+        {
+        assertNotNull(detailsResponse.detail());
+        final String dynamicSettingKey = IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+ */
+        );
+        assertThat(dataStream.getIndices(), hasSize(1));
+            assertThat(aliasMetadata2, notNullValue());
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest(indexName);
+        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
+                highLevelClient().indices()::create,
+            Settings.Builder settings = Settings.builder();
+            assertThat(
+import static org.hamcrest.Matchers.equalTo;
+import org.opensearch.action.admin.indices.alias.get.GetAliasesRequest;
+            Collections.singletonList(dataStreamName),
+            AliasMetadata aliasMetadata = getAliasesResponse.getAliases().get(index).iterator().next();
+        MappingMetadata mappingMetadata = getIndexResponse.getMappings().get(indexName);
+                .startObject("settings")
+            highLevelClient().indices()::getSettings,
+        assertThat(
+            assertTrue(response);
+            highLevelClient().indices()::getFieldMapping,
+            .alias(new Alias("{index}-write").searchRouting("xyz"));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        GetMappingsRequest request = new GetMappingsRequest().indices(indexName);
+        {
+            assertTrue(indexExists(indexName));
+            assertEquals("test_new", rolloverResponse.getNewIndex());
+        createIndex(indexName, basicSettings);
+        String indexName1 = "get_multiple_settings_one";
+        ValidateQueryRequest request = new ValidateQueryRequest(index).query(builder);
+        exception = expectThrows(
+        assertThat(
+                    + "  \"my_doc_type\": {"
+        String nonExistentIndex = "index_that_doesnt_exist";
+ * under the License.
+        assertThat(lenientOpenIndexResponse.isAcknowledged(), equalTo(true));
+        );
+        );
+            highLevelClient().indices()::shrinkAsync
+        Map<String, Object> filter = (Map<String, Object>) getAlias.get("filter");
+            2L,
+            );
+            String index = "index";
+        );
+    }
+import static org.hamcrest.Matchers.hasItems;
+                .put("index.number_of_replicas", 0)
+            assertEquals("test_new", rolloverResponse.getNewIndex());
+            );
+        assertThat(getAlias.get("index_routing"), equalTo("routing"));
+        );
+        assertThat(aliasExists(index, alias), equalTo(false));
+        exception = expectThrows(
+import org.opensearch.action.admin.indices.validate.query.ValidateQueryResponse;
+        AcknowledgedResponse putMappingResponse = execute(
+        )
+        mappingBuilder.endObject().endObject().endObject();
+        /*
+            Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue(
+            String indexName = "test_index_exists_index_present";
+        assertThat(aliases.get("simulation-alias").getAlias(), is("simulation-alias"));
+            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
+import org.opensearch.client.indices.rollover.RolloverRequest;
+ * The OpenSearch Contributors require contributions made to
+                + "  \"type\": \"act\","
+        assertEquals(RestStatus.NOT_FOUND, exception.status());
+        mappingBuilder.field("type", "text");
+            OpenSearchException.class,
+        assertThat(aliasExists(alias), equalTo(false));
+        );
+            assertThat(forceMergeRequest.getDescription(), containsString(index));
+        );
+                .put("index.number_of_shards", 2)
+        assertThat(aliasExists(alias), equalTo(false));
+import org.opensearch.client.indices.CloseIndexResponse;
+        Map<String, Object> nodes = getAsMap("_nodes");
+        );
+import org.opensearch.common.ValidationException;
+        assertThat(o, instanceOf(Map.class));
+        String setting = "no_idea_what_you_are_talking_about";
+            alias.filter("{\"term\":{\"year\":2016}}");
+        {
+                () -> execute(refreshRequest, highLevelClient().indices()::refresh, highLevelClient().indices()::refreshAsync)
+            exception.getMessage(),
+        // Index doesn't exist
+import org.opensearch.cluster.metadata.Template;
+                getComposableIndexTemplateRequest,
+                highLevelClient().indices()::updateAliasesAsync
+ */
+    }
+        assertThat(putTemplateResponse.isAcknowledged(), equalTo(true));
+            );
+        ComposableIndexTemplate indexTemplate = new ComposableIndexTemplate(
+import org.opensearch.client.indices.GetMappingsResponse;
+            assertEquals(RestStatus.NOT_FOUND, exception.status());
+        // default settings should be null
+            assertTrue(createIndexResponse.isAcknowledged());
+        );
+    }
+            highLevelClient().indices()::getMappingAsync
+            "source",
+    }
+        PutIndexTemplateRequest putTemplateRequest = new PutIndexTemplateRequest("my-template").patterns(
+            request,
+                exception.getMessage().contains("Can't update non dynamic settings [[index.creation_date]]")
+        assertNull(getSettingsResponse.getSetting(indexName, "index.refresh_interval"));
+        PutComposableIndexTemplateRequest putComposableIndexTemplateRequest = new PutComposableIndexTemplateRequest().name(templateName)
+                )
+            highLevelClient().indices()::deleteAlias,
+        );
+        assertTrue(execute(getAliasesRequest, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
+                    + "    \"properties\": {"
+import org.opensearch.client.indices.DeleteAliasRequest;
+            .alias(new Alias("alias-1"));
+        {
+        );
+        final String unmodifiableSettingKey = IndexMetadata.SETTING_NUMBER_OF_SHARDS;
+            highLevelClient().indices()::getSettingsAsync
+    public void testUpdateAliases() throws IOException {
+        }
+                    client.indices()::deleteTemplateAsync
+        assertEquals("_doc", mappingMetadata.type());
+            );
+        );
+        {
+            highLevelClient().indices()::getSettingsAsync
+                highLevelClient().indices()::rolloverAsync
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices(index, "non_existent_index").aliases(alias);
+            OpenSearchStatusException.class,
+    public void testRollover() throws IOException {
+            assertTrue(execute(bothRequest, client.indices()::existsTemplate, client.indices()::existsTemplateAsync));
+            Collections.emptyList(),
+            .must(QueryBuilders.queryStringQuery("*:*"))
+        }
+            highLevelClient().indices()::existsIndexTemplate,
+        assertThat(
+                unmodifiableSettingRequest,
+        }
+            highLevelClient().indices()::getSettings,
+        assertEquals("integer", fieldMapping.get("type"));
+            expectThrows(
+            highLevelClient().indices()::existsIndexTemplateAsync
+            getSettingsResponse.getIndexToDefaultSettings().get("get_settings_index").getAsTime("index.refresh_interval", null)
+            assertEquals(RestStatus.NOT_FOUND, exception.status());
+        assertThat(dataStreamsCount, equalTo(1));
+    }
+        updateIndexSettings("source", Settings.builder().put("index.blocks.write", true));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.action.admin.indices.open.OpenIndexRequest;
+        );
+            OpenSearchException.class,
+        }
+        org.opensearch.client.core.AcknowledgedResponse aliasDeleteResponse = execute(
+                    + "reason=unknown setting [index.no_idea_what_you_are_talking_about] please check that any required plugins are installed, "
+                highLevelClient().indices()::deleteAsync
+        );
+        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
+            lenientOpenIndexRequest,
+        AnalyzeRequest noindexRequest = AnalyzeRequest.withGlobalAnalyzer("english", "One two three");
+            assertThat(getAliasesResponse.getAliases().get("index3").size(), equalTo(0));
+            assertTrue("Index should exist after creation with creation_date setting", indexExists(indexName));
+                )
+        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
+            .settings(Settings.builder().put("number_of_shards", "2").put("number_of_replicas", "0"));
+        assertEquals(RestStatus.NOT_FOUND, exception.status());
+            highLevelClient().indices()::putMapping,
+        assertFalse(indexExists(nonExistentIndex));
+import java.util.Arrays;
+            Settings.builder()
+        Object o = getIndexResponse.getMappings().get(indexName).getSourceAsMap().get("properties");
+            assertFalse(rolloverResponse.isRolledOver());
+        String indexName = "get_settings_index";
+        AliasActions removeAction = new AliasActions(AliasActions.Type.REMOVE).index(index).alias(alias);
+        String index = "index";
+            assertThat(flushResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
+        request.explain(true);
+                refreshRequest,
+            putMappingRequest,
+        GetComposableIndexTemplatesResponse getResponse = execute(
+        assertEquals("text", XContentMapValues.extractValue(indexName + ".mappings.properties.field.type", getIndexResponse));
+        assertThat(aliasExists(index, alias2), equalTo(true));
+import org.opensearch.action.admin.indices.open.OpenIndexResponse;
+        assertThat(closeIndexResponse.getIndices(), hasSize(indices.length));
+        final Setting<Integer> unmodifiableSetting = IndexMetadata.INDEX_NUMBER_OF_SHARDS_SETTING;
+            "existing template overlaps the higher priority template we provided for the simulation",
+    }
+        Map<String, Object> aliasData = (Map<String, Object>) XContentMapValues.extractValue("target.aliases.alias", getIndexResponse);
+            Alias alias = new Alias("alias_name");
+import static org.hamcrest.Matchers.nullValue;
+        CreateDataStreamRequest createDataStreamRequest = new CreateDataStreamRequest(dataStreamName);
+                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
+        }
+            equalTo(true)
+                deleteIndexRequest,
+        );
+        {
+                getAliasesResponse.getException().getMessage(),
+        String index = "index";
+            Settings.Builder settings = Settings.builder();
+        );
+            .alias(new Alias("alias-1").indexRouting("abc"))
+        assertNotNull(aliasData);
+        Settings settings = Settings.builder().put("index.number_of_shards", 1).build();
+            ForceMergeRequest forceMergeRequest = new ForceMergeRequest(nonExistentIndex);
+        assertTrue(execute(getAliasesRequest2, highLevelClient().indices()::existsAlias, highLevelClient().indices()::existsAliasAsync));
+        assertThat(fieldMappingMap, equalTo(Collections.singletonMap("field", metadata)));
+        );
+        PutComposableIndexTemplateRequest putComposableIndexTemplateRequest = new PutComposableIndexTemplateRequest().name(templateName)
+        }
+import org.opensearch.client.indices.CreateIndexRequest;
+        assertThat((Map<String, String>) extractValue("my-template.aliases.{index}-write", templates), hasEntry("search_routing", "xyz"));
+        nonExistentIndexRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).index(nonExistentIndex).alias(alias));
+        Template template = new Template(settings, mappings, Map.of("alias", alias));
+            highLevelClient().indices()::existsIndexTemplateAsync
+        highLevelClient().index(
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+        assertEquals("0", indexSettings.get("number_of_replicas"));
+        AcknowledgedResponse aliasesRemoveIndexResponse = execute(
+    }
+            assertEquals(RestStatus.NOT_FOUND, exception.status());
+                highLevelClient().indices()::getAlias,
+    public void testGetIndexWithDefaults() throws IOException {
+import static org.hamcrest.Matchers.arrayContainingInAnyOrder;
+            "field",
+            )
+            XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
+        );
+        assertNotNull(indexSettings);
+            client.indices()::getIndexTemplateAsync
+            CreateIndexResponse createIndexResponse = execute(
+            );
+        {
+                getAliasesRequest,
+        OpenSearchException exception = expectThrows(
+        request.explain(randomBoolean());
+            assertFalse(indexExists(indexName));
+import org.opensearch.client.indices.GetMappingsRequest;
+        Map<String, Object> getIndexResponse = getAsMap(indexName);
+        {
+            highLevelClient().indices()::getSettingsAsync
+        indexSettingsAsMap = getIndexSettingsAsMap(index);
+        createIndex(index, Settings.EMPTY);
+            AliasMetadata aliasMetadata2 = getAliasesResponse.getAliases().get("index2").iterator().next();
+        assertTrue(putMappingResponse.isAcknowledged());
+                OpenSearchException.class,
+        AliasMetadata alias = AliasMetadata.builder("alias").writeIndex(true).build();
+            .indexTemplate(indexTemplate);
+            GetIndexRequest request = new GetIndexRequest(indexName);
+    public void testPutTemplateWithTypesUsingUntypedAPI() throws Exception {
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName).names("index.number_of_shards");
+            assertThat(aliasMetadata1, notNullValue());
+    public void testOpenExistingIndex() throws IOException {
+        mixedRequest.addAliasAction(new AliasActions(AliasActions.Type.ADD).indices(index).aliases(alias));
+import org.opensearch.client.indices.AnalyzeRequest;
+        assertThat(
+        );
+        assertThat(unmodifiableSetting.getDefault(Settings.EMPTY), not(unmodifiableSettingValue));
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
+        assertTrue(response.isAcknowledged());
+        assertNull(getSettingsResponse.getSetting(indexName, "index.number_of_replicas"));
+            assertThat(aliasMetadata2.alias(), equalTo("alias2"));
+        assertThat(dataStreamStat.getDataStream(), equalTo(dataStreamName));
+        assertThat(closeIndexResponse.getIndices(), notNullValue());
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+    public void testClearCache() throws IOException {
+        Map<String, Object> expected = new HashMap<>();
+        assertNotNull(indexSettings);
+            exception.getMessage(),
+                OpenSearchException.class,
+            assertThat(flushResponse.getTotalShards(), equalTo(1));
+        assertThat(extractValue("my-template.settings.index.number_of_shards", templates), equalTo("3"));
+            CreateIndexResponse createIndexResponse = execute(
+            DeleteIndexRequest deleteIndexRequest = new DeleteIndexRequest(nonExistentIndex);
+            assertThat(clearCacheResponse.getShardFailures(), equalTo(BroadcastResponse.EMPTY));
+                highLevelClient().indices()::getIndexTemplate,
+        OpenSearchStatusException statusException = expectThrows(
+    @SuppressWarnings("unchecked")
+            highLevelClient().indices()::getIndexTemplate,
+            putMappingRequest,
+        }
+    }
+        AnalyzeResponse noindexResponse = execute(noindexRequest, client.indices()::analyze, client.indices()::analyzeAsync);
+ * Modifications Copyright OpenSearch Contributors. See
+            highLevelClient().indices()::putMappingAsync
+                "{"
+            .mapping("{ \"properties\": { \"host_name\": { \"type\": \"keyword\" } } }", MediaTypeRegistry.JSON)
+        resizeRequest.setResizeType(ResizeType.SPLIT);
+import org.opensearch.action.admin.indices.refresh.RefreshRequest;
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+        OpenIndexRequest lenientOpenIndexRequest = new OpenIndexRequest(nonExistentIndex);
+            assertThat(indexResult.getIndex(), startsWith("index-"));
+        {
+            assertEquals("test", rolloverResponse.getOldIndex());
+        createIndex("source", Settings.builder().put("index.number_of_shards", 4).put("index.number_of_replicas", 0).build());
+        assertThat(getResponse.getIndexTemplates().get(templateName), equalTo(indexTemplate));
+        boolean exist = execute(
+            getAll.getIndexTemplates().stream().map(IndexTemplateMetadata::name).collect(Collectors.toList()),
+        GetSettingsRequest getSettingsRequest = new GetSettingsRequest().indices(indexName)
+        Settings basicSettings = Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build();
+        assertThat(
+        {
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.NOT_FOUND));
+        String index = "test";
+            GetAliasesResponse getAliasesResponse = execute(
+            highLevelClient().indices()::updateAliases,
+        getDataStreamResponse = execute(getDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync);
+            assertEquals("test", rolloverResponse.getOldIndex());
+        createIndex(indexName, Settings.EMPTY);
+            );
+            indices[i] = index;
+            1L,
+        Map<String, Object> indexSettingsAsMap = getIndexSettingsAsMap(index);
+        assertThat(exception.validationErrors().get(0), equalTo("index is missing"));
+        GetIndexResponse getIndexResponse = execute(
+        dataStream = dataStreams.get(0);
+                highLevelClient().indices()::getAliasAsync
+            startsWith(
+            FlushResponse flushResponse = execute(
+            () -> execute(goodTemplate, client.indices()::putTemplate, client.indices()::putTemplateAsync)
+            boolean response = execute(request, highLevelClient().indices()::exists, highLevelClient().indices()::existsAsync);
+        assertThat(template2.settings().get("index.number_of_shards"), equalTo("2"));
+import org.opensearch.client.indices.GetIndexRequest;
+        final Setting<Integer> dynamicSetting = IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING;
+            highLevelClient().indices()::putSettingsAsync
+        }
+    }
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+import org.opensearch.client.indices.DataStreamsStatsResponse.DataStreamStats;
+        GetSettingsResponse getSettingsResponse = execute(
+            putMappingRequest,
+                OpenSearchException.class,
+    public void testDeleteIndex() throws IOException {
+            new BytesArray("{\"field\":{\"type\":\"text\"}}")
+            .settings(Settings.builder().put("this-setting-does-not-exist", 100));
+            assertFalse(response);
+    public void testGetMapping() throws IOException {
+            highLevelClient().indices()::putIndexTemplateAsync
+        ComposableIndexTemplate simulationTemplate = new ComposableIndexTemplate(
+                highLevelClient().indices()::getAlias,
+                    client.indices()::getIndexTemplateAsync
+        assertThat(dataStreams, hasSize(1));
+                "OpenSearch exception [type=illegal_argument_exception, "
+            assertThat(aliasMetadata.getSearchRouting(), nullValue());
+        IndicesClient indices = highLevelClient().indices();
+                .field("order", 10)
+        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
+            getSettingsRequest,
+            getSettingsRequest,
+            assertThat(getAliasesResponse.getAliases().size(), equalTo(0));
+        String nonExistentIndex = "non_existent_index";
+            assertFalse(conditionStatus.get("[max_size: 1mb]"));
+        assertTrue(aliasesAddRemoveResponse.isAcknowledged());
+            assertThat(aliasMetadata.alias(), equalTo("alias1"));
+            String indexName = "plain_index";
+                getAliasesRequest,
+    public void testUpdateIndexSettingsFailFinalSetting() throws IOException {
+            String indexName = "rich_index";
+            );
+        exception = expectThrows(
+        {
+import org.opensearch.action.admin.indices.forcemerge.ForceMergeResponse;
+        assertThat(dataStreams, hasSize(1));
+                    client.indices()::deleteTemplate,
+        }
+        );
+                highLevelClient().indices()::clearCache,
+            ClearIndicesCacheResponse clearCacheResponse = execute(
+            )
+    public void testPutTemplateWithDeprecatedTemplateField() throws Exception {
+        }
+            assertFalse(indexExists(nonExistentIndex));
+import static org.hamcrest.Matchers.startsWith;
+        resizeRequest.setTargetIndex(
+        assertTrue(resizeResponse.isAcknowledged());
+        assertTrue(props.containsKey("name"));
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest(alias);
+        Settings basicSettings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+                highLevelClient().indices()::getAliasAsync
+            .get(indexName);
+        assertThat(aliasExists(index, alias2), equalTo(false));
+            .create(true)
+        assertThat(extractValue("my-template.order", templates), equalTo(10));
+        assertThat(staticSetting.getDefault(Settings.EMPTY), not(staticSettingValue));
+        assertThat(dataStreams, hasSize(0));
+                indexUpdateSettingsRequest,
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+        IndexTemplateMetadata template2 = getTemplate2.getIndexTemplates().get(0);
+                equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
+        Map<String, Object> templates = getAsMap("/_template/my-template");
+            aliasesAddRemoveRequest,
+        GetAliasesRequest getAliasesRequest2 = new GetAliasesRequest();
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_REPLICAS;
+            OpenSearchException.class,
+        );
+        assertThat(template1.patterns(), contains("pattern-1", "name-1"));
+ * the Apache License, Version 2.0 (the "License"); you may
+    public void testCloseEmptyOrNullIndex() {
+        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF_SHARDS;
+        final String[] indices = new String[randomIntBetween(1, 5)];
+            assertThat(getAliasesResponse.getAliases().get("index2").size(), equalTo(1));
+    }
+        // noinspection unchecked
+            highLevelClient().indices()::getSettings,
+import org.opensearch.common.unit.TimeValue;
+        ResizeResponse resizeResponse = execute(
+         */
+            assertFalse(conditionStatus.get("[max_docs: 1]"));
+            .filter(QueryBuilders.termQuery("user", "foobar"));
+import org.opensearch.client.indices.GetIndexResponse;
+            );
+                assertTrue(execute(putRequest, client.indices()::putTemplate, client.indices()::putTemplateAsync).isAcknowledged());
+        }
+            final List<String> templateNames = randomBoolean() ? Arrays.asList("*plate-1", "template-2") : Arrays.asList("template-*");
+            .mapping(
+        }
+            execute(new GetIndexTemplatesRequest("template-*"), client.indices()::getIndexTemplate, client.indices()::getIndexTemplateAsync)
+                highLevelClient().indices()::createAsync
+                .field("number_of_shards", 3)
+            containsString("[type=illegal_argument_exception, reason=index_template [t2] already exists]")
+import org.opensearch.client.indices.AnalyzeResponse;
+        assertThat(aliases, is(notNullValue()));
+        );
+            );
+                final IndexTemplatesExistRequest existsRequest = new IndexTemplatesExistRequest("template-" + suffix);
+        assertThat(aliasExists(alias), equalTo(true));
+            equalTo(RestStatus.NOT_FOUND)
+            )
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().indices("non_existent_index*");
+        GetSettingsResponse getSettingsResponse = execute(
+            highLevelClient().indices()::getSettings,
+            );
+        // New API returns a MappingMetadata class rather than CompressedXContent for the mapping
+                highLevelClient().indices()::refresh,
+ * GitHub history for details.
+                highLevelClient().indices()::getAlias,
+        client().performRequest(new Request(HttpPut.METHOD_NAME, "/" + index + "/_alias/" + alias));
+            assertFalse(indexExists(nonExistentIndex));
+            aliases.get("simulation-alias"),
+        String nonExistentIndex = "non_existent_index";
+            createIndex("index2", Settings.EMPTY);
+                + "  \"play_name\": \"Henry IV\","
+        assertTrue(aliasesAddResponse.isAcknowledged());
+        String nonExistentIndex = "index_that_doesnt_exist";
+                getAliasesRequest,
+        IndicesAliasesRequest aliasesRemoveIndexRequest = new IndicesAliasesRequest();
+            OpenSearchException.class,
+        assertThat(dynamicSetting.getDefault(Settings.EMPTY), not(dynamicSettingValue));
+        assertThat(
+        assertThat(dataStreamsStats, notNullValue());
+        );
+        Response response = client().performRequest(new Request(HttpGet.METHOD_NAME, "/" + index + "/_search"));
+    }
+        assertEquals("integer", fieldMapping.get("type"));
+            String indexName = "final_setting_index";
+import static org.hamcrest.Matchers.hasEntry;
+ * license agreements. See the NOTICE file distributed with
+        OpenIndexRequest openIndexRequest = new OpenIndexRequest(index);
+        GetSettingsResponse getSettingsResponse = execute(
+        assertEquals(
+            assertThat(
+        assertTrue(closeIndexResponse.isAcknowledged());
+        OpenIndexRequest openIndexRequest = new OpenIndexRequest(nonExistentIndex);
+        rolloverRequest.addMaxIndexDocsCondition(1);
+        );
+            new GetIndexTemplatesRequest("template-2"),
+            );
+        assertThat(extractValue("my-template.mappings.properties.host_name.type", templates), equalTo("keyword"));
+            highLevelClient().indices()::getAsync
+        String nonExistentIndex = "non_existent_index";
+            rolloverRequest.dryRun(false);
+        String templateName = "my-template";
+        assertEquals("1", getSettingsResponse.getSetting(indexName, "index.number_of_shards"));
+            assertFalse(rolloverResponse.isDryRun());
+            highLevelClient().indices()::putIndexTemplate,
+            FlushRequest flushRequest = new FlushRequest(index);
+        );
+        }
+        );
+        assertThat(aliasExists(index, alias2), equalTo(true));
+        highLevelClient().indices().create(new CreateIndexRequest("test").alias(new Alias("alias")), RequestOptions.DEFAULT);
+        assertThat(response.isAcknowledged(), equalTo(true));
+        }
+                highLevelClient().indices()::getAlias,
+        assertThat(dataStream.getName(), equalTo(dataStreamName));
+            OpenSearchException.class,
+        assertNull(getIndexResponse.getSetting(indexName, "index.refresh_interval"));
+public class IndicesClientIT extends OpenSearchRestHighLevelClientTestCase {
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/60461")
+            assertFalse(indexExists(indexName));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                .put("index.number_of_shards", 2)
+            new HashMap<>(),
+            .putNull("index.routing.allocation.require._name")
+        addAction.routing("routing").searchRouting("search_routing").filter("{\"term\":{\"year\":2016}}");
+        );
+    public void testCloseNonExistentIndex() throws IOException {
+        String index = "index";
+    @SuppressWarnings("unchecked")
+            highLevelClient().indices()::updateAliases,
+        {
+        ComposableIndexTemplateExistRequest composableIndexTemplateExistRequest = new ComposableIndexTemplateExistRequest(templateName);
+                highLevelClient().indices()::putSettingsAsync
+            assertThat(aliasMetadata2, notNullValue());
+            .order(10)
+            null
+    }
+            OpenSearchException.class,
+            equalTo(RestStatus.NOT_FOUND)
+            createIndex(indexName, Settings.EMPTY);
+        assertThat(getTemplate2.getIndexTemplates(), hasSize(1));
+        response = execute(
+            assertTrue(conditionStatus.get("[max_docs: 1]"));
+        );
+            OpenSearchException exception = expectThrows(
+            exception.getMessage(),
+        ResizeRequest resizeRequest = new ResizeRequest("target", "source");
+    }
+import org.opensearch.client.indices.GetComposableIndexTemplateRequest;
+        }
+            createIndex("index1", Settings.EMPTY);
+        assertNotNull(getIndexResponse.getMappings().get(indexName));
+import org.opensearch.action.admin.indices.settings.get.GetSettingsResponse;
+        assertThat(byteSizeValue, notNullValue());
+        );
+                OpenSearchException.class,
+import org.opensearch.client.indices.IndexTemplateMetadata;
+                getAliasesRequest,
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+        response = execute(createDataStreamRequest, indices::createDataStream, indices::createDataStreamAsync);
+        resizeRequest.setTargetIndex(
+            assertThat(aliasMetadata.getIndexRouting(), nullValue());
+        assertEquals("{\"properties\":{\"field-1\":{\"type\":\"integer\"}}}", mappingMetadata.source().string());
+            getIndexResponse.getDefaultSettings().get(indexName).getAsTime("index.refresh_interval", null)
+        assertThat(dataStream.getTimeStampField(), equalTo("@timestamp"));
+    }
+        Settings settings = Settings.builder().put("index.number_of_shards", 1).build();
+        assertThat(indexSettingsAsMap.get(dynamicSettingKey), equalTo(String.valueOf(dynamicSettingValue)));
+    public void testExistsAlias() throws IOException {
+            assertThat(aliasMetadata1, notNullValue());
+    }
+import static org.hamcrest.Matchers.hasSize;
+                    + "reason=Can't update non dynamic settings [[index.shard.check_on_startup]] for open indices [[index/"
+        // Failed to validate because index patterns are missing
+                .isAcknowledged()
+            createIndex(index, settings);
+        );
+            createIndex(index, settings);
+                "OpenSearch exception [type=illegal_argument_exception, "
+            assertThat(aliasMetadata, notNullValue());
+import org.opensearch.core.common.unit.ByteSizeValue;
+        assertThat(response.isAcknowledged(), equalTo(true));
+        ByteSizeValue byteSizeValue = dataStreamsStatsResponse.getTotalStoreSize();
+            assertThat(getAliasesResponse.status(), equalTo(RestStatus.OK));
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
+            highLevelClient().indices()::putTemplateAsync,
+    }
+        UpdateSettingsRequest indexUpdateSettingsRequest = new UpdateSettingsRequest(index);
+        getDataStreamRequest = new GetDataStreamRequest(null);
+    public void testCloseExistingIndex() throws IOException {
+        ValidateQueryResponse response = execute(
+        QueryBuilder builder = QueryBuilders.queryStringQuery("line_id:foo").lenient(false);
+        RestHighLevelClient client = highLevelClient();
+        assertThat(getAll.getIndexTemplates().size(), greaterThanOrEqualTo(2));
+        createIndex("index", Settings.EMPTY);
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+        assertThat(exception.getMetadata("opensearch.index"), hasItem(nonExistentIndex));
+                getAliasesRequest,
+        final RestHighLevelClient client = highLevelClient();
+        int backingIndices = dataStreamsStatsResponse.getBackingIndices();
+import org.opensearch.common.xcontent.XContentFactory;
+        GetIndexTemplatesResponse getTemplate1 = execute(
+        GetDataStreamRequest finalGetDataStreamRequest = getDataStreamRequest;
+        assertThat(extractValue("my-template.order", templates), equalTo(10));
+        {
+import org.opensearch.OpenSearchStatusException;
+                () -> execute(clearCacheRequest, highLevelClient().indices()::clearCache, highLevelClient().indices()::clearCacheAsync)
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_CREATION_DATE;
+            String nonExistentIndex = "non_existent_index";
+        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"@timestamp\":{\"type\":\"date\"}}}");
+            pattern,
+        assertThat(exception.status(), equalTo(RestStatus.NOT_FOUND));
+            highLevelClient().indices()::putMappingAsync
+                highLevelClient().indices()::flush,
+        OpenSearchStatusException unknownSettingError = expectThrows(
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+            )
+                + "  \"speaker\": \"\","
+        List<String> pattern = List.of("pattern");
+            1L,
+            OpenSearchException exception = expectThrows(
+        updateIndexSettings(
+    public void testGetSettingsWithDefaultsFiltered() throws IOException {
+        mappingBuilder.field("type", "text");
+        String index = "index";
+            GetAliasesRequest getAliasesRequest = new GetAliasesRequest().aliases("alias1");
+        }
+                 "alias": {}
+            () -> execute(
+import org.opensearch.core.xcontent.XContentBuilder;
+        );
+        GetDataStreamRequest getDataStreamRequest = new GetDataStreamRequest(dataStreamName);
+import org.opensearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+            String existingIndex = "apples";
+                "OpenSearch exception [type=settings_exception, " + "reason=final index setting [index.number_of_shards], not updateable"
+            is("pattern")
+            alias.routing("1");
+            assertTrue(deleteIndexResponse.isAcknowledged());
+        );
+    public void testIndexTemplatesExist() throws Exception {
+        resizeRequest.setTargetIndex(
+        assertThat(aliasExists(alias), equalTo(false));
+        assertNotNull(getIndexResponse.getSetting(indexName, "index.refresh_interval"));
+    }
+        PutIndexTemplateRequest putTemplate2 = new PutIndexTemplateRequest("template-2").patterns(Arrays.asList("pattern-2", "name-2"))
+import org.opensearch.action.support.WriteRequest;
+    public void testCreateIndexWithCreationDate() throws IOException {
+            createIndexRequest.settings(settings);
+            assertThat(getAliasesResponse.getError(), equalTo("alias [" + alias + "] missing"));
+        }
+            getIndexRequest,
+        CompressedXContent mappings = new CompressedXContent("{\"properties\":{\"host_name\":{\"type\":\"keyword\"}}}");
+            equalTo("OpenSearch exception [type=index_not_found_exception, reason=no such index [non_existent_index]]")
+                OpenSearchException.class,
+            highLevelClient().indices()::putMapping,
+        GetIndexTemplatesRequest getAllRequest = new GetIndexTemplatesRequest();
+            assertThat(forceMergeRequest.getDescription(), containsString(nonExistentIndex));
+            highLevelClient().indices()::deleteIndexTemplateAsync
+        }
+            () -> execute(finalGetDataStreamRequest, indices::getDataStream, indices::getDataStreamAsync)
+            equalTo(RestStatus.NOT_FOUND)
+        assertThat(response.getStatusLine().getStatusCode(), equalTo(RestStatus.OK.getStatus()));
+        XContentBuilder mappingBuilder = JsonXContent.contentBuilder();
+            );
+            expectWarningsOnce("Deprecated field [template] used, replaced by [index_patterns]")
+        client().performRequest(new Request(HttpPut.METHOD_NAME, "/index/_alias/alias"));
+            equalTo(
+            new GetIndexTemplatesRequest("template-1"),
+            AliasMetadata aliasMetadata1 = getAliasesResponse.getAliases().get("index1").iterator().next();
+            ).status(),
+            highLevelClient().indices()::putMappingAsync
+                () -> execute(forceMergeRequest, highLevelClient().indices()::forcemerge, highLevelClient().indices()::forcemergeAsync)
+        createIndex(indexName, basicSettings);
+        {
+        );
+            assertThat(aliasMetadata1.alias(), equalTo("alias1"));
+                flushRequest,
+                highLevelClient().indices()::getAliasAsync
+            highLevelClient().indices()::getAsync
+            OpenSearchException.class,
+        final Map<String, GetFieldMappingsResponse.FieldMappingMetadata> fieldMappingMap = getFieldMappingsResponse.mappings()
+    }
+            assertThat(getAliasesResponse.getAliases().get("index1").size(), equalTo(1));
+    public void testIndicesExists() throws IOException {
+            createIndex("index3", Settings.EMPTY);
+            GetAliasesResponse getAliasesResponse = execute(
+            execute(new DeleteIndexTemplateRequest("template-*"), client.indices()::deleteTemplate, client.indices()::deleteTemplateAsync)
+            Settings settings = Settings.builder().put("number_of_shards", 1).put("number_of_replicas", 0).build();
+        createIndex(index, Settings.EMPTY);
+                OpenSearchException.class,
+        String indexName = "test";
+            .indexTemplate(indexTemplate);

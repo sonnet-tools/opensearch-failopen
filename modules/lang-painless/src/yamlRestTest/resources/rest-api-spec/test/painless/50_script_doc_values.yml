@@ -1,378 +1,346 @@
-setup:
-    - do:
-        indices.create:
-            index: test
-            body:
-                settings:
-                    number_of_shards: 1
-                mappings:
-                    properties:
-                        boolean:
-                            type: boolean
-                        date:
-                            type: date
-                        geo_point:
-                            type: geo_point
-                        ip:
-                            type: ip
-                        keyword:
-                            type: keyword
-                        long:
-                            type: long
-                        integer:
-                            type: integer
-                        short:
-                            type: short
-                        byte:
-                            type: byte
-                        double:
-                            type: double
-                        float:
-                            type: float
-                        half_float:
-                            type: half_float
-                        scaled_float:
-                            type: scaled_float
-                            scaling_factor: 100
-                        token_count:
-                            type: token_count
-                            analyzer: standard
-
-    - do:
-        index:
-            index: test
-            id: 1
-            body:
-                boolean: true
-                date: 2017-01-01T12:11:12
-                geo_point: 41.12,-71.34
-                ip: 192.168.0.1
-                keyword: not split at all
-                long: 12348732141234
-                integer: 134134566
-                short: 1324
+                    field:
+            rest_total_hits_as_int: true
+        search:
+                    field:
+            rest_total_hits_as_int: true
                 byte: 12
-                double: 3.14159265358979
-                float: 3.141592654
-                half_float: 3.140625
-                scaled_float: 3.14
-                token_count: count all these words please
-
-    - do:
-        indices.refresh: {}
-
----
-"boolean":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['boolean'].get(0)"
-    - match: { hits.hits.0.fields.field.0: true }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['boolean'].value"
-    - match: { hits.hits.0.fields.field.0: true }
-
----
-"date":
-    - skip:
-        features: "allowed_warnings"
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc.date.get(0)"
-    - match: { hits.hits.0.fields.field.0: '2017-01-01T12:11:12.000Z' }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc.date.value"
-    - match: { hits.hits.0.fields.field.0: '2017-01-01T12:11:12.000Z' }
-
----
-"geo_point":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['geo_point'].get(0)"
-    - match: { hits.hits.0.fields.field.0.lat: 41.1199999647215 }
-    - match: { hits.hits.0.fields.field.0.lon: -71.34000004269183 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['geo_point'].value"
-    - match: { hits.hits.0.fields.field.0.lat: 41.1199999647215 }
-    - match: { hits.hits.0.fields.field.0.lon: -71.34000004269183 }
-
----
-"ip":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['ip'].get(0)"
-    - match: { hits.hits.0.fields.field.0: "192.168.0.1" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['ip'].value"
-    - match: { hits.hits.0.fields.field.0: "192.168.0.1" }
-
----
-"keyword":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['keyword'].get(0)"
-    - match: { hits.hits.0.fields.field.0: "not split at all" }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['keyword'].value"
-    - match: { hits.hits.0.fields.field.0: "not split at all" }
-
----
-"long":
-    - skip:
-        features: "allowed_warnings"
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['long'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 12348732141234 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['long'].value"
-    - match: { hits.hits.0.fields.field.0: 12348732141234 }
-
----
-"integer":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['integer'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 134134566 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
                             source: "doc['integer'].value"
-    - match: { hits.hits.0.fields.field.0: 134134566 }
-
+                            type: byte
+        indices.refresh: {}
+                script_fields:
+        features: "allowed_warnings"
+                boolean: true
+        search:
+            body:
 ---
-"short":
-    - do:
-        search:
             rest_total_hits_as_int: true
-            body:
-                script_fields:
                     field:
-                        script:
-                            source: "doc['short'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 1324 }
-
+                script_fields:
     - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
                     field:
-                        script:
-                            source: "doc['short'].value"
-    - match: { hits.hits.0.fields.field.0: 1324 }
-
+                        short:
+            rest_total_hits_as_int: true
+    - match: { hits.hits.0.fields.field.0.lon: -71.34000004269183 }
+                            source: "doc['integer'].get(0)"
 ---
-"byte":
+                            type: long
+                            source: "doc['long'].get(0)"
     - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
                     field:
-                        script:
-                            source: "doc['byte'].get(0)"
+    - match: { hits.hits.0.fields.field.0: 5 }
+                    field:
+            body:
+    - do:
+                script_fields:
+                long: 12348732141234
+        search:
+                float: 3.141592654
+                            source: "doc['keyword'].value"
     - match: { hits.hits.0.fields.field.0: 12 }
-
+                        script:
+        indices.create:
+                        float:
+                script_fields:
+    - match: { hits.hits.0.fields.field.0: 5 }
+            rest_total_hits_as_int: true
     - do:
         search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['byte'].value"
-    - match: { hits.hits.0.fields.field.0: 12 }
-
 ---
-"double":
+    - match: { hits.hits.0.fields.field.0.lat: 41.1199999647215 }
+    - do:
+                        date:
+            rest_total_hits_as_int: true
+"boolean":
+            body:
+                        script:
+                        script:
+                    field:
+            rest_total_hits_as_int: true
+            body:
+setup:
+                            source: "doc['scaled_float'].get(0)"
+                    field:
+                        script:
+                        script:
+                    field:
+                script_fields:
+    - match: { hits.hits.0.fields.field.0: 1324 }
+            body:
+                            source: "doc['half_float'].get(0)"
+                            type: scaled_float
+                    field:
+    - do:
+    - do:
+                script_fields:
+                            type: boolean
     - do:
         search:
-            rest_total_hits_as_int: true
+                script_fields:
+    - do:
+                short: 1324
+                script_fields:
+            body:
             body:
                 script_fields:
                     field:
-                        script:
-                            source: "doc['double'].get(0)"
+                    field:
     - match: { hits.hits.0.fields.field.0: 3.14159265358979 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
+    - match: { hits.hits.0.fields.field.0: 12348732141234 }
                 script_fields:
-                    field:
+                script_fields:
+                        double:
+                            type: token_count
+    - match: { hits.hits.0.fields.field.0: "not split at all" }
+                        byte:
+            body:
+        search:
+            body:
+    - do:
+    - match: { hits.hits.0.fields.field.0: "not split at all" }
+    - do:
                         script:
                             source: "doc['double'].value"
-    - match: { hits.hits.0.fields.field.0: 3.14159265358979 }
-
----
-"float":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
                         script:
-                            source: "doc['float'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 3.1415927410125732 } # this ends up as a double
-
-    - do:
         search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['float'].value"
-    - match: { hits.hits.0.fields.field.0: 3.1415927410125732 } # this ends up as a double
-
----
-"half_float":
-    - do:
         search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['half_float'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 3.140625 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['half_float'].value"
-    - match: { hits.hits.0.fields.field.0: 3.140625 }
-
----
-"scaled_float":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
-                            source: "doc['scaled_float'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 3.14 }
-
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
-                script_fields:
-                    field:
-                        script:
+    - match: { hits.hits.0.fields.field.0: "192.168.0.1" }
+    - match: { hits.hits.0.fields.field.0: '2017-01-01T12:11:12.000Z' }
                             source: "doc['scaled_float'].value"
-    - match: { hits.hits.0.fields.field.0: 3.14 }
-
----
+"ip":
+            rest_total_hits_as_int: true
+    - do:
+    - do:
+                script_fields:
+                ip: 192.168.0.1
+            rest_total_hits_as_int: true
+            id: 1
+                        script:
+    - do:
+            rest_total_hits_as_int: true
+                script_fields:
 "token_count":
-    - do:
-        search:
-            rest_total_hits_as_int: true
-            body:
                 script_fields:
                     field:
+            body:
                         script:
-                            source: "doc['token_count'].get(0)"
-    - match: { hits.hits.0.fields.field.0: 5 }
-
+    - match: { hits.hits.0.fields.field.0: '2017-01-01T12:11:12.000Z' }
+                integer: 134134566
+                            source: "doc['boolean'].get(0)"
+            body:
+                        scaled_float:
+            rest_total_hits_as_int: true
+                script_fields:
+                        script:
     - do:
+            rest_total_hits_as_int: true
+                        long:
         search:
             rest_total_hits_as_int: true
+                settings:
+    - do:
+---
+---
+                    number_of_shards: 1
+    - match: { hits.hits.0.fields.field.0: 3.14159265358979 }
+        search:
+    - match: { hits.hits.0.fields.field.0: 12348732141234 }
             body:
-                script_fields:
-                    field:
+                        half_float:
                         script:
+"long":
+    - do:
+                script_fields:
                             source: "doc['token_count'].value"
-    - match: { hits.hits.0.fields.field.0: 5 }
+            body:
+    - do:
+    - match: { hits.hits.0.fields.field.0: 134134566 }
+                script_fields:
+            body:
+                    field:
+            rest_total_hits_as_int: true
+                script_fields:
+                keyword: not split at all
+                            source: "doc.date.value"
+                        script:
+    - do:
+                            source: "doc['double'].get(0)"
+            body:
+                            source: "doc['geo_point'].get(0)"
+    - match: { hits.hits.0.fields.field.0: true }
+                            type: integer
+                        integer:
+            rest_total_hits_as_int: true
+                        script:
+                    field:
+                            type: ip
+        search:
+                script_fields:
+        search:
+        search:
+            body:
+            body:
+            rest_total_hits_as_int: true
+                    field:
+"half_float":
+                    field:
+---
+                            source: "doc['long'].value"
+            rest_total_hits_as_int: true
+                    field:
+    - do:
+    - do:
+                script_fields:
+                            source: "doc['boolean'].value"
+                            source: "doc['token_count'].get(0)"
+            body:
+                    field:
+---
+                    field:
+        search:
+    - match: { hits.hits.0.fields.field.0: true }
+                        script:
+                script_fields:
+                            source: "doc['short'].get(0)"
+                script_fields:
+    - do:
+                date: 2017-01-01T12:11:12
+---
+                            type: keyword
+                script_fields:
+            body:
+                script_fields:
+        search:
+                            source: "doc['byte'].value"
+                        geo_point:
+                        script:
+"short":
+                mappings:
+                    field:
+            rest_total_hits_as_int: true
+    - match: { hits.hits.0.fields.field.0.lat: 41.1199999647215 }
+    - do:
+    - do:
+    - match: { hits.hits.0.fields.field.0: 3.140625 }
+        features: "allowed_warnings"
+                        script:
+                            source: "doc.date.get(0)"
+    - do:
+    - match: { hits.hits.0.fields.field.0: 3.140625 }
+                    properties:
+            body:
+            index: test
+            body:
+            body:
+                        script:
+                        script:
+                script_fields:
+        search:
+                    field:
+                        script:
+"integer":
+        search:
+                            source: "doc['half_float'].value"
+            index: test
+        search:
+                            source: "doc['short'].value"
+                            source: "doc['geo_point'].value"
+                geo_point: 41.12,-71.34
+                            source: "doc['float'].get(0)"
+            body:
+                    field:
+                        token_count:
+    - do:
+        search:
+            rest_total_hits_as_int: true
+            body:
+                            type: float
+            rest_total_hits_as_int: true
+    - match: { hits.hits.0.fields.field.0: 3.14 }
+---
+                            type: date
+    - match: { hits.hits.0.fields.field.0: 1324 }
+                            type: half_float
+                        ip:
+                        boolean:
+        search:
+        search:
+        search:
+                        script:
+    - match: { hits.hits.0.fields.field.0: 3.1415927410125732 } # this ends up as a double
+            rest_total_hits_as_int: true
+                            source: "doc['ip'].value"
+                        script:
+    - match: { hits.hits.0.fields.field.0: 3.1415927410125732 } # this ends up as a double
+                        script:
+"float":
+---
+    - do:
+    - skip:
+                token_count: count all these words please
+    - do:
+            body:
+            body:
+                            source: "doc['keyword'].get(0)"
+        search:
+    - match: { hits.hits.0.fields.field.0: 134134566 }
+            rest_total_hits_as_int: true
+        index:
+"byte":
+                        script:
+            rest_total_hits_as_int: true
+            body:
+    - do:
+            body:
+                    field:
+---
+                script_fields:
+            body:
+                        script:
+                double: 3.14159265358979
+                script_fields:
+                        keyword:
+"date":
+        search:
+                        script:
+"double":
+                            source: "doc['ip'].get(0)"
+                            analyzer: standard
+    - match: { hits.hits.0.fields.field.0: "192.168.0.1" }
+        search:
+"keyword":
+                    field:
+                scaled_float: 3.14
+            rest_total_hits_as_int: true
+            rest_total_hits_as_int: true
+---
+    - match: { hits.hits.0.fields.field.0: 12 }
+        search:
+                            source: "doc['float'].value"
+            body:
+            rest_total_hits_as_int: true
+                        script:
+            rest_total_hits_as_int: true
+                    field:
+                            scaling_factor: 100
+        search:
+                            type: double
+                    field:
+    - match: { hits.hits.0.fields.field.0.lon: -71.34000004269183 }
+                            type: geo_point
+---
+        search:
+"geo_point":
+                            type: short
+                            source: "doc['byte'].get(0)"
+---
+                        script:
+"scaled_float":
+            rest_total_hits_as_int: true
+    - do:
+                script_fields:
+                        script:
+    - do:
+    - skip:
+                half_float: 3.140625
+    - match: { hits.hits.0.fields.field.0: 3.14 }
+                    field:

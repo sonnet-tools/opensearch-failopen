@@ -1,217 +1,193 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.common.CheckedBiConsumer;
-import org.opensearch.common.CheckedFunction;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Supplier;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-
-/**
- * A multi-bucket agg that has been parsed
- *
- * @opensearch.internal
- */
-public abstract class ParsedMultiBucketAggregation<B extends ParsedMultiBucketAggregation.Bucket> extends ParsedAggregation
-    implements
-        MultiBucketsAggregation {
-
-    protected final List<B> buckets = new ArrayList<>();
-    protected boolean keyed = false;
-
-    @Override
-    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
-        if (keyed) {
-            builder.startObject(CommonFields.BUCKETS.getPreferredName());
-        } else {
-            builder.startArray(CommonFields.BUCKETS.getPreferredName());
-        }
-        for (B bucket : buckets) {
-            bucket.toXContent(builder, params);
-        }
-        if (keyed) {
-            builder.endObject();
-        } else {
-            builder.endArray();
-        }
-        return builder;
-    }
-
-    protected static void declareMultiBucketAggregationFields(
-        final ObjectParser<? extends ParsedMultiBucketAggregation, Void> objectParser,
-        final CheckedFunction<XContentParser, ParsedBucket, IOException> bucketParser,
-        final CheckedFunction<XContentParser, ParsedBucket, IOException> keyedBucketParser
-    ) {
-        declareAggregationFields(objectParser);
-        objectParser.declareField((parser, aggregation, context) -> {
-            XContentParser.Token token = parser.currentToken();
-            if (token == XContentParser.Token.START_OBJECT) {
-                aggregation.keyed = true;
-                while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-                    aggregation.buckets.add(keyedBucketParser.apply(parser));
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                aggregation.keyed = false;
-                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-                    aggregation.buckets.add(bucketParser.apply(parser));
-                }
-            }
-        }, CommonFields.BUCKETS, ObjectParser.ValueType.OBJECT_ARRAY);
-    }
-
-    /**
-     * A parsed bucket
-     *
-     * @opensearch.internal
-     */
-    public abstract static class ParsedBucket implements MultiBucketsAggregation.Bucket {
-
-        private Aggregations aggregations;
-        private String keyAsString;
-        private long docCount;
-        private boolean keyed;
-
-        protected void setKeyAsString(String keyAsString) {
-            this.keyAsString = keyAsString;
-        }
-
-        @Override
+        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {
+                    currentFieldName = parser.currentName();
         public String getKeyAsString() {
-            return keyAsString;
+     *
+                            Aggregation.TYPED_KEYS_DELIMITER,
+                        );
         }
-
-        protected void setDocCount(long docCount) {
-            this.docCount = docCount;
+            builder.endObject();
+    protected final List<B> buckets = new ArrayList<>();
+/*
+                }
+        objectParser.declareField((parser, aggregation, context) -> {
+ *
+ */
+                    aggregation.buckets.add(bucketParser.apply(parser));
+                    }
         }
-
-        @Override
+import java.io.IOException;
+        final CheckedFunction<XContentParser, ParsedBucket, IOException> keyedBucketParser
+        }
+        }
+import java.util.ArrayList;
+    implements
+            bucket.setAggregations(new Aggregations(aggregations));
+        private long docCount;
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.search.aggregations.bucket.MultiBucketsAggregation;
+            }
+        return builder;
+            } else if (token == XContentParser.Token.START_ARRAY) {
+ * Licensed to Elasticsearch under one or more contributor
+            String currentFieldName = parser.currentName();
+                ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
         public long getDocCount() {
-            return docCount;
+                        bucket.setKeyAsString(parser.text());
+            return keyAsString;
+            builder.startArray(CommonFields.BUCKETS.getPreferredName());
+        private String keyAsString;
+            }
         }
-
-        public void setKeyed(boolean keyed) {
-            this.keyed = keyed;
-        }
-
-        protected boolean isKeyed() {
-            return keyed;
-        }
-
-        protected void setAggregations(Aggregations aggregations) {
+                            aggregations::add
+            bucket.toXContent(builder, params);
+            return builder;
+ * You may obtain a copy of the License at
+            } else {
+    }
+        protected static <B extends ParsedBucket> B parseXContent(
             this.aggregations = aggregations;
+            final CheckedBiConsumer<XContentParser, B, IOException> keyConsumer
+                } else if (token.isValue()) {
+            if (token == XContentParser.Token.START_OBJECT) {
+                // Subclasses can override the getKeyAsString method to handle specific cases like
+    protected boolean keyed = false;
+                        keyConsumer.accept(parser, bucket);
+ * SPDX-License-Identifier: Apache-2.0
+                builder.startObject(getKeyAsString());
+ *
         }
-
+                }
+import java.util.List;
+        }
+        if (keyed) {
+ * @opensearch.internal
+            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
+import org.opensearch.common.CheckedFunction;
+                // out but we still need to have a string version of the key to use as the bucket's name.
         @Override
-        public Aggregations getAggregations() {
+    @Override
+        if (keyed) {
+public abstract class ParsedMultiBucketAggregation<B extends ParsedMultiBucketAggregation.Bucket> extends ParsedAggregation
+                }
+/*
+        ) throws IOException {
+        }
+        }, CommonFields.BUCKETS, ObjectParser.ValueType.OBJECT_ARRAY);
+                // keyed bucket with RAW doc value format where the key_as_string field is not printed
+     * @opensearch.internal
+            bucket.setKeyed(keyed);
+        @Override
+ * ownership. Elasticsearch licenses this file to you under
+ * software distributed under the License is distributed on an
+        protected void setKeyAsString(String keyAsString) {
+ * GitHub history for details.
+                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), getKeyAsString());
+            final boolean keyed,
+        } else {
+        @Override
+                builder.startObject();
+ * this work for additional information regarding copyright
+/**
+            this.keyed = keyed;
+            if (keyAsString != null) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                            Aggregation.class,
+        }
+    protected static void declareMultiBucketAggregationFields(
+            if (keyed) {
+import org.opensearch.core.xcontent.XContentBuilder;
+        }
+        private Aggregations aggregations;
+                } else if (token == XContentParser.Token.START_OBJECT) {
+            XContentParser.Token token = parser.currentToken();
+        }
+        MultiBucketsAggregation {
+     * A parsed bucket
+import org.opensearch.core.xcontent.ObjectParser;
+}
+        for (B bucket : buckets) {
             return aggregations;
         }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            if (keyed) {
-                // Subclasses can override the getKeyAsString method to handle specific cases like
-                // keyed bucket with RAW doc value format where the key_as_string field is not printed
-                // out but we still need to have a string version of the key to use as the bucket's name.
-                builder.startObject(getKeyAsString());
-            } else {
-                builder.startObject();
+ *
             }
-            if (keyAsString != null) {
-                builder.field(CommonFields.KEY_AS_STRING.getPreferredName(), getKeyAsString());
-            }
-            keyToXContent(builder);
-            builder.field(CommonFields.DOC_COUNT.getPreferredName(), docCount);
-            aggregations.toXContentInternal(builder, params);
-            builder.endObject();
-            return builder;
-        }
-
-        protected XContentBuilder keyToXContent(XContentBuilder builder) throws IOException {
-            return builder.field(CommonFields.KEY.getPreferredName(), getKey());
-        }
-
-        protected static <B extends ParsedBucket> B parseXContent(
-            final XContentParser parser,
-            final boolean keyed,
-            final Supplier<B> bucketSupplier,
-            final CheckedBiConsumer<XContentParser, B, IOException> keyConsumer
-        ) throws IOException {
-            final B bucket = bucketSupplier.get();
-            bucket.setKeyed(keyed);
-            XContentParser.Token token = parser.currentToken();
-            String currentFieldName = parser.currentName();
-            if (keyed) {
-                ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-            }
-
-            List<Aggregation> aggregations = new ArrayList<>();
+    }
+ */
+    public abstract static class ParsedBucket implements MultiBucketsAggregation.Bucket {
             while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        protected void setDocCount(long docCount) {
+    /**
+    }
+                    if (CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
+    protected XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
                 if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();
-                } else if (token.isValue()) {
-                    if (CommonFields.KEY_AS_STRING.getPreferredName().equals(currentFieldName)) {
-                        bucket.setKeyAsString(parser.text());
+ */
                     } else if (CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
+        protected boolean isKeyed() {
+        final CheckedFunction<XContentParser, ParsedBucket, IOException> bucketParser,
+            builder.startObject(CommonFields.BUCKETS.getPreferredName());
+            }
+            final XContentParser parser,
+                    if (CommonFields.KEY_AS_STRING.getPreferredName().equals(currentFieldName)) {
+        private boolean keyed;
+        declareAggregationFields(objectParser);
+            builder.endObject();
+            final B bucket = bucketSupplier.get();
+            this.docCount = docCount;
+ * A multi-bucket agg that has been parsed
+ */
+                while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
+            return builder.field(CommonFields.KEY.getPreferredName(), getKey());
+import java.util.function.Supplier;
+ * not use this file except in compliance with the License.
+            return bucket;
+import org.opensearch.core.xcontent.XContentParserUtils;
+                    aggregation.buckets.add(keyedBucketParser.apply(parser));
                         keyConsumer.accept(parser, bucket);
                     } else if (CommonFields.DOC_COUNT.getPreferredName().equals(currentFieldName)) {
-                        bucket.setDocCount(parser.longValue());
-                    }
-                } else if (token == XContentParser.Token.START_OBJECT) {
-                    if (CommonFields.KEY.getPreferredName().equals(currentFieldName)) {
-                        keyConsumer.accept(parser, bucket);
-                    } else {
-                        XContentParserUtils.parseTypedKeysObject(
-                            parser,
-                            Aggregation.TYPED_KEYS_DELIMITER,
-                            Aggregation.class,
-                            aggregations::add
-                        );
-                    }
-                }
-            }
-            bucket.setAggregations(new Aggregations(aggregations));
-            return bucket;
+ * KIND, either express or implied.  See the License for the
+ *
+            aggregations.toXContentInternal(builder, params);
+     */
         }
-    }
-}
+        public Aggregations getAggregations() {
+                        XContentParserUtils.parseTypedKeysObject(
+            final Supplier<B> bucketSupplier,
+                aggregation.keyed = true;
+    ) {
+            this.keyAsString = keyAsString;
+                    } else {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+package org.opensearch.search.aggregations;
+        @Override
+ * The OpenSearch Contributors require contributions made to
+ * compatible open source license.
+ * Unless required by applicable law or agreed to in writing,
+            return docCount;
+        final ObjectParser<? extends ParsedMultiBucketAggregation, Void> objectParser,
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+                aggregation.keyed = false;
+                            parser,
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See
+            keyToXContent(builder);
+                    }
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.core.xcontent.XContentParser;
+            builder.endArray();
+import org.opensearch.common.CheckedBiConsumer;
+            if (keyed) {
+        protected void setAggregations(Aggregations aggregations) {
+        public void setKeyed(boolean keyed) {
+                while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+        } else {
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            XContentParser.Token token = parser.currentToken();
+ * under the License.
+            List<Aggregation> aggregations = new ArrayList<>();
+            return keyed;
+                        bucket.setDocCount(parser.longValue());

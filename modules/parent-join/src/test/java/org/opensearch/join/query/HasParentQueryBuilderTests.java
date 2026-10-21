@@ -1,304 +1,273 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.join.query;
-
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.join.ScoreMode;
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
 import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.query.IdsQueryBuilder;
-import org.opensearch.index.query.InnerHitBuilder;
-import org.opensearch.index.query.InnerHitContextBuilder;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.QueryShardException;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.query.WrapperQueryBuilder;
-import org.opensearch.join.ParentJoinModulePlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.search.sort.FieldSortBuilder;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.AbstractQueryTestCase;
-import org.opensearch.test.TestGeoShapeFieldMapperPlugin;
-import org.opensearch.test.VersionUtils;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.join.query.JoinQueryBuilders.hasParentQuery;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class HasParentQueryBuilderTests extends AbstractQueryTestCase<HasParentQueryBuilder> {
-    private static final String TYPE = "_doc";
-    private static final String PARENT_DOC = "parent";
-    private static final String CHILD_DOC = "child";
-
-    boolean requiresRewrite = false;
-
-    @Override
-    protected Collection<Class<? extends Plugin>> getPlugins() {
-        return Arrays.asList(ParentJoinModulePlugin.class, TestGeoShapeFieldMapperPlugin.class);
-    }
-
-    @Override
-    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {
-        XContentBuilder mapping = jsonBuilder().startObject()
-            .startObject("_doc")
-            .startObject("properties")
-            .startObject("join_field")
-            .field("type", "join")
-            .startObject("relations")
-            .field(PARENT_DOC, CHILD_DOC)
-            .endObject()
-            .endObject()
-            .startObject(TEXT_FIELD_NAME)
-            .field("type", "text")
-            .endObject()
-            .startObject(KEYWORD_FIELD_NAME)
-            .field("type", "keyword")
-            .endObject()
-            .startObject(INT_FIELD_NAME)
-            .field("type", "integer")
-            .endObject()
-            .startObject(DOUBLE_FIELD_NAME)
-            .field("type", "double")
-            .endObject()
-            .startObject(BOOLEAN_FIELD_NAME)
-            .field("type", "boolean")
-            .endObject()
-            .startObject(DATE_FIELD_NAME)
-            .field("type", "date")
-            .endObject()
-            .startObject(OBJECT_FIELD_NAME)
-            .field("type", "object")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject();
-
-        mapperService.merge(TYPE, new CompressedXContent(mapping.toString()), MapperService.MergeReason.MAPPING_UPDATE);
-    }
-
-    /**
-     * @return a {@link HasChildQueryBuilder} with random values all over the place
-     */
-    @Override
-    protected HasParentQueryBuilder doCreateTestQueryBuilder() {
-        QueryBuilder innerQueryBuilder = new MatchAllQueryBuilder();
-        if (randomBoolean()) {
-            requiresRewrite = true;
-            innerQueryBuilder = new WrapperQueryBuilder(innerQueryBuilder.toString());
-        }
-        HasParentQueryBuilder hqb = new HasParentQueryBuilder(PARENT_DOC, innerQueryBuilder, randomBoolean());
-        hqb.ignoreUnmapped(randomBoolean());
-        if (randomBoolean()) {
-            hqb.innerHit(
-                new InnerHitBuilder().setName(randomAlphaOfLengthBetween(1, 10))
-                    .setSize(randomIntBetween(0, 100))
-                    .addSort(new FieldSortBuilder(KEYWORD_FIELD_NAME).order(SortOrder.ASC))
-            );
-        }
-        return hqb;
-    }
-
-    @Override
     protected void doAssertLuceneQuery(HasParentQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        assertThat(query, instanceOf(HasChildQueryBuilder.LateParsingQuery.class));
-        HasChildQueryBuilder.LateParsingQuery lpq = (HasChildQueryBuilder.LateParsingQuery) query;
-        assertEquals(queryBuilder.score() ? ScoreMode.Max : ScoreMode.None, lpq.getScoreMode());
-
-        if (queryBuilder.innerHit() != null) {
-            // have to rewrite again because the provided queryBuilder hasn't been rewritten (directly returned from
-            // doCreateTestQueryBuilder)
-            queryBuilder = (HasParentQueryBuilder) queryBuilder.rewrite(context);
-
-            assertNotNull(context);
-            Map<String, InnerHitContextBuilder> innerHitBuilders = new HashMap<>();
-            InnerHitContextBuilder.extractInnerHits(queryBuilder, innerHitBuilders);
-            assertTrue(innerHitBuilders.containsKey(queryBuilder.innerHit().getName()));
-            InnerHitContextBuilder innerHits = innerHitBuilders.get(queryBuilder.innerHit().getName());
-            assertEquals(innerHits.innerHitBuilder(), queryBuilder.innerHit());
-        }
-    }
-
     /**
-     * Test (de)serialization on all previous released versions
-     */
-    public void testSerializationBWC() throws IOException {
-        for (Version version : VersionUtils.allReleasedVersions()) {
-            HasParentQueryBuilder testQuery = createTestQueryBuilder();
-            assertSerialization(testQuery, version);
-        }
-    }
-
-    public void testIllegalValues() throws IOException {
-        QueryBuilder query = new MatchAllQueryBuilder();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> hasParentQuery(null, query, false));
-        assertThat(e.getMessage(), equalTo("[has_parent] requires 'parent_type' field"));
-
-        e = expectThrows(IllegalArgumentException.class, () -> hasParentQuery("foo", null, false));
-        assertThat(e.getMessage(), equalTo("[has_parent] requires 'query' field"));
-
-        QueryShardContext context = createShardContext();
-        HasParentQueryBuilder qb = hasParentQuery("just_a_type", new MatchAllQueryBuilder(), false);
-        QueryShardException qse = expectThrows(QueryShardException.class, () -> qb.doToQuery(context));
-        assertThat(qse.getMessage(), equalTo("[has_parent] join field [join_field] doesn't hold [just_a_type] as a parent"));
-    }
-
-    public void testToQueryInnerQueryType() throws IOException {
-        QueryShardContext shardContext = createShardContext();
-        HasParentQueryBuilder hasParentQueryBuilder = new HasParentQueryBuilder(PARENT_DOC, new IdsQueryBuilder().addIds("id"), false);
-        Query query = hasParentQueryBuilder.toQuery(shardContext);
-        HasChildQueryBuilderTests.assertLateParsingQuery(query, PARENT_DOC, "id");
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        try {
-            super.testMustRewrite();
-        } catch (UnsupportedOperationException e) {
-            if (requiresRewrite == false) {
-                throw e;
-            }
-        }
-    }
-
-    public void testFromJson() throws IOException {
-        String json = "{\n"
-            + "  \"has_parent\" : {\n"
-            + "    \"query\" : {\n"
-            + "      \"term\" : {\n"
-            + "        \"tag\" : {\n"
-            + "          \"value\" : \"something\",\n"
-            + "          \"boost\" : 1.0\n"
-            + "        }\n"
-            + "      }\n"
-            + "    },\n"
-            + "    \"parent_type\" : \"blog\",\n"
-            + "    \"score\" : true,\n"
-            + "    \"ignore_unmapped\" : false,\n"
-            + "    \"boost\" : 1.0\n"
-            + "  }\n"
-            + "}";
-        HasParentQueryBuilder parsed = (HasParentQueryBuilder) parseQuery(json);
-        checkGeneratedJson(json, parsed);
-        assertEquals(json, "blog", parsed.type());
-        assertEquals(json, "something", ((TermQueryBuilder) parsed.query()).value());
-    }
-
-    public void testIgnoreUnmapped() throws IOException {
-        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder("unmapped", new MatchAllQueryBuilder(), false);
-        queryBuilder.innerHit(new InnerHitBuilder());
-        assertFalse(queryBuilder.innerHit().isIgnoreUnmapped());
-        queryBuilder.ignoreUnmapped(true);
-        assertTrue(queryBuilder.innerHit().isIgnoreUnmapped());
-        Query query = queryBuilder.toQuery(createShardContext());
-        assertThat(query, notNullValue());
-        assertThat(query, instanceOf(MatchNoDocsQuery.class));
-
-        final HasParentQueryBuilder failingQueryBuilder = new HasParentQueryBuilder("unmapped", new MatchAllQueryBuilder(), false);
         failingQueryBuilder.innerHit(new InnerHitBuilder());
-        assertFalse(failingQueryBuilder.innerHit().isIgnoreUnmapped());
-        failingQueryBuilder.ignoreUnmapped(false);
-        assertFalse(failingQueryBuilder.innerHit().isIgnoreUnmapped());
-        QueryShardException e = expectThrows(QueryShardException.class, () -> failingQueryBuilder.toQuery(createShardContext()));
-        assertThat(e.getMessage(), containsString("[has_parent] join field [join_field] doesn't hold [unmapped] as a parent"));
-    }
-
-    public void testIgnoreUnmappedWithRewrite() throws IOException {
-        // WrapperQueryBuilder makes sure we always rewrite
-        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
-            "unmapped",
-            new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()),
-            false
-        );
-        queryBuilder.ignoreUnmapped(true);
-        QueryShardContext queryShardContext = createShardContext();
-        Query query = queryBuilder.rewrite(queryShardContext).toQuery(queryShardContext);
-        assertThat(query, notNullValue());
-        assertThat(query, instanceOf(MatchNoDocsQuery.class));
-    }
-
-    public void testExtractInnerHitBuildersWithDuplicate() {
-        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
-            CHILD_DOC,
-            new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()),
-            false
-        );
-        queryBuilder.innerHit(new InnerHitBuilder("some_name"));
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> InnerHitContextBuilder.extractInnerHits(queryBuilder, Collections.singletonMap("some_name", null))
-        );
-        assertEquals("[inner_hits] already contains an entry for key [some_name]", e.getMessage());
-    }
-
-    public void testDisallowExpensiveQueries() {
+        return Arrays.asList(ParentJoinModulePlugin.class, TestGeoShapeFieldMapperPlugin.class);
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
-        when(queryShardContext.allowExpensiveQueries()).thenReturn(false);
-
-        HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
-            CHILD_DOC,
+import org.opensearch.index.query.QueryShardContext;
+            }
             new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()),
-            false
+import org.apache.lucene.search.MatchNoDocsQuery;
+            assertEquals(innerHits.innerHitBuilder(), queryBuilder.innerHit());
+    }
+    public void testIgnoreUnmappedWithRewrite() throws IOException {
+        assertThat(qse.getMessage(), equalTo("[has_parent] join field [join_field] doesn't hold [just_a_type] as a parent"));
+    @Override
+        HasChildQueryBuilderTests.assertLateParsingQuery(query, PARENT_DOC, "id");
+            + "    \"query\" : {\n"
+    public void testDisallowExpensiveQueries() {
+        Query query = hasParentQueryBuilder.toQuery(shardContext);
+    }
+/*
+import org.opensearch.index.query.QueryBuilder;
         );
+ * Unless required by applicable law or agreed to in writing,
+        }
+            + "    \"score\" : true,\n"
+    boolean requiresRewrite = false;
+    protected void initializeAdditionalMappings(MapperService mapperService) throws IOException {
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+            .startObject("properties")
+        );
+    protected Collection<Class<? extends Plugin>> getPlugins() {
         OpenSearchException e = expectThrows(OpenSearchException.class, () -> queryBuilder.toQuery(queryShardContext));
-        assertEquals("[joining] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+            .startObject(BOOLEAN_FIELD_NAME)
+import java.util.HashMap;
+            HasParentQueryBuilder testQuery = createTestQueryBuilder();
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.index.query.TermQueryBuilder;
+            .startObject(KEYWORD_FIELD_NAME)
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            .endObject();
+    @Override
+            + "  \"has_parent\" : {\n"
+import org.opensearch.plugins.Plugin;
+        assertThat(query, instanceOf(MatchNoDocsQuery.class));
+            () -> InnerHitContextBuilder.extractInnerHits(queryBuilder, Collections.singletonMap("some_name", null))
+            .startObject("_doc")
+ * GitHub history for details.
+     */
+        HasParentQueryBuilder hasParentQueryBuilder = new HasParentQueryBuilder(PARENT_DOC, new IdsQueryBuilder().addIds("id"), false);
+import org.apache.lucene.search.join.ScoreMode;
+            + "  }\n"
+            .endObject()
+        Query query = queryBuilder.toQuery(createShardContext());
+        if (queryBuilder.innerHit() != null) {
+            assertSerialization(testQuery, version);
+            queryBuilder = (HasParentQueryBuilder) queryBuilder.rewrite(context);
+import static org.opensearch.join.query.JoinQueryBuilders.hasParentQuery;
+/*
+import java.util.Collection;
     }
-
-    public void testVisit() {
-        HasParentQueryBuilder builder = doCreateTestQueryBuilder();
-
-        List<QueryBuilder> visitedQueries = new ArrayList<>();
-        builder.visit(createTestVisitor(visitedQueries));
-
-        assertEquals(2, visitedQueries.size());
+            CHILD_DOC,
+     */
     }
+import org.opensearch.core.xcontent.XContentBuilder;
+        assertThat(e.getMessage(), equalTo("[has_parent] requires 'parent_type' field"));
+            false
+import org.opensearch.index.query.InnerHitBuilder;
+import java.util.Map;
+        assertEquals(queryBuilder.score() ? ScoreMode.Max : ScoreMode.None, lpq.getScoreMode());
+import java.util.Arrays;
+    private static final String PARENT_DOC = "parent";
+        assertThat(e.getMessage(), equalTo("[has_parent] requires 'query' field"));
+            + "      \"term\" : {\n"
+import org.opensearch.Version;
+        XContentBuilder mapping = jsonBuilder().startObject()
+        final HasParentQueryBuilder failingQueryBuilder = new HasParentQueryBuilder("unmapped", new MatchAllQueryBuilder(), false);
+                new InnerHitBuilder().setName(randomAlphaOfLengthBetween(1, 10))
+    protected HasParentQueryBuilder doCreateTestQueryBuilder() {
+ *
+    }
+            .endObject()
+            InnerHitContextBuilder.extractInnerHits(queryBuilder, innerHitBuilders);
 }
+import org.opensearch.index.query.MatchAllQueryBuilder;
+        assertEquals(2, visitedQueries.size());
+ */
+            + "        }\n"
+            innerQueryBuilder = new WrapperQueryBuilder(innerQueryBuilder.toString());
+import org.opensearch.index.mapper.MapperService;
+        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
+        HasParentQueryBuilder builder = doCreateTestQueryBuilder();
+ * compatible open source license.
+            .field("type", "join")
+        assertFalse(queryBuilder.innerHit().isIgnoreUnmapped());
+        assertThat(query, notNullValue());
+ * You may obtain a copy of the License at
+                    .addSort(new FieldSortBuilder(KEYWORD_FIELD_NAME).order(SortOrder.ASC))
+            requiresRewrite = true;
+    public void testExtractInnerHitBuildersWithDuplicate() {
+        assertFalse(failingQueryBuilder.innerHit().isIgnoreUnmapped());
+            InnerHitContextBuilder innerHits = innerHitBuilders.get(queryBuilder.innerHit().getName());
+            );
+    }
+            false
+            assertNotNull(context);
+import static org.mockito.Mockito.mock;
+        QueryShardException e = expectThrows(QueryShardException.class, () -> failingQueryBuilder.toQuery(createShardContext()));
+ * ownership. Elasticsearch licenses this file to you under
+            .endObject()
+            .field("type", "date")
+import static org.hamcrest.CoreMatchers.containsString;
+import org.opensearch.test.AbstractQueryTestCase;
+        QueryBuilder innerQueryBuilder = new MatchAllQueryBuilder();
+        Query query = queryBuilder.rewrite(queryShardContext).toQuery(queryShardContext);
+    public void testIllegalValues() throws IOException {
+import static org.mockito.Mockito.when;
+ * under the License.
+            .field("type", "object")
+        );
+            .startObject(TEXT_FIELD_NAME)
+import org.opensearch.search.sort.SortOrder;
+            .endObject()
+        QueryBuilder query = new MatchAllQueryBuilder();
+import static org.hamcrest.CoreMatchers.instanceOf;
+            + "    },\n"
+        assertEquals(json, "blog", parsed.type());
+        } catch (UnsupportedOperationException e) {
+            .field("type", "keyword")
+            .startObject(DOUBLE_FIELD_NAME)
+    }
+    /**
+            .field("type", "text")
+        }
+    }
+ *
+package org.opensearch.join.query;
+    public void testVisit() {
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> hasParentQuery(null, query, false));
+        assertTrue(queryBuilder.innerHit().isIgnoreUnmapped());
+        for (Version version : VersionUtils.allReleasedVersions()) {
+ */
+import java.io.IOException;
+                    .setSize(randomIntBetween(0, 100))
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+        IllegalArgumentException e = expectThrows(
+        HasParentQueryBuilder qb = hasParentQuery("just_a_type", new MatchAllQueryBuilder(), false);
+import org.opensearch.search.sort.FieldSortBuilder;
+            Map<String, InnerHitContextBuilder> innerHitBuilders = new HashMap<>();
+            .field(PARENT_DOC, CHILD_DOC)
+    public void testMustRewrite() throws IOException {
+        assertEquals("[inner_hits] already contains an entry for key [some_name]", e.getMessage());
+            .startObject(INT_FIELD_NAME)
+            false
+        queryBuilder.ignoreUnmapped(true);
+            + "          \"value\" : \"something\",\n"
+import org.opensearch.OpenSearchException;
+import org.opensearch.test.VersionUtils;
+        }
+            .endObject()
+    public void testToQueryInnerQueryType() throws IOException {
+            .endObject()
+    }
+import java.util.Collections;
+    @Override
+        assertEquals(json, "something", ((TermQueryBuilder) parsed.query()).value());
+        QueryShardContext context = createShardContext();
+import org.opensearch.join.ParentJoinModulePlugin;
+ * The OpenSearch Contributors require contributions made to
+    public void testIgnoreUnmapped() throws IOException {
+            // doCreateTestQueryBuilder)
+            .startObject(OBJECT_FIELD_NAME)
+            + "      }\n"
+ * this file be licensed under the Apache-2.0 license or a
+     * @return a {@link HasChildQueryBuilder} with random values all over the place
+ * software distributed under the License is distributed on an
+                throw e;
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+ *
+public class HasParentQueryBuilderTests extends AbstractQueryTestCase<HasParentQueryBuilder> {
+import org.opensearch.index.query.IdsQueryBuilder;
+    public void testSerializationBWC() throws IOException {
+            super.testMustRewrite();
+        mapperService.merge(TYPE, new CompressedXContent(mapping.toString()), MapperService.MergeReason.MAPPING_UPDATE);
+        try {
+            assertTrue(innerHitBuilders.containsKey(queryBuilder.innerHit().getName()));
+import org.opensearch.index.query.QueryShardException;
+            .endObject()
+            .startObject("relations")
+        HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
+        QueryShardContext queryShardContext = createShardContext();
+        assertThat(query, notNullValue());
+        assertThat(query, instanceOf(HasChildQueryBuilder.LateParsingQuery.class));
+    private static final String TYPE = "_doc";
+import org.opensearch.index.query.WrapperQueryBuilder;
+            .field("type", "integer")
+    public void testFromJson() throws IOException {
+            .endObject()
+            + "        \"tag\" : {\n"
+        String json = "{\n"
+            "unmapped",
+import java.util.ArrayList;
+        HasParentQueryBuilder hqb = new HasParentQueryBuilder(PARENT_DOC, innerQueryBuilder, randomBoolean());
+ * not use this file except in compliance with the License.
+/*
+        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder("unmapped", new MatchAllQueryBuilder(), false);
+        );
+    }
+            .endObject()
+            // have to rewrite again because the provided queryBuilder hasn't been rewritten (directly returned from
+            + "}";
+    private static final String CHILD_DOC = "child";
+        e = expectThrows(IllegalArgumentException.class, () -> hasParentQuery("foo", null, false));
+            + "    \"ignore_unmapped\" : false,\n"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            .startObject(DATE_FIELD_NAME)
+        assertThat(query, instanceOf(MatchNoDocsQuery.class));
+            .field("type", "double")
+     * Test (de)serialization on all previous released versions
+import static org.hamcrest.CoreMatchers.notNullValue;
+        assertThat(e.getMessage(), containsString("[has_parent] join field [join_field] doesn't hold [unmapped] as a parent"));
+        HasChildQueryBuilder.LateParsingQuery lpq = (HasChildQueryBuilder.LateParsingQuery) query;
+            IllegalArgumentException.class,
+    }
+        // WrapperQueryBuilder makes sure we always rewrite
+            .startObject("join_field")
+        failingQueryBuilder.ignoreUnmapped(false);
+ * specific language governing permissions and limitations
+        queryBuilder.innerHit(new InnerHitBuilder());
+            CHILD_DOC,
+        if (randomBoolean()) {
+            + "    \"boost\" : 1.0\n"
+        QueryShardException qse = expectThrows(QueryShardException.class, () -> qb.doToQuery(context));
+ * SPDX-License-Identifier: Apache-2.0
+            new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()),
+ * license agreements. See the NOTICE file distributed with
+        if (randomBoolean()) {
+        HasParentQueryBuilder parsed = (HasParentQueryBuilder) parseQuery(json);
+            .endObject()
+        when(queryShardContext.allowExpensiveQueries()).thenReturn(false);
+    }
+import org.apache.lucene.search.Query;
+            new WrapperQueryBuilder(new MatchAllQueryBuilder().toString()),
+        queryBuilder.ignoreUnmapped(true);
+            if (requiresRewrite == false) {
+            .endObject()
+    @Override
+        builder.visit(createTestVisitor(visitedQueries));
+        checkGeneratedJson(json, parsed);
+ * Modifications Copyright OpenSearch Contributors. See
+            + "          \"boost\" : 1.0\n"
+import static org.hamcrest.CoreMatchers.equalTo;
+ */
+        assertEquals("[joining] queries cannot be executed when 'search.allow_expensive_queries' is set to false.", e.getMessage());
+            .field("type", "boolean")
+        final HasParentQueryBuilder queryBuilder = new HasParentQueryBuilder(
+        assertFalse(failingQueryBuilder.innerHit().isIgnoreUnmapped());
+        QueryShardContext shardContext = createShardContext();
+    }
+import org.opensearch.test.TestGeoShapeFieldMapperPlugin;
+        }
+    @Override
+        hqb.ignoreUnmapped(randomBoolean());
+import org.opensearch.index.query.InnerHitContextBuilder;
+import java.util.List;
+            + "    \"parent_type\" : \"blog\",\n"
+ * KIND, either express or implied.  See the License for the
+            hqb.innerHit(
+        queryBuilder.innerHit(new InnerHitBuilder("some_name"));
+ * this work for additional information regarding copyright
+        return hqb;
+        }

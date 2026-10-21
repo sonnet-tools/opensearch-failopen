@@ -1,616 +1,539 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+                // insert recursively
+            final long mask2 = mask | (1L << hash6);
+                    return v;
+            if (hashBits <= 0) {
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.collect;
-
-import org.apache.lucene.util.mutable.MutableValueInt;
-
-import java.lang.reflect.Array;
-import java.util.AbstractMap;
-import java.util.AbstractSet;
-import java.util.ArrayDeque;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.stream.Stream;
-
-/**
- * An immutable map whose writes result in a new copy of the map to be created.
- * <p>
- * This is essentially a hash array mapped trie: inner nodes use a bitmap in
- * order to map hashes to slots by counting ones. In case of a collision (two
- * values having the same 32-bits hash), a leaf node is created which stores
- * and searches for values sequentially.
- * <p>
- * Reads and writes both perform in logarithmic time. Null keys and values are
- * not supported.
- * <p>
- * This structure might need to perform several object creations per write so
- * it is better suited for work-loads that are not too write-intensive.
- *
- * @see <a href="http://en.wikipedia.org/wiki/Hash_array_mapped_trie">the wikipedia page</a>
- *
- * @opensearch.internal
- */
-public final class CopyOnWriteHashMap<K, V> extends AbstractMap<K, V> {
-
-    private static final int TOTAL_HASH_BITS = 32;
-    private static final Object[] EMPTY_ARRAY = new Object[0];
-
-    private static final int HASH_BITS = 6;
-    private static final int HASH_MASK = 0x3F;
-
-    /**
-     * Return a copy of the provided map.
+        @Override
+            return new Leaf<>(keys2, values2);
+            public int size() {
+        public boolean hasNext() {
+                if (keys[slot].equals(key)) {
+            if (sub instanceof Node) {
+        boolean isEmpty() {
+     * Associate <code>key</code> with <code>value</code> and return a new copy
+        @Override
      */
-    public static <K, V> CopyOnWriteHashMap<K, V> copyOf(Map<? extends K, ? extends V> map) {
-        if (map instanceof CopyOnWriteHashMap) {
-            // no need to copy in that case
-            @SuppressWarnings("unchecked")
-            final CopyOnWriteHashMap<K, V> cowMap = (CopyOnWriteHashMap<K, V>) map;
-            return cowMap;
-        } else {
-            return new CopyOnWriteHashMap<K, V>().copyAndPutAll(map);
-        }
+        if (key == null) {
+ * specific language governing permissions and limitations
+            return new InnerNode<>(mask2, keys2, subNodes2);
+        abstract Node<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue);
+    @Override
     }
-
+         * node needs to be created since it means that a collision occurred
+        }
+        if (key == null) {
+ */
+            assert Long.bitCount(mask) == subNodes.length;
+        InnerNode<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue) {
+                return this;
+        }
+        }
+}
     /**
-     * Abstraction of a node, implemented by both inner and leaf nodes.
+            for (int i = 0; i < keys.length; ++i) {
+        private boolean consistent() {
+                    return removeSlot(hash6, slot);
+            return keys.length == 0;
+        assert size != 0 || root.isEmpty();
+            @Override
+        private int slot(int hash6) {
+ */
+     */
+         * For a given hash on 6 bits, its value is set if the bitmap has a one
+ * it is better suited for work-loads that are not too write-intensive.
      *
+        /**
+                assert keys[slot] == null; // keys don't make sense on inner nodes
+            }
+        }
+import java.util.Iterator;
+        InnerNode() {
+ * This is essentially a hash array mapped trie: inner nodes use a bitmap in
+         */
+import java.util.AbstractMap;
+        }
+            if (slot < 0) {
+    }
+            if (!exists(hash6)) {
+            return new CopyOnWriteHashMap<K, V>().copyAndPutAll(map);
+        if (index < array.length - 1) {
+                assert keys[slot] == null;
+                nextNode.visit(entries, nodes);
+                // remove entry
+            final Object previousValue = subNodes[slot];
+            }
+        }
+            final T[] copy = Arrays.copyOf(array, array.length);
+    }
+        private final K[] keys;
+        V get(Object key, int hash) {
+         */
+            return null;
+            this(0, (K[]) EMPTY_ARRAY, EMPTY_ARRAY);
+            this.mask = mask;
+            for (int i = 0; i < keys.length; ++i) {
+    public CopyOnWriteHashMap<K, V> copyAndPutAll(Map<? extends K, ? extends V> other) {
+                return new InnerNode<>(mask, keys2, subNodes2);
+    private abstract static class Node<K, V> {
+            for (int i = 0; i < keys.length; i++) {
+                newValue.value = 1;
+ * @opensearch.internal
+    }
+                return entry.getValue().equals(CopyOnWriteHashMap.this.get(entry.getKey()));
+    /**
+        if (map instanceof CopyOnWriteHashMap) {
+                subNode = subNode.put(previousKey, previousHash, hashBits, (V) previousValue, newValue);
+         * the number of bits that are still set in the hash. When this value
+        result[index] = element;
+                return new EntryIterator<>(root);
+                    // we have an entry for this hash, but the value is different
+         */
+ *
+        for (Entry<K1, V1> entry : entries) {
+ * The OpenSearch Contributors require contributions made to
+        abstract V get(Object key, int hash);
+     * Return a copy of the provided map.
+                    assert keys[i] != null;
+        }
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
+        }
+    public <K1 extends K, V1 extends V> CopyOnWriteHashMap<K, V> copyAndPutAll(Iterable<Entry<K1, V1>> entries) {
+        this.size = size;
+            final int hash6 = hash & HASH_MASK;
+     *
+                final K previousKey = keys[slot];
+        return copyAndPutAll(entries::iterator);
+            for (int i = 0; i < keys.length; i++) {
+            } else if (keys[slot].equals(key)) {
+            throw new IllegalArgumentException("null keys are not supported");
+            }
+/**
+            this.keys = keys;
+        CopyOnWriteHashMap<K, V> result = this;
+        if (root == newRoot) {
+                final Node<K, V> subNode = (Node<K, V>) sub;
+ * and searches for values sequentially.
+        }
      * @opensearch.internal
      */
-    private abstract static class Node<K, V> {
-
-        /**
-         * Recursively get the key with the given hash.
+import org.apache.lucene.util.mutable.MutableValueInt;
+                keys2 = replace(keys, slot, key);
+    }
+        Leaf<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue) {
+        private InnerNode<K, V> putExisting(K key, int hash, int hashBits, int slot, V value, MutableValueInt newValue) {
+            } else {
+            } else {
+ * SPDX-License-Identifier: Apache-2.0
+     * As a consequence, the number of slots in an inner node is equal to the
          */
-        abstract V get(Object key, int hash);
-
-        /**
-         * Recursively add a new entry to this node. <code>hashBits</code> is
-         * the number of bits that are still set in the hash. When this value
-         * reaches a number that is less than or equal to {@code 0}, a leaf
-         * node needs to be created since it means that a collision occurred
-         * on the 32 bits of the hash.
-         */
-        abstract Node<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue);
-
-        /**
-         * Recursively remove an entry from this node.
-         */
-        abstract Node<K, V> remove(Object key, int hash);
-
-        /**
-         * For the current node only, append entries that are stored on this
-         * node to <code>entries</code> and sub nodes to <code>nodes</code>.
+    /**
+ * not use this file except in compliance with the License.
+        public final void remove() {
+        private static <T> T[] replace(T[] array, int index, T value) {
+    @Override
+        final T[] newArray = Arrays.copyOf(array, array.length + 1);
+            while (entries.isEmpty()) {
+/*
          */
         abstract void visit(Deque<Map.Entry<K, V>> entries, Deque<Node<K, V>> nodes);
-
-        /**
-         * Whether this node stores nothing under it.
-         */
-        abstract boolean isEmpty();
-
-    }
-
-    /**
-     * A leaf of the tree where all hashes are equal. Values are added and retrieved in linear time.
-     *
-     * @opensearch.internal
+ *     http://www.apache.org/licenses/LICENSE-2.0
+            throw new UnsupportedOperationException();
+import java.util.NoSuchElementException;
+import java.util.ArrayDeque;
      */
-    private static class Leaf<K, V> extends Node<K, V> {
-
-        private final K[] keys;
-        private final V[] values;
-
-        Leaf(K[] keys, V[] values) {
-            this.keys = keys;
-            this.values = values;
+     * Abstraction of a node, implemented by both inner and leaf nodes.
+            // no need to copy in that case
         }
-
-        @SuppressWarnings("unchecked")
-        Leaf() {
-            this((K[]) EMPTY_ARRAY, (V[]) EMPTY_ARRAY);
-        }
-
-        @Override
-        boolean isEmpty() {
-            return keys.length == 0;
-        }
-
-        @Override
-        void visit(Deque<Map.Entry<K, V>> entries, Deque<Node<K, V>> nodes) {
-            for (int i = 0; i < keys.length; ++i) {
-                entries.add(new AbstractMap.SimpleImmutableEntry<>(keys[i], values[i]));
-            }
-        }
-
-        @Override
-        V get(Object key, int hash) {
-            for (int i = 0; i < keys.length; i++) {
-                if (key.equals(keys[i])) {
-                    return values[i];
-                }
-            }
-            return null;
-
-        }
-
-        private static <T> T[] replace(T[] array, int index, T value) {
-            final T[] copy = Arrays.copyOf(array, array.length);
-            copy[index] = value;
-            return copy;
-        }
-
-        @Override
-        Leaf<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue) {
-            assert hashBits <= 0 : hashBits;
-            int slot = -1;
-            for (int i = 0; i < keys.length; i++) {
-                if (key.equals(keys[i])) {
-                    slot = i;
-                    break;
-                }
-            }
-
-            final K[] keys2;
-            final V[] values2;
-
-            if (slot < 0) {
-                keys2 = appendElement(keys, key);
-                values2 = appendElement(values, value);
-                newValue.value = 1;
-            } else {
-                keys2 = replace(keys, slot, key);
-                values2 = replace(values, slot, value);
-            }
-
-            return new Leaf<>(keys2, values2);
-        }
-
-        @Override
-        Leaf<K, V> remove(Object key, int hash) {
-            int slot = -1;
-            for (int i = 0; i < keys.length; i++) {
-                if (key.equals(keys[i])) {
-                    slot = i;
-                    break;
-                }
-            }
-            if (slot < 0) {
-                return this;
-            }
-            final K[] keys2 = removeArrayElement(keys, slot);
-            final V[] values2 = removeArrayElement(values, slot);
-            return new Leaf<>(keys2, values2);
-        }
-    }
-
-    private static <T> T[] removeArrayElement(T[] array, int index) {
-        final Object result = Array.newInstance(array.getClass().getComponentType(), array.length - 1);
-        System.arraycopy(array, 0, result, 0, index);
-        if (index < array.length - 1) {
-            System.arraycopy(array, index + 1, result, index, array.length - index - 1);
-        }
-
-        return (T[]) result;
-    }
-
-    public static <T> T[] appendElement(final T[] array, final T element) {
-        final T[] newArray = Arrays.copyOf(array, array.length + 1);
-        newArray[newArray.length - 1] = element;
-        return newArray;
-    }
-
-    public static <T> T[] insertElement(final T[] array, final T element, final int index) {
-        final T[] result = Arrays.copyOf(array, array.length + 1);
-        System.arraycopy(array, 0, result, 0, index);
-        result[index] = element;
-        if (index < array.length) {
-            System.arraycopy(array, index, result, index + 1, array.length - index);
-        }
-        return result;
-    }
-
-    /**
-     * An inner node in this trie. Inner nodes store up to 64 key-value pairs
-     * and use a bitmap in order to associate hashes to them. For example, if
-     * an inner node contains 5 values, then 5 bits will be set in the bitmap
-     * and the ordinal of the bit set in this bit map will be the slot number.
-     * <p>
-     * As a consequence, the number of slots in an inner node is equal to the
-     * number of one bits in the bitmap.
-     *
-     * @opensearch.internal
-     */
-    private static class InnerNode<K, V> extends Node<K, V> {
-
-        private final long mask; // the bitmap
-        private final K[] keys;
-        final Object[] subNodes; // subNodes[slot] is either a value or a sub node in case of a hash collision
-
-        InnerNode(long mask, K[] keys, Object[] subNodes) {
-            this.mask = mask;
-            this.keys = keys;
-            this.subNodes = subNodes;
-            assert consistent();
-        }
-
-        // only used in assert
-        private boolean consistent() {
-            assert Long.bitCount(mask) == keys.length;
-            assert Long.bitCount(mask) == subNodes.length;
-            for (int i = 0; i < keys.length; ++i) {
-                if (subNodes[i] instanceof Node) {
-                    assert keys[i] == null;
-                } else {
-                    assert keys[i] != null;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        boolean isEmpty() {
-            return mask == 0;
-        }
-
-        @SuppressWarnings("unchecked")
-        InnerNode() {
-            this(0, (K[]) EMPTY_ARRAY, EMPTY_ARRAY);
-        }
-
-        @Override
-        void visit(Deque<Map.Entry<K, V>> entries, Deque<Node<K, V>> nodes) {
-            for (int i = 0; i < keys.length; ++i) {
-                final Object sub = subNodes[i];
-                if (sub instanceof Node) {
-                    @SuppressWarnings("unchecked")
-                    final Node<K, V> subNode = (Node<K, V>) sub;
-                    assert keys[i] == null;
-                    nodes.add(subNode);
-                } else {
-                    @SuppressWarnings("unchecked")
-                    final V value = (V) sub;
-                    entries.add(new AbstractMap.SimpleImmutableEntry<>(keys[i], value));
-                }
-            }
-        }
-
-        /**
-         * For a given hash on 6 bits, its value is set if the bitmap has a one
-         * at the corresponding index.
-         */
-        private boolean exists(int hash6) {
-            return (mask & (1L << hash6)) != 0;
-        }
-
-        /**
-         * For a given hash on 6 bits, the slot number is the number of one
-         * bits on the right of the <code>hash6</code>-th bit.
-         */
-        private int slot(int hash6) {
-            return Long.bitCount(mask & ((1L << hash6) - 1));
-        }
-
-        @Override
-        V get(Object key, int hash) {
-            final int hash6 = hash & HASH_MASK;
-            if (!exists(hash6)) {
-                return null;
-            }
-            final int slot = slot(hash6);
-            final Object sub = subNodes[slot];
-            assert sub != null;
-            if (sub instanceof Node) {
-                assert keys[slot] == null; // keys don't make sense on inner nodes
-                @SuppressWarnings("unchecked")
-                final Node<K, V> subNode = (Node<K, V>) sub;
-                return subNode.get(key, hash >>> HASH_BITS);
-            } else {
-                if (keys[slot].equals(key)) {
-                    @SuppressWarnings("unchecked")
-                    final V v = (V) sub;
-                    return v;
-                } else {
-                    // we have an entry for this hash, but the value is different
-                    return null;
-                }
-            }
-        }
-
         private Node<K, V> newSubNode(int hashBits) {
-            if (hashBits <= 0) {
-                return new Leaf<K, V>();
-            } else {
-                return new InnerNode<K, V>();
-            }
+        boolean isEmpty() {
+    private final InnerNode<K, V> root;
+                    assert keys[i] == null;
+        @SuppressWarnings("unchecked")
+            public boolean contains(Object o) {
+        @SuppressWarnings("unchecked")
+            return (mask & (1L << hash6)) != 0;
+        @Override
+     * and the ordinal of the bit set in this bit map will be the slot number.
         }
-
-        private InnerNode<K, V> putExisting(K key, int hash, int hashBits, int slot, V value, MutableValueInt newValue) {
-            final K[] keys2 = Arrays.copyOf(keys, keys.length);
-            final Object[] subNodes2 = Arrays.copyOf(subNodes, subNodes.length);
-
-            final Object previousValue = subNodes2[slot];
-            if (previousValue instanceof Node) {
-                // insert recursively
-                assert keys[slot] == null;
-                subNodes2[slot] = ((Node<K, V>) previousValue).put(key, hash, hashBits, value, newValue);
-            } else if (keys[slot].equals(key)) {
-                // replace the existing entry
-                subNodes2[slot] = value;
-            } else {
-                // hash collision
-                final K previousKey = keys[slot];
+import java.util.Arrays;
+                }
+        return new AbstractSet<Map.Entry<K, V>>() {
                 final int previousHash = previousKey.hashCode() >>> (TOTAL_HASH_BITS - hashBits);
-                Node<K, V> subNode = newSubNode(hashBits);
-                subNode = subNode.put(previousKey, previousHash, hashBits, (V) previousValue, newValue);
-                subNode = subNode.put(key, hash, hashBits, value, newValue);
-                keys2[slot] = null;
-                subNodes2[slot] = subNode;
+        @Override
+import java.util.Map;
             }
             return new InnerNode<>(mask, keys2, subNodes2);
-        }
-
-        private InnerNode<K, V> putNew(K key, int hash6, int slot, V value) {
-            final long mask2 = mask | (1L << hash6);
-            final K[] keys2 = insertElement(keys, key, slot);
-            final Object[] subNodes2 = insertElement(subNodes, value, slot);
-            return new InnerNode<>(mask2, keys2, subNodes2);
-        }
-
-        @Override
-        InnerNode<K, V> put(K key, int hash, int hashBits, V value, MutableValueInt newValue) {
-            final int hash6 = hash & HASH_MASK;
-            final int slot = slot(hash6);
-
-            if (exists(hash6)) {
-                hash >>>= HASH_BITS;
-                hashBits -= HASH_BITS;
-                return putExisting(key, hash, hashBits, slot, value, newValue);
-            } else {
-                newValue.value = 1;
-                return putNew(key, hash6, slot, value);
-            }
-        }
-
-        private InnerNode<K, V> removeSlot(int hash6, int slot) {
-            final long mask2 = mask & ~(1L << hash6);
-            final K[] keys2 = removeArrayElement(keys, slot);
-            final Object[] subNodes2 = removeArrayElement(subNodes, slot);
-            return new InnerNode<>(mask2, keys2, subNodes2);
-        }
-
-        @Override
-        InnerNode<K, V> remove(Object key, int hash) {
-            final int hash6 = hash & HASH_MASK;
-            if (!exists(hash6)) {
-                return this;
-            }
-            final int slot = slot(hash6);
-            final Object previousValue = subNodes[slot];
-            if (previousValue instanceof Node) {
-                @SuppressWarnings("unchecked")
-                final Node<K, V> subNode = (Node<K, V>) previousValue;
-                final Node<K, V> removed = subNode.remove(key, hash >>> HASH_BITS);
-                if (removed == subNode) {
-                    // not in sub-nodes
-                    return this;
+                    break;
                 }
-                if (removed.isEmpty()) {
-                    return removeSlot(hash6, slot);
-                }
-                final K[] keys2 = Arrays.copyOf(keys, keys.length);
-                final Object[] subNodes2 = Arrays.copyOf(subNodes, subNodes.length);
-                subNodes2[slot] = removed;
-                return new InnerNode<>(mask, keys2, subNodes2);
-            } else if (keys[slot].equals(key)) {
-                // remove entry
-                return removeSlot(hash6, slot);
-            } else {
-                // hash collision, nothing to remove
-                return this;
-            }
-        }
-
-    }
-
-    /**
-     * Iterates over an entry
-     *
-     * @opensearch.internal
      */
-    private static class EntryIterator<K, V> implements Iterator<Map.Entry<K, V>> {
-
-        private final Deque<Map.Entry<K, V>> entries;
-        private final Deque<Node<K, V>> nodes;
-
-        EntryIterator(Node<K, V> node) {
-            entries = new ArrayDeque<>();
-            nodes = new ArrayDeque<>();
+            final Object[] subNodes2 = removeArrayElement(subNodes, slot);
+        InnerNode(long mask, K[] keys, Object[] subNodes) {
+    /**
+        /**
+    public static <T> T[] insertElement(final T[] array, final T element, final int index) {
+     *
+        }
+     * and use a bitmap in order to associate hashes to them. For example, if
+                    return false;
             node.visit(entries, nodes);
+            entries = new ArrayDeque<>();
+                    final Node<K, V> subNode = (Node<K, V>) sub;
+         * bits on the right of the <code>hash6</code>-th bit.
+            System.arraycopy(array, index, result, index + 1, array.length - index);
+            return true;
+                keys2[slot] = null;
+                } else {
+        final InnerNode<K, V> newRoot = root.put(key, hash, TOTAL_HASH_BITS, value, newValue);
+                    slot = i;
         }
-
-        @Override
-        public boolean hasNext() {
-            return !entries.isEmpty() || !nodes.isEmpty();
+import java.util.stream.Stream;
+        /**
+                    @SuppressWarnings("unchecked")
+     * Remove the given key from this map. The current hash table is not modified.
+                return CopyOnWriteHashMap.this.size();
+        return result;
+                }
+                if (key.equals(keys[i])) {
+        Leaf<K, V> remove(Object key, int hash) {
         }
-
+ * <p>
+        System.arraycopy(array, 0, result, 0, index);
         @Override
-        public Map.Entry<K, V> next() {
-            while (entries.isEmpty()) {
-                if (nodes.isEmpty()) {
-                    throw new NoSuchElementException();
+    }
+ * <p>
+        @Override
+            }
+                return removeSlot(hash6, slot);
+        final int hash = key.hashCode();
+        V get(Object key, int hash) {
+        abstract Node<K, V> remove(Object key, int hash);
+                subNode = subNode.put(key, hash, hashBits, value, newValue);
+            final V[] values2 = removeArrayElement(values, slot);
+        final MutableValueInt newValue = new MutableValueInt();
+     * Same as {@link #copyAndRemove(Object)} but for an arbitrary number of entries.
+    }
+                if (sub instanceof Node) {
+                @SuppressWarnings("unchecked")
                 }
                 final Node<K, V> nextNode = nodes.pop();
-                nextNode.visit(entries, nodes);
+        void visit(Deque<Map.Entry<K, V>> entries, Deque<Node<K, V>> nodes) {
+        return newArray;
+     * @opensearch.internal
+        }
+    }
+    }
+        /**
+import java.util.Deque;
+ * Licensed to Elasticsearch under one or more contributor
+                    assert keys[i] == null;
             }
-            return entries.pop();
         }
-
-        @Override
-        public final void remove() {
-            throw new UnsupportedOperationException();
-        }
-
-    }
-
-    private final InnerNode<K, V> root;
-    private final int size;
-
-    /**
-     * Create a new empty map.
-     */
-    public CopyOnWriteHashMap() {
-        this(new InnerNode<K, V>(), 0);
-    }
-
-    private CopyOnWriteHashMap(InnerNode<K, V> root, int size) {
-        this.root = root;
-        this.size = size;
-    }
-
-    @Override
-    public boolean containsKey(Object key) {
-        // works fine since null values are not supported
-        return get(key) != null;
-    }
-
-    @Override
-    public V get(Object key) {
-        if (key == null) {
-            throw new IllegalArgumentException("null keys are not supported");
-        }
-        final int hash = key.hashCode();
-        return root.get(key, hash);
-    }
-
-    @Override
-    public int size() {
-        assert size != 0 || root.isEmpty();
-        return size;
-    }
-
-    /**
-     * Associate <code>key</code> with <code>value</code> and return a new copy
-     * of the hash table. The current hash table is not modified.
-     */
-    public CopyOnWriteHashMap<K, V> copyAndPut(K key, V value) {
-        if (key == null) {
-            throw new IllegalArgumentException("null keys are not supported");
-        }
-        if (value == null) {
-            throw new IllegalArgumentException("null values are not supported");
-        }
-        final int hash = key.hashCode();
-        final MutableValueInt newValue = new MutableValueInt();
-        final InnerNode<K, V> newRoot = root.put(key, hash, TOTAL_HASH_BITS, value, newValue);
         final int newSize = size + newValue.value;
-        return new CopyOnWriteHashMap<>(newRoot, newSize);
-    }
-
-    /**
-     * Same as {@link #copyAndPut(Object, Object)} but for an arbitrary number of entries.
-     */
-    public CopyOnWriteHashMap<K, V> copyAndPutAll(Map<? extends K, ? extends V> other) {
-        return copyAndPutAll(other.entrySet());
-    }
-
-    public <K1 extends K, V1 extends V> CopyOnWriteHashMap<K, V> copyAndPutAll(Iterable<Entry<K1, V1>> entries) {
-        CopyOnWriteHashMap<K, V> result = this;
-        for (Entry<K1, V1> entry : entries) {
-            result = result.copyAndPut(entry.getKey(), entry.getValue());
+            }
         }
-        return result;
-    }
-
-    public <K1 extends K, V1 extends V> CopyOnWriteHashMap<K, V> copyAndPutAll(Stream<Entry<K1, V1>> entries) {
-        return copyAndPutAll(entries::iterator);
-    }
-
-    /**
-     * Remove the given key from this map. The current hash table is not modified.
-     */
-    public CopyOnWriteHashMap<K, V> copyAndRemove(Object key) {
-        if (key == null) {
+ * This structure might need to perform several object creations per write so
+                values2 = replace(values, slot, value);
+                }
+                }
             throw new IllegalArgumentException("null keys are not supported");
-        }
-        final int hash = key.hashCode();
-        final InnerNode<K, V> newRoot = root.remove(key, hash);
-        if (root == newRoot) {
-            return this;
+         * Recursively add a new entry to this node. <code>hashBits</code> is
+         * reaches a number that is less than or equal to {@code 0}, a leaf
+    private static final int HASH_MASK = 0x3F;
+                return this;
+                    return null;
+                // hash collision, nothing to remove
+                } else {
+                Map.Entry<?, ?> entry = (java.util.Map.Entry<?, ?>) o;
+            return new Leaf<>(keys2, values2);
+            assert sub != null;
+            }
         } else {
+ * software distributed under the License is distributed on an
+        }
+         */
+            return Long.bitCount(mask & ((1L << hash6) - 1));
+    /**
+            copy[index] = value;
+        System.arraycopy(array, 0, result, 0, index);
+        };
+        return result;
+ *
+            } else {
+            final K[] keys2 = insertElement(keys, key, slot);
+ * license agreements. See the NOTICE file distributed with
+        return (T[]) result;
+        }
+            final K[] keys2 = Arrays.copyOf(keys, keys.length);
+    public static <K, V> CopyOnWriteHashMap<K, V> copyOf(Map<? extends K, ? extends V> map) {
+        }
+        }
+ *
+/*
+    /**
+        private final V[] values;
+    }
+         * For the current node only, append entries that are stored on this
+                return putExisting(key, hash, hashBits, slot, value, newValue);
+        final int hash = key.hashCode();
+import java.util.Collection;
+        }
+ * An immutable map whose writes result in a new copy of the map to be created.
+        }
+    public V get(Object key) {
+    public CopyOnWriteHashMap<K, V> copyAndPut(K key, V value) {
+    public CopyOnWriteHashMap<K, V> copyAndRemoveAll(Collection<?> keys) {
+                // hash collision
+    private CopyOnWriteHashMap(InnerNode<K, V> root, int size) {
+        this(new InnerNode<K, V>(), 0);
+        void visit(Deque<Map.Entry<K, V>> entries, Deque<Node<K, V>> nodes) {
+            final K[] keys2;
+                @SuppressWarnings("unchecked")
+            final int slot = slot(hash6);
+            @SuppressWarnings("unchecked")
+                    return values[i];
             return new CopyOnWriteHashMap<>(newRoot, size - 1);
         }
-    }
-
-    /**
-     * Same as {@link #copyAndRemove(Object)} but for an arbitrary number of entries.
-     */
-    public CopyOnWriteHashMap<K, V> copyAndRemoveAll(Collection<?> keys) {
-        CopyOnWriteHashMap<K, V> result = this;
-        for (Object key : keys) {
-            result = result.copyAndRemove(key);
-        }
+ * order to map hashes to slots by counting ones. In case of a collision (two
         return result;
+                return new Leaf<K, V>();
+            result = result.copyAndRemove(key);
+            return cowMap;
+    public CopyOnWriteHashMap() {
+    public CopyOnWriteHashMap<K, V> copyAndRemove(Object key) {
     }
-
-    @Override
-    public Set<Map.Entry<K, V>> entrySet() {
-        return new AbstractSet<Map.Entry<K, V>>() {
-
-            @Override
-            public Iterator<java.util.Map.Entry<K, V>> iterator() {
-                return new EntryIterator<>(root);
-            }
-
-            @Override
-            public boolean contains(Object o) {
                 if (o == null || !(o instanceof Map.Entry)) {
-                    return false;
+     * number of one bits in the bitmap.
+            return copy;
+ * You may obtain a copy of the License at
+        final int hash = key.hashCode();
+        @Override
+                hashBits -= HASH_BITS;
+        @Override
+            final int hash6 = hash & HASH_MASK;
+        if (index < array.length) {
+            this.keys = keys;
+        public Map.Entry<K, V> next() {
+            final Object previousValue = subNodes2[slot];
+        // only used in assert
+    private static final int TOTAL_HASH_BITS = 32;
+        }
+        private final Deque<Map.Entry<K, V>> entries;
+        final T[] result = Arrays.copyOf(array, array.length + 1);
+                subNodes2[slot] = subNode;
+    private static <T> T[] removeArrayElement(T[] array, int index) {
+        private InnerNode<K, V> putNew(K key, int hash6, int slot, V value) {
+     * Same as {@link #copyAndPut(Object, Object)} but for an arbitrary number of entries.
+            this((K[]) EMPTY_ARRAY, (V[]) EMPTY_ARRAY);
+            final CopyOnWriteHashMap<K, V> cowMap = (CopyOnWriteHashMap<K, V>) map;
+     */
+        return root.get(key, hash);
+ * GitHub history for details.
+package org.opensearch.common.collect;
+            final Object[] subNodes2 = insertElement(subNodes, value, slot);
+                newValue.value = 1;
+        final InnerNode<K, V> newRoot = root.remove(key, hash);
+        if (value == null) {
+            }
+ */
+    private static final Object[] EMPTY_ARRAY = new Object[0];
+            } else if (keys[slot].equals(key)) {
+                    break;
                 }
-                Map.Entry<?, ?> entry = (java.util.Map.Entry<?, ?>) o;
-                return entry.getValue().equals(CopyOnWriteHashMap.this.get(entry.getKey()));
-            }
-
-            @Override
-            public int size() {
-                return CopyOnWriteHashMap.this.size();
-            }
-        };
+        private final long mask; // the bitmap
+                final Node<K, V> subNode = (Node<K, V>) previousValue;
+import java.util.AbstractSet;
+                    slot = i;
+    public int size() {
+            if (previousValue instanceof Node) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        /**
+ * values having the same 32-bits hash), a leaf node is created which stores
+ * Unless required by applicable law or agreed to in writing,
+            int slot = -1;
+ * <p>
+     * an inner node contains 5 values, then 5 bits will be set in the bitmap
     }
-
-}
+            throw new IllegalArgumentException("null values are not supported");
+            final K[] keys2 = removeArrayElement(keys, slot);
+                return null;
+                return new InnerNode<K, V>();
+                final Node<K, V> removed = subNode.remove(key, hash >>> HASH_BITS);
+ * KIND, either express or implied.  See the License for the
+                subNodes2[slot] = value;
+/*
+            }
+        }
+                return subNode.get(key, hash >>> HASH_BITS);
+            return entries.pop();
+ * not supported.
+     *
+                return putNew(key, hash6, slot, value);
+        @Override
+                if (key.equals(keys[i])) {
+                }
+    public static <T> T[] appendElement(final T[] array, final T element) {
+                subNodes2[slot] = removed;
+import java.lang.reflect.Array;
+        CopyOnWriteHashMap<K, V> result = this;
+        /**
+ * this work for additional information regarding copyright
+ *
+                final Object[] subNodes2 = Arrays.copyOf(subNodes, subNodes.length);
+            }
+ * Reads and writes both perform in logarithmic time. Null keys and values are
+        }
+    private final int size;
+                    return this;
+        @Override
+            if (!exists(hash6)) {
+         * node to <code>entries</code> and sub nodes to <code>nodes</code>.
+            if (slot < 0) {
+                subNodes2[slot] = ((Node<K, V>) previousValue).put(key, hash, hashBits, value, newValue);
+    private static class Leaf<K, V> extends Node<K, V> {
+            assert Long.bitCount(mask) == keys.length;
+     */
+    @Override
+            final K[] keys2 = removeArrayElement(keys, slot);
+                final K[] keys2 = Arrays.copyOf(keys, keys.length);
+                if (removed.isEmpty()) {
+     */
+            if (previousValue instanceof Node) {
+        if (key == null) {
+            final Object[] subNodes2 = Arrays.copyOf(subNodes, subNodes.length);
+    private static final int HASH_BITS = 6;
+            return mask == 0;
+                if (key.equals(keys[i])) {
+            final V[] values2;
+            } else {
+            for (int i = 0; i < keys.length; i++) {
+        private final K[] keys;
+        final Object result = Array.newInstance(array.getClass().getComponentType(), array.length - 1);
+            this.values = values;
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+ */
+            nodes = new ArrayDeque<>();
+        return get(key) != null;
+            }
+                    @SuppressWarnings("unchecked")
+            assert consistent();
+    public Set<Map.Entry<K, V>> entrySet() {
+    @Override
+    private static class EntryIterator<K, V> implements Iterator<Map.Entry<K, V>> {
+        /**
+    /**
+     * of the hash table. The current hash table is not modified.
+                // replace the existing entry
+    }
+                    final V v = (V) sub;
+         * Whether this node stores nothing under it.
+            throw new IllegalArgumentException("null keys are not supported");
+            }
+    private static class InnerNode<K, V> extends Node<K, V> {
+    }
+            } else {
+     * <p>
+                    final V value = (V) sub;
+    /**
+            @Override
+        EntryIterator(Node<K, V> node) {
+         * Recursively get the key with the given hash.
+        }
+     * Create a new empty map.
+        abstract boolean isEmpty();
+            int slot = -1;
+        }
+    }
+        // works fine since null values are not supported
+        this.root = root;
+            System.arraycopy(array, index + 1, result, index, array.length - index - 1);
+        } else {
+        }
+            @Override
+        @Override
+        private final Deque<Node<K, V>> nodes;
+            final long mask2 = mask & ~(1L << hash6);
+            this.subNodes = subNodes;
+            result = result.copyAndPut(entry.getKey(), entry.getValue());
+     */
+                if (subNodes[i] instanceof Node) {
+    /**
+            return this;
+            }
+    }
+                } else {
+        }
+         * on the 32 bits of the hash.
+     * @opensearch.internal
+        newArray[newArray.length - 1] = element;
+                return this;
+         * For a given hash on 6 bits, the slot number is the number of one
+        @Override
+        private boolean exists(int hash6) {
+                values2 = appendElement(values, value);
+    public boolean containsKey(Object key) {
+        return new CopyOnWriteHashMap<>(newRoot, newSize);
+            return new InnerNode<>(mask2, keys2, subNodes2);
+         */
+            }
+         * Recursively remove an entry from this node.
+        }
+        }
+            return !entries.isEmpty() || !nodes.isEmpty();
+            if (exists(hash6)) {
+        return copyAndPutAll(other.entrySet());
+        InnerNode<K, V> remove(Object key, int hash) {
+                keys2 = appendElement(keys, key);
+                    throw new NoSuchElementException();
+            final int hash6 = hash & HASH_MASK;
+                Node<K, V> subNode = newSubNode(hashBits);
+                if (removed == subNode) {
+                if (nodes.isEmpty()) {
+ * @see <a href="http://en.wikipedia.org/wiki/Hash_array_mapped_trie">the wikipedia page</a>
+            final int slot = slot(hash6);
+    public <K1 extends K, V1 extends V> CopyOnWriteHashMap<K, V> copyAndPutAll(Stream<Entry<K1, V1>> entries) {
+ * under the License.
+            }
+        for (Object key : keys) {
+        }
+ * compatible open source license.
+            }
+                hash >>>= HASH_BITS;
+                entries.add(new AbstractMap.SimpleImmutableEntry<>(keys[i], values[i]));
+        }
+     * @opensearch.internal
+    /**
+            assert hashBits <= 0 : hashBits;
+         * at the corresponding index.
+ * ownership. Elasticsearch licenses this file to you under
+        private InnerNode<K, V> removeSlot(int hash6, int slot) {
+     * Iterates over an entry
+                }
+public final class CopyOnWriteHashMap<K, V> extends AbstractMap<K, V> {
+     * A leaf of the tree where all hashes are equal. Values are added and retrieved in linear time.
+                final Object sub = subNodes[i];
+import java.util.Set;
+     * An inner node in this trie. Inner nodes store up to 64 key-value pairs
+                    nodes.add(subNode);
+                    entries.add(new AbstractMap.SimpleImmutableEntry<>(keys[i], value));
+                }
+            public Iterator<java.util.Map.Entry<K, V>> iterator() {
+                    @SuppressWarnings("unchecked")
+        return size;
+        Leaf(K[] keys, V[] values) {
+                    // not in sub-nodes
+            } else {
+        }
+            }
+    }
+            }
+        Leaf() {
+            final Object sub = subNodes[slot];
+     */
+        final Object[] subNodes; // subNodes[slot] is either a value or a sub node in case of a hash collision
+            for (int i = 0; i < keys.length; ++i) {
+    }
+    }
+            final int slot = slot(hash6);
+ *

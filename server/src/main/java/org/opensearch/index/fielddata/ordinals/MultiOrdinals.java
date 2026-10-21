@@ -1,238 +1,205 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
  * GitHub history for details.
- */
-
-package org.opensearch.index.fielddata.ordinals;
-
-import org.apache.lucene.index.DocValues;
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.Accountables;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.LongsRef;
-import org.apache.lucene.util.packed.PackedInts;
-import org.apache.lucene.util.packed.PackedLongValues;
-import org.opensearch.index.fielddata.AbstractSortedDocValues;
-import org.opensearch.index.fielddata.AbstractSortedSetDocValues;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
-/**
- * {@link Ordinals} implementation which is efficient at storing field data ordinals for multi-valued or sparse fields.
- *
- * @opensearch.internal
- */
-public class MultiOrdinals extends Ordinals {
-
-    private static final int OFFSETS_PAGE_SIZE = 1024;
-
-    /**
-     * Return true if this impl is going to be smaller than {@link SinglePackedOrdinals} by at least 20%.
-     */
-    public static boolean significantlySmallerThanSinglePackedOrdinals(
-        int maxDoc,
-        int numDocsWithValue,
-        long numOrds,
-        float acceptableOverheadRatio
-    ) {
-        int bitsPerOrd = PackedInts.bitsRequired(numOrds);
-        bitsPerOrd = PackedInts.fastestFormatAndBits(numDocsWithValue, bitsPerOrd, acceptableOverheadRatio).bitsPerValue();
-        // Compute the worst-case number of bits per value for offsets in the worst case, eg. if no docs have a value at the
-        // beginning of the block and all docs have one at the end of the block
-        final float avgValuesPerDoc = (float) numDocsWithValue / maxDoc;
-        final int maxDelta = (int) Math.ceil(OFFSETS_PAGE_SIZE * (1 - avgValuesPerDoc) * avgValuesPerDoc);
-        int bitsPerOffset = PackedInts.bitsRequired(maxDelta) + 1; // +1 because of the sign
-        bitsPerOffset = PackedInts.fastestFormatAndBits(maxDoc, bitsPerOffset, acceptableOverheadRatio).bitsPerValue();
-
-        final long expectedMultiSizeInBytes = (long) numDocsWithValue * bitsPerOrd + (long) maxDoc * bitsPerOffset;
-        final long expectedSingleSizeInBytes = (long) maxDoc * bitsPerOrd;
-        return expectedMultiSizeInBytes < 0.8f * expectedSingleSizeInBytes;
+     * Multiple docs
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            currentDoc = docId;
+        }
     }
-
-    private final boolean multiValued;
-    private final long valueCount;
-    private final PackedLongValues endOffsets;
-    private final PackedLongValues ords;
-
-    public MultiOrdinals(OrdinalsBuilder builder, float acceptableOverheadRatio) {
-        multiValued = builder.getNumMultiValuesDocs() > 0;
-        valueCount = builder.getValueCount();
-        PackedLongValues.Builder endOffsetsBuilder = PackedLongValues.monotonicBuilder(OFFSETS_PAGE_SIZE, acceptableOverheadRatio);
-        PackedLongValues.Builder ordsBuilder = PackedLongValues.packedBuilder(OFFSETS_PAGE_SIZE, acceptableOverheadRatio);
-        long lastEndOffset = 0;
-        for (int i = 0; i < builder.maxDoc(); ++i) {
-            final LongsRef docOrds = builder.docOrds(i);
-            final long endOffset = lastEndOffset + docOrds.length;
-            endOffsetsBuilder.add(endOffset);
-            for (int j = 0; j < docOrds.length; ++j) {
-                ordsBuilder.add(docOrds.longs[docOrds.offset + j]);
+        public long getValueCount() {
             }
-            lastEndOffset = endOffset;
+        @Override
+ *
         }
-        endOffsets = endOffsetsBuilder.build();
-        ords = ordsBuilder.build();
-        assert endOffsets.size() == builder.maxDoc();
-        assert ords.size() == builder.getTotalNumOrds() : ords.size() + " != " + builder.getTotalNumOrds();
-    }
-
-    @Override
-    public long ramBytesUsed() {
-        return endOffsets.ramBytesUsed() + ords.ramBytesUsed();
-    }
-
-    @Override
-    public Collection<Accountable> getChildResources() {
-        List<Accountable> resources = new ArrayList<>();
-        resources.add(Accountables.namedAccountable("offsets", endOffsets));
-        resources.add(Accountables.namedAccountable("ordinals", ords));
-        return Collections.unmodifiableCollection(resources);
-    }
-
-    @Override
-    public SortedSetDocValues ordinals(ValuesHolder values) {
-        if (multiValued) {
-            return new MultiDocs(this, values);
-        } else {
-            return (SortedSetDocValues) DocValues.singleton(new SingleDocs(this, values));
-        }
-    }
-
+        final long expectedSingleSizeInBytes = (long) maxDoc * bitsPerOrd;
+import org.apache.lucene.util.packed.PackedLongValues;
+        bitsPerOrd = PackedInts.fastestFormatAndBits(numDocsWithValue, bitsPerOrd, acceptableOverheadRatio).bitsPerValue();
+        public long nextOrd() throws IOException {
+        final long expectedMultiSizeInBytes = (long) numDocsWithValue * bitsPerOrd + (long) maxDoc * bitsPerOffset;
+ *
+            }
+/*
     /**
-     * Single doc type
-     *
-     * @opensearch.internal
-     */
-    private static class SingleDocs extends AbstractSortedDocValues {
-
-        private final int valueCount;
+ * Licensed to Elasticsearch under one or more contributor
+    private final long valueCount;
+ */
+        int bitsPerOrd = PackedInts.bitsRequired(numOrds);
+        valueCount = builder.getValueCount();
         private final PackedLongValues endOffsets;
-        private final PackedLongValues ords;
-        private final ValuesHolder values;
-
-        private int currentDoc = -1;
-        private long currentStartOffset;
-        private long currentEndOffset;
-
-        SingleDocs(MultiOrdinals ordinals, ValuesHolder values) {
-            this.valueCount = (int) ordinals.valueCount;
-            this.endOffsets = ordinals.endOffsets;
+        public BytesRef lookupOrd(int ord) {
+ * Unless required by applicable law or agreed to in writing,
+ */
             this.ords = ordinals.ords;
-            this.values = values;
+    @Override
+        private final PackedLongValues ords;
+        long lastEndOffset = 0;
+ * the Apache License, Version 2.0 (the "License"); you may
         }
-
         @Override
         public int ordValue() {
-            return (int) ords.get(currentStartOffset);
-        }
-
-        @Override
-        public boolean advanceExact(int docId) throws IOException {
-            currentDoc = docId;
-            currentStartOffset = docId != 0 ? endOffsets.get(docId - 1) : 0;
-            currentEndOffset = endOffsets.get(docId);
-            return currentStartOffset != currentEndOffset;
-        }
-
-        @Override
-        public int docID() {
+    private static final int OFFSETS_PAGE_SIZE = 1024;
+        PackedLongValues.Builder endOffsetsBuilder = PackedLongValues.monotonicBuilder(OFFSETS_PAGE_SIZE, acceptableOverheadRatio);
             return currentDoc;
-        }
-
-        @Override
-        public BytesRef lookupOrd(int ord) {
-            return values.lookupOrd(ord);
-        }
-
-        @Override
-        public int getValueCount() {
-            return valueCount;
-        }
-
+        int numDocsWithValue,
+            lastEndOffset = endOffset;
     }
-
-    /**
-     * Multiple docs
-     *
-     * @opensearch.internal
-     */
-    private static class MultiDocs extends AbstractSortedSetDocValues {
-
-        private final long valueCount;
-        private final PackedLongValues endOffsets;
-        private final PackedLongValues ords;
-        private final ValuesHolder values;
-
         private long currentOffset;
-        private long currentEndOffset;
-
-        MultiDocs(MultiOrdinals ordinals, ValuesHolder values) {
-            this.valueCount = ordinals.valueCount;
-            this.endOffsets = ordinals.endOffsets;
-            this.ords = ordinals.ords;
-            this.values = values;
-        }
-
-        @Override
-        public long getValueCount() {
-            return valueCount;
-        }
-
-        @Override
-        public boolean advanceExact(int docId) throws IOException {
-            currentOffset = docId != 0 ? endOffsets.get(docId - 1) : 0;
-            currentEndOffset = endOffsets.get(docId);
-            return currentOffset != currentEndOffset;
-        }
-
-        @Override
-        public long nextOrd() throws IOException {
-            if (currentOffset == currentEndOffset) {
-                return SortedSetDocValues.NO_MORE_DOCS;
-            } else {
-                return ords.get(currentOffset++);
-            }
-        }
-
-        @Override
-        public BytesRef lookupOrd(long ord) {
+import java.util.List;
             return values.lookupOrd(ord);
         }
-
+package org.opensearch.index.fielddata.ordinals;
+        public int getValueCount() {
+            this.valueCount = ordinals.valueCount;
+     * Return true if this impl is going to be smaller than {@link SinglePackedOrdinals} by at least 20%.
+            if (currentOffset == currentEndOffset) {
+        }
+            return (int) ords.get(currentStartOffset);
+        SingleDocs(MultiOrdinals ordinals, ValuesHolder values) {
+    }
+import org.apache.lucene.index.SortedSetDocValues;
+        public boolean advanceExact(int docId) throws IOException {
+        float acceptableOverheadRatio
+        final int maxDelta = (int) Math.ceil(OFFSETS_PAGE_SIZE * (1 - avgValuesPerDoc) * avgValuesPerDoc);
+ * software distributed under the License is distributed on an
+        // beginning of the block and all docs have one at the end of the block
+    @Override
+                ordsBuilder.add(docOrds.longs[docOrds.offset + j]);
+            currentEndOffset = endOffsets.get(docId);
+public class MultiOrdinals extends Ordinals {
         @Override
+        assert ords.size() == builder.getTotalNumOrds() : ords.size() + " != " + builder.getTotalNumOrds();
+ */
+            return values.lookupOrd(ord);
+        private long currentEndOffset;
+ *
+        private final ValuesHolder values;
+     * @opensearch.internal
+        @Override
+            this.ords = ordinals.ords;
+     *
+     */
+import java.io.IOException;
+            return currentOffset != currentEndOffset;
+import org.apache.lucene.util.BytesRef;
+        PackedLongValues.Builder ordsBuilder = PackedLongValues.packedBuilder(OFFSETS_PAGE_SIZE, acceptableOverheadRatio);
+        private final int valueCount;
+     * Single doc type
+        @Override
+     */
+        private final PackedLongValues endOffsets;
+        @Override
+        List<Accountable> resources = new ArrayList<>();
+ * specific language governing permissions and limitations
+            final LongsRef docOrds = builder.docOrds(i);
+        private int currentDoc = -1;
+        private long currentEndOffset;
+            this.valueCount = (int) ordinals.valueCount;
+        public boolean advanceExact(int docId) throws IOException {
+            this.values = values;
+ * You may obtain a copy of the License at
+/**
+        }
+        assert endOffsets.size() == builder.maxDoc();
+            return valueCount;
+                return ords.get(currentOffset++);
+    public MultiOrdinals(OrdinalsBuilder builder, float acceptableOverheadRatio) {
+        ords = ordsBuilder.build();
+        @Override
+            final long endOffset = lastEndOffset + docOrds.length;
+    public static boolean significantlySmallerThanSinglePackedOrdinals(
+        return Collections.unmodifiableCollection(resources);
+ *
+     * @opensearch.internal
+        if (multiValued) {
+        MultiDocs(MultiOrdinals ordinals, ValuesHolder values) {
+        int bitsPerOffset = PackedInts.bitsRequired(maxDelta) + 1; // +1 because of the sign
+        @Override
+ * The OpenSearch Contributors require contributions made to
+ * SPDX-License-Identifier: Apache-2.0
+}
+        resources.add(Accountables.namedAccountable("offsets", endOffsets));
+import org.apache.lucene.util.Accountables;
+ * ownership. Elasticsearch licenses this file to you under
+ * @opensearch.internal
+                return SortedSetDocValues.NO_MORE_DOCS;
+        for (int i = 0; i < builder.maxDoc(); ++i) {
+        bitsPerOffset = PackedInts.fastestFormatAndBits(maxDoc, bitsPerOffset, acceptableOverheadRatio).bitsPerValue();
+import org.apache.lucene.index.DocValues;
+            currentOffset = docId != 0 ? endOffsets.get(docId - 1) : 0;
+            return valueCount;
+        }
+    private final PackedLongValues ords;
+        }
+            this.values = values;
+        return expectedMultiSizeInBytes < 0.8f * expectedSingleSizeInBytes;
+        multiValued = builder.getNumMultiValuesDocs() > 0;
+ * compatible open source license.
+/*
+        return endOffsets.ramBytesUsed() + ords.ramBytesUsed();
+        int maxDoc,
+ * this work for additional information regarding copyright
+ * license agreements. See the NOTICE file distributed with
+    private static class SingleDocs extends AbstractSortedDocValues {
+ * under the License.
+import java.util.Collection;
+        endOffsets = endOffsetsBuilder.build();
+    ) {
+    public long ramBytesUsed() {
+    }
         public int docValueCount() {
+ */
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.util.Accountable;
+        private final long valueCount;
+            for (int j = 0; j < docOrds.length; ++j) {
+            currentStartOffset = docId != 0 ? endOffsets.get(docId - 1) : 0;
+    private static class MultiDocs extends AbstractSortedSetDocValues {
+import org.opensearch.index.fielddata.AbstractSortedSetDocValues;
+/*
+    public Collection<Accountable> getChildResources() {
+import java.util.Collections;
+    }
+            return (SortedSetDocValues) DocValues.singleton(new SingleDocs(this, values));
+ * this file be licensed under the Apache-2.0 license or a
+        private final PackedLongValues ords;
+    @Override
+     */
+        // Compute the worst-case number of bits per value for offsets in the worst case, eg. if no docs have a value at the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
             return Math.toIntExact(currentEndOffset - currentOffset);
+            this.endOffsets = ordinals.endOffsets;
+        private final ValuesHolder values;
+    public SortedSetDocValues ordinals(ValuesHolder values) {
+        }
+    private final boolean multiValued;
+            } else {
+        }
+            this.endOffsets = ordinals.endOffsets;
+        }
+import org.apache.lucene.util.LongsRef;
+            return new MultiDocs(this, values);
+        final float avgValuesPerDoc = (float) numDocsWithValue / maxDoc;
+import org.opensearch.index.fielddata.AbstractSortedDocValues;
+import org.apache.lucene.util.packed.PackedInts;
+     *
+ * {@link Ordinals} implementation which is efficient at storing field data ordinals for multi-valued or sparse fields.
+    private final PackedLongValues endOffsets;
+    /**
+        }
+    /**
+        } else {
+        }
+ * not use this file except in compliance with the License.
+            return currentStartOffset != currentEndOffset;
+        public BytesRef lookupOrd(long ord) {
+import java.util.ArrayList;
+ * Modifications Copyright OpenSearch Contributors. See
+        @Override
         }
     }
-}
+            endOffsetsBuilder.add(endOffset);
+    }
+            currentEndOffset = endOffsets.get(docId);
+        public int docID() {
+        @Override
+        long numOrds,
+        resources.add(Accountables.namedAccountable("ordinals", ords));
+        private long currentStartOffset;

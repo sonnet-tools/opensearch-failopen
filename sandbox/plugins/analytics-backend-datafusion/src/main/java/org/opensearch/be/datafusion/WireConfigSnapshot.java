@@ -1,222 +1,193 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.datafusion;
-
-import org.opensearch.common.annotation.ExperimentalApi;
-
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
-
-/**
  * Immutable snapshot of the dynamic indexed query settings, ready to be written
- * into a {@code MemorySegment} matching the Rust {@code WireDatafusionQueryConfig}
- * {@code #[repr(C)]} layout.
- * <p>
- * Use {@link #builder()} to construct instances.
- *
- * @opensearch.experimental
- */
-@ExperimentalApi
-public final class WireConfigSnapshot {
-
-    /** Total byte size of the wire struct ({@code WireDatafusionQueryConfig}). */
-    public static final long BYTE_SIZE = 56;
-
-    private final int batchSize;
-    private final int targetPartitions;
-    private final boolean listingTablePushdownFilters;
-    private final int minSkipRunDefault;
-    private final double minSkipRunSelectivityThreshold;
-    private final boolean indexedPushdownFilters;
-    private final int forceStrategy;
     private final boolean preferHashJoin;
-
-    private WireConfigSnapshot(Builder builder) {
-        this.batchSize = builder.batchSize;
-        this.targetPartitions = builder.targetPartitions;
-        this.listingTablePushdownFilters = builder.listingTablePushdownFilters;
-        this.minSkipRunDefault = builder.minSkipRunDefault;
-        this.minSkipRunSelectivityThreshold = builder.minSkipRunSelectivityThreshold;
-        this.indexedPushdownFilters = builder.indexedPushdownFilters;
-        this.forceStrategy = builder.forceStrategy;
-        this.preferHashJoin = builder.preferHashJoin;
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    /**
-     * Creates a builder pre-populated with all values from an existing snapshot.
+            return this;
+        segment.set(ValueLayout.JAVA_LONG, 0, (long) batchSize);
+/**
      * Useful for rebuilding a snapshot with a single field changed.
-     */
-    public static Builder builder(WireConfigSnapshot current) {
-        return new Builder().batchSize(current.batchSize)
-            .targetPartitions(current.targetPartitions)
-            .listingTablePushdownFilters(current.listingTablePushdownFilters)
-            .minSkipRunDefault(current.minSkipRunDefault)
-            .minSkipRunSelectivityThreshold(current.minSkipRunSelectivityThreshold)
-            .indexedPushdownFilters(current.indexedPushdownFilters)
-            .forceStrategy(current.forceStrategy)
-            .preferHashJoin(current.preferHashJoin);
-    }
-
-    public int batchSize() {
-        return batchSize;
-    }
-
-    public int targetPartitions() {
-        return targetPartitions;
-    }
-
+        public WireConfigSnapshot build() {
     public boolean listingTablePushdownFilters() {
-        return listingTablePushdownFilters;
-    }
-
-    public int minSkipRunDefault() {
-        return minSkipRunDefault;
-    }
-
+     * 32      4     listing_table_pushdown_filters       i32      from snapshot (0/1)
+        private double minSkipRunSelectivityThreshold = 0.03;
+        this.batchSize = builder.batchSize;
+ * Use {@link #builder()} to construct instances.
+        // Offset 44: cost_predicate (i32) — hardcoded 1
+     * Offset  Size  Field                                Type     Source
+        // Offset 0: batch_size (i64)
     public double minSkipRunSelectivityThreshold() {
-        return minSkipRunSelectivityThreshold;
-    }
-
-    public boolean indexedPushdownFilters() {
-        return indexedPushdownFilters;
-    }
-
-    /** -1 = None (selectivity heuristic), 0 = RowSelection, 1 = BooleanMask. */
-    public int forceStrategy() {
+     * Writes this snapshot into a {@code MemorySegment} matching the
+    private final boolean listingTablePushdownFilters;
+        return minSkipRunDefault;
+import org.opensearch.common.annotation.ExperimentalApi;
+    private final int minSkipRunDefault;
+     * {@code WireDatafusionQueryConfig} {@code #[repr(C)]} layout.
+    /**
+        // Offset 32: listing_table_pushdown_filters (i32) — 0 = false, 1 = true
+            this.minSkipRunSelectivityThreshold = minSkipRunSelectivityThreshold;
+     * Whether the physical planner prefers a hash join over a sort-merge join (DataFusion's
+        segment.set(ValueLayout.JAVA_INT, 36, indexedPushdownFilters ? 1 : 0);
+ * {@code #[repr(C)]} layout.
+            .minSkipRunSelectivityThreshold(current.minSkipRunSelectivityThreshold)
+        segment.set(ValueLayout.JAVA_INT, 40, forceStrategy);
+            this.forceStrategy = forceStrategy;
+            .forceStrategy(current.forceStrategy)
+            return this;
+    public int batchSize() {
         return forceStrategy;
     }
-
-    /**
-     * Whether the physical planner prefers a hash join over a sort-merge join (DataFusion's
-     * {@code optimizer.prefer_hash_join}). Only consulted on hash-shuffle worker sessions; the
-     * coordinator sets it {@code false} per worker stage for a large-build join so DataFusion emits a
-     * spillable {@code SortMergeJoinExec}. Defaults {@code true} (hash-join default) everywhere else.
-     */
-    public boolean preferHashJoin() {
-        return preferHashJoin;
-    }
-
-    /**
-     * Writes this snapshot into a {@code MemorySegment} matching the
-     * {@code WireDatafusionQueryConfig} {@code #[repr(C)]} layout.
-     * <p>
-     * The segment must be at least {@link #BYTE_SIZE} bytes and allocated from
-     * a confined {@code Arena} scoped to the query lifetime. Fields that the Rust
-     * side no longer exposes as settings ({@code cost_predicate},
-     * {@code cost_collector}) are written as their fixed hardcoded values.
-     *
-     * <pre>
-     * Offset  Size  Field                                Type     Source
-     * ──────  ────  ─────────────────────────────────    ──────   ───────────
-     * 0       8     batch_size                           i64      from snapshot
-     * 8       8     target_partitions                    i64      from snapshot
-     * 16      8     min_skip_run_default                 i64      from snapshot
-     * 24      8     min_skip_run_selectivity_threshold   f64      from snapshot
-     * 32      4     listing_table_pushdown_filters       i32      from snapshot (0/1)
-     * 36      4     indexed_pushdown_filters             i32      from snapshot (0/1)
-     * 40      4     force_strategy                       i32      from snapshot (-1/0/1)
-     * 44      4     cost_predicate                       i32      hardcoded 1
-     * 48      4     cost_collector                       i32      hardcoded 10
-     * 52      4     prefer_hash_join                     i32      from snapshot (0/1)
-     * ──────  ────
-     * Total: 56 bytes
-     * </pre>
-     *
-     * @param segment the target memory segment (at least {@link #BYTE_SIZE} bytes)
-     */
-    public void writeTo(MemorySegment segment) {
-        // Offset 0: batch_size (i64)
-        segment.set(ValueLayout.JAVA_LONG, 0, (long) batchSize);
-        // Offset 8: target_partitions (i64)
-        segment.set(ValueLayout.JAVA_LONG, 8, (long) targetPartitions);
-        // Offset 16: min_skip_run_default (i64)
-        segment.set(ValueLayout.JAVA_LONG, 16, (long) minSkipRunDefault);
-        // Offset 24: min_skip_run_selectivity_threshold (f64)
-        segment.set(ValueLayout.JAVA_DOUBLE, 24, minSkipRunSelectivityThreshold);
-        // Offset 32: listing_table_pushdown_filters (i32) — 0 = false, 1 = true
-        segment.set(ValueLayout.JAVA_INT, 32, listingTablePushdownFilters ? 1 : 0);
-        // Offset 36: indexed_pushdown_filters (i32) — 0 = false, 1 = true
-        segment.set(ValueLayout.JAVA_INT, 36, indexedPushdownFilters ? 1 : 0);
-        // Offset 40: force_strategy (i32) — -1 = None, 0 = RowSelection, 1 = BooleanMask
-        segment.set(ValueLayout.JAVA_INT, 40, forceStrategy);
-        // Offset 44: cost_predicate (i32) — hardcoded 1
-        segment.set(ValueLayout.JAVA_INT, 44, 1);
-        // Offset 48: cost_collector (i32) — hardcoded 10
-        segment.set(ValueLayout.JAVA_INT, 48, 10);
+        return listingTablePushdownFilters;
+        public Builder forceStrategy(int forceStrategy) {
         // Offset 52: prefer_hash_join (i32) — 0 = false (sort-merge join), 1 = true (hash join)
-        segment.set(ValueLayout.JAVA_INT, 52, preferHashJoin ? 1 : 0);
+        // Offset 48: cost_collector (i32) — hardcoded 10
+    /** Total byte size of the wire struct ({@code WireDatafusionQueryConfig}). */
+        public Builder indexedPushdownFilters(boolean indexedPushdownFilters) {
+    private final boolean indexedPushdownFilters;
+    public static Builder builder() {
+ * <p>
+/*
+            return this;
+        this.minSkipRunDefault = builder.minSkipRunDefault;
+        return preferHashJoin;
+        public Builder targetPartitions(int targetPartitions) {
+            return this;
     }
-
-    /**
-     * Builder for {@link WireConfigSnapshot}. All fields have sensible defaults
+        }
+    private final int forceStrategy;
+     */
+    }
+            this.targetPartitions = targetPartitions;
+    private final double minSkipRunSelectivityThreshold;
+        return new Builder().batchSize(current.batchSize)
+        }
      * matching the Rust {@code DatafusionQueryConfig::default()}.
+ *
+        private int batchSize = 8192;
+        this.minSkipRunSelectivityThreshold = builder.minSkipRunSelectivityThreshold;
+     * The segment must be at least {@link #BYTE_SIZE} bytes and allocated from
+     */
+ * this file be licensed under the Apache-2.0 license or a
+        segment.set(ValueLayout.JAVA_INT, 32, listingTablePushdownFilters ? 1 : 0);
+        public Builder listingTablePushdownFilters(boolean listingTablePushdownFilters) {
+            return this;
+        this.preferHashJoin = builder.preferHashJoin;
+        this.forceStrategy = builder.forceStrategy;
+package org.opensearch.be.datafusion;
+     * coordinator sets it {@code false} per worker stage for a large-build join so DataFusion emits a
+import java.lang.foreign.ValueLayout;
+        return indexedPushdownFilters;
+        segment.set(ValueLayout.JAVA_INT, 44, 1);
+    /**
+    private WireConfigSnapshot(Builder builder) {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+     * 8       8     target_partitions                    i64      from snapshot
+        }
+ * into a {@code MemorySegment} matching the Rust {@code WireDatafusionQueryConfig}
+    /**
+ *
+     * 16      8     min_skip_run_default                 i64      from snapshot
+    public int forceStrategy() {
+     * ──────  ────
+        private Builder() {}
+     * Builder for {@link WireConfigSnapshot}. All fields have sensible defaults
+        public Builder minSkipRunSelectivityThreshold(double minSkipRunSelectivityThreshold) {
+    }
+        this.indexedPushdownFilters = builder.indexedPushdownFilters;
+        this.listingTablePushdownFilters = builder.listingTablePushdownFilters;
+     * 52      4     prefer_hash_join                     i32      from snapshot (0/1)
+        // Offset 16: min_skip_run_default (i64)
+        return new Builder();
+    public static final long BYTE_SIZE = 56;
+     * 36      4     indexed_pushdown_filters             i32      from snapshot (0/1)
+        }
+        segment.set(ValueLayout.JAVA_LONG, 8, (long) targetPartitions);
+        public Builder preferHashJoin(boolean preferHashJoin) {
      */
     public static final class Builder {
-        private int batchSize = 8192;
-        private int targetPartitions = 4;
-        private boolean listingTablePushdownFilters = false;
-        private int minSkipRunDefault = 1024;
-        private double minSkipRunSelectivityThreshold = 0.03;
-        private boolean indexedPushdownFilters = true;
-        private int forceStrategy = -1;
-        private boolean preferHashJoin = true;
-
-        private Builder() {}
-
-        public Builder batchSize(int batchSize) {
-            this.batchSize = batchSize;
-            return this;
+ */
         }
-
-        public Builder targetPartitions(int targetPartitions) {
-            this.targetPartitions = targetPartitions;
-            return this;
-        }
-
-        public Builder listingTablePushdownFilters(boolean listingTablePushdownFilters) {
-            this.listingTablePushdownFilters = listingTablePushdownFilters;
-            return this;
-        }
-
-        public Builder minSkipRunDefault(int minSkipRunDefault) {
-            this.minSkipRunDefault = minSkipRunDefault;
-            return this;
-        }
-
-        public Builder minSkipRunSelectivityThreshold(double minSkipRunSelectivityThreshold) {
-            this.minSkipRunSelectivityThreshold = minSkipRunSelectivityThreshold;
-            return this;
-        }
-
-        public Builder indexedPushdownFilters(boolean indexedPushdownFilters) {
-            this.indexedPushdownFilters = indexedPushdownFilters;
-            return this;
-        }
-
-        /** @param forceStrategy -1 = None (heuristic), 0 = RowSelection, 1 = BooleanMask. */
-        public Builder forceStrategy(int forceStrategy) {
-            this.forceStrategy = forceStrategy;
-            return this;
-        }
-
-        /** @param preferHashJoin false → DataFusion emits a spillable sort-merge join for equi-joins. */
-        public Builder preferHashJoin(boolean preferHashJoin) {
-            this.preferHashJoin = preferHashJoin;
-            return this;
-        }
-
-        public WireConfigSnapshot build() {
-            return new WireConfigSnapshot(this);
-        }
+    /** -1 = None (selectivity heuristic), 0 = RowSelection, 1 = BooleanMask. */
+     * {@code optimizer.prefer_hash_join}). Only consulted on hash-shuffle worker sessions; the
     }
+     */
+    }
+     * Total: 56 bytes
+ * The OpenSearch Contributors require contributions made to
+     * 44      4     cost_predicate                       i32      hardcoded 1
+     *
+            this.minSkipRunDefault = minSkipRunDefault;
+     * 24      8     min_skip_run_selectivity_threshold   f64      from snapshot
+            return new WireConfigSnapshot(this);
+@ExperimentalApi
+            .minSkipRunDefault(current.minSkipRunDefault)
+     * @param segment the target memory segment (at least {@link #BYTE_SIZE} bytes)
+            return this;
+            this.preferHashJoin = preferHashJoin;
+        this.targetPartitions = builder.targetPartitions;
+        }
+        private int minSkipRunDefault = 1024;
+    public int targetPartitions() {
+        /** @param preferHashJoin false → DataFusion emits a spillable sort-merge join for equi-joins. */
+    }
+     *
+            .preferHashJoin(current.preferHashJoin);
+     * spillable {@code SortMergeJoinExec}. Defaults {@code true} (hash-join default) everywhere else.
+     * a confined {@code Arena} scoped to the query lifetime. Fields that the Rust
+    private final int batchSize;
+        return targetPartitions;
+        private boolean listingTablePushdownFilters = false;
+        segment.set(ValueLayout.JAVA_INT, 52, preferHashJoin ? 1 : 0);
+ * @opensearch.experimental
+     * Creates a builder pre-populated with all values from an existing snapshot.
+            .listingTablePushdownFilters(current.listingTablePushdownFilters)
+    public boolean indexedPushdownFilters() {
+     * ──────  ────  ─────────────────────────────────    ──────   ───────────
+    }
+    /**
+    public static Builder builder(WireConfigSnapshot current) {
+     * <p>
+    }
+        segment.set(ValueLayout.JAVA_INT, 48, 10);
+public final class WireConfigSnapshot {
+        return minSkipRunSelectivityThreshold;
+     * {@code cost_collector}) are written as their fixed hardcoded values.
+        return batchSize;
+     * </pre>
+        }
+        }
+        public Builder minSkipRunDefault(int minSkipRunDefault) {
+            return this;
+     * <pre>
+        segment.set(ValueLayout.JAVA_DOUBLE, 24, minSkipRunSelectivityThreshold);
+        private int forceStrategy = -1;
+     * side no longer exposes as settings ({@code cost_predicate},
+import java.lang.foreign.MemorySegment;
+            return this;
+            .targetPartitions(current.targetPartitions)
+     * 40      4     force_strategy                       i32      from snapshot (-1/0/1)
+            this.listingTablePushdownFilters = listingTablePushdownFilters;
 }
+     * 0       8     batch_size                           i64      from snapshot
+        }
+     * 48      4     cost_collector                       i32      hardcoded 10
+        // Offset 8: target_partitions (i64)
+            this.batchSize = batchSize;
+ * compatible open source license.
+        // Offset 36: indexed_pushdown_filters (i32) — 0 = false, 1 = true
+            .indexedPushdownFilters(current.indexedPushdownFilters)
+        private int targetPartitions = 4;
+        public Builder batchSize(int batchSize) {
+            this.indexedPushdownFilters = indexedPushdownFilters;
+        private boolean indexedPushdownFilters = true;
+    }
+    private final int targetPartitions;
+        // Offset 24: min_skip_run_selectivity_threshold (f64)
+    public void writeTo(MemorySegment segment) {
+ */
+    public boolean preferHashJoin() {
+        segment.set(ValueLayout.JAVA_LONG, 16, (long) minSkipRunDefault);
+    }
+        private boolean preferHashJoin = true;
+    public int minSkipRunDefault() {
+    }
+        // Offset 40: force_strategy (i32) — -1 = None, 0 = RowSelection, 1 = BooleanMask
+        /** @param forceStrategy -1 = None (heuristic), 0 = RowSelection, 1 = BooleanMask. */

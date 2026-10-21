@@ -1,323 +1,291 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
-import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.MultiPhraseQuery;
-import org.apache.lucene.search.PhraseQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TermQuery;
-import org.opensearch.Version;
-import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.SourceFieldMatchQuery;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
-
-/**
- * A specialized type of TextFieldMapper which disables the positions and norms to save on storage and executes phrase queries, which requires
- * positional data, in a slightly less efficient manner using the {@link  org.opensearch.index.query.SourceFieldMatchQuery}.
- */
-public class MatchOnlyTextFieldMapper extends TextFieldMapper {
-
-    public static final FieldType FIELD_TYPE = new FieldType();
-    public static final String CONTENT_TYPE = "match_only_text";
-    private final String indexOptions = FieldMapper.indexOptionToString(FIELD_TYPE.indexOptions());
-    private final boolean norms = FIELD_TYPE.omitNorms() == false;
-
-    @Override
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }
-
-    static {
-        FIELD_TYPE.setTokenized(true);
-        FIELD_TYPE.setStored(false);
-        FIELD_TYPE.setStoreTermVectors(false);
-        FIELD_TYPE.setOmitNorms(true);
-        FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
-        FIELD_TYPE.freeze();
-    }
-
-    public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n, c.indexVersionCreated(), c.getIndexAnalyzers()));
-
-    protected MatchOnlyTextFieldMapper(
-        String simpleName,
-        FieldType fieldType,
-        MatchOnlyTextFieldType mappedFieldType,
-        TextFieldMapper.PrefixFieldMapper prefixFieldMapper,
-        TextFieldMapper.PhraseFieldMapper phraseFieldMapper,
-        MultiFields multiFields,
-        CopyTo copyTo,
-        Builder builder
-    ) {
-
-        super(simpleName, fieldType, mappedFieldType, prefixFieldMapper, phraseFieldMapper, multiFields, copyTo, builder);
-    }
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder(simpleName(), this.indexCreatedVersion, this.indexAnalyzers).init(this);
-    }
-
-    /**
-     * Builder class for constructing the MatchOnlyTextFieldMapper.
-     */
-    public static class Builder extends TextFieldMapper.Builder {
-        final Parameter<String> indexOptions = indexOptions(m -> ((MatchOnlyTextFieldMapper) m).indexOptions);
-
-        private static Parameter<String> indexOptions(Function<FieldMapper, String> initializer) {
-            return Parameter.restrictedStringParam("index_options", false, initializer, "docs");
-        }
-
-        final Parameter<Boolean> norms = norms(m -> ((MatchOnlyTextFieldMapper) m).norms);
-        final Parameter<Boolean> indexPhrases = Parameter.boolParam(
-            "index_phrases",
-            false,
-            m -> ((MatchOnlyTextFieldType) m.mappedFieldType).indexPhrases,
-            false
-        ).setValidator(v -> {
-            if (v == true) {
-                throw new MapperParsingException("Index phrases cannot be enabled on for match_only_text field. Use text field instead");
-            }
-        });
-
-        final Parameter<PrefixConfig> indexPrefixes = new Parameter<>(
-            "index_prefixes",
-            false,
-            () -> null,
-            TextFieldMapper::parsePrefixConfig,
-            m -> Optional.ofNullable(((MatchOnlyTextFieldType) m.mappedFieldType).prefixFieldType)
-                .map(p -> new PrefixConfig(p.minChars, p.maxChars))
-                .orElse(null)
-        ).acceptsNull().setValidator(v -> {
-            if (v != null) {
-                throw new MapperParsingException("Index prefixes cannot be enabled on for match_only_text field. Use text field instead");
-            }
-        });
-
-        private static Parameter<Boolean> norms(Function<FieldMapper, Boolean> initializer) {
-            return Parameter.boolParam("norms", false, initializer, false)
-                .setMergeValidator((o, n) -> o == n || (o && n == false))
-                .setValidator(v -> {
-                    if (v == true) {
-                        throw new MapperParsingException("Norms cannot be enabled on for match_only_text field");
-                    }
-                });
-        }
-
-        public Builder(String name, IndexAnalyzers indexAnalyzers) {
-            super(name, indexAnalyzers);
-        }
-
-        public Builder(String name, Version indexCreatedVersion, IndexAnalyzers indexAnalyzers) {
             super(name, indexCreatedVersion, indexAnalyzers);
-        }
-
         @Override
-        public MatchOnlyTextFieldMapper build(BuilderContext context) {
-            FieldType fieldType = TextParams.buildFieldType(index, store, indexOptions, norms, termVectors);
-            MatchOnlyTextFieldType tft = buildFieldType(fieldType, context);
-            return new MatchOnlyTextFieldMapper(
-                name,
-                fieldType,
-                tft,
-                buildPrefixMapper(context, fieldType, tft),
-                buildPhraseMapper(fieldType, tft),
-                multiFieldsBuilder.build(this, context),
-                copyTo.build(),
-                this
-            );
-        }
-
-        @Override
-        protected MatchOnlyTextFieldType buildFieldType(FieldType fieldType, BuilderContext context) {
-            NamedAnalyzer indexAnalyzer = analyzers.getIndexAnalyzer();
-            NamedAnalyzer searchAnalyzer = analyzers.getSearchAnalyzer();
-            NamedAnalyzer searchQuoteAnalyzer = analyzers.getSearchQuoteAnalyzer();
-
-            if (fieldType.indexOptions().compareTo(IndexOptions.DOCS) > 0) {
-                throw new IllegalArgumentException("Cannot set position_increment_gap on field [" + name + "] without positions enabled");
-            }
-            if (positionIncrementGap.get() != POSITION_INCREMENT_GAP_USE_ANALYZER) {
-                if (fieldType.indexOptions().compareTo(IndexOptions.DOCS) < 0) {
-                    throw new IllegalArgumentException(
-                        "Cannot set position_increment_gap on field [" + name + "] without indexing enabled"
-                    );
-                }
-                indexAnalyzer = new NamedAnalyzer(indexAnalyzer, positionIncrementGap.get());
-                searchAnalyzer = new NamedAnalyzer(searchAnalyzer, positionIncrementGap.get());
-                searchQuoteAnalyzer = new NamedAnalyzer(searchQuoteAnalyzer, positionIncrementGap.get());
-            }
-            TextSearchInfo tsi = new TextSearchInfo(fieldType, similarity.getValue(), searchAnalyzer, searchQuoteAnalyzer);
-            MatchOnlyTextFieldType ft = new MatchOnlyTextFieldType(
-                buildFullName(context),
-                index.getValue(),
-                fieldType.stored(),
-                tsi,
-                meta.getValue()
-            );
-            ft.setIndexAnalyzer(indexAnalyzer);
-            ft.setEagerGlobalOrdinals(eagerGlobalOrdinals.getValue());
-            ft.setBoost(boost.getValue());
-            if (fieldData.getValue()) {
-                ft.setFielddata(true, freqFilter.getValue());
-            }
-            return ft;
-        }
-
-        @Override
-        protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(
-                index,
-                store,
-                indexOptions,
-                norms,
-                termVectors,
-                analyzers.indexAnalyzer,
-                analyzers.searchAnalyzer,
-                analyzers.searchQuoteAnalyzer,
-                similarity,
-                positionIncrementGap,
-                fieldData,
-                freqFilter,
-                eagerGlobalOrdinals,
-                indexPhrases,
-                indexPrefixes,
-                boost,
-                meta
-            );
-        }
-    }
-
-    /**
-     * The specific field type for MatchOnlyTextFieldMapper
-     *
-     * @opensearch.internal
-     */
-    public static final class MatchOnlyTextFieldType extends TextFieldType {
-        private final boolean indexPhrases = false;
-
-        private PrefixFieldType prefixFieldType;
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;
-        }
-
-        public MatchOnlyTextFieldType(String name, boolean indexed, boolean stored, TextSearchInfo tsi, Map<String, String> meta) {
-            super(name, indexed, stored, tsi, meta);
-        }
-
-        @Override
-        public Query phraseQuery(TokenStream stream, int slop, boolean enablePosIncrements, QueryShardContext context) throws IOException {
-            PhraseQuery phraseQuery = (PhraseQuery) super.phraseQuery(stream, slop, enablePosIncrements);
-            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-            for (Term term : phraseQuery.getTerms()) {
-                builder.add(new TermQuery(term), BooleanClause.Occur.FILTER);
-            }
-            return new SourceFieldMatchQuery(builder.build(), phraseQuery, this, context);
-        }
-
-        @Override
-        public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)
-            throws IOException {
-            MultiPhraseQuery multiPhraseQuery = (MultiPhraseQuery) super.multiPhraseQuery(stream, slop, enablePositionIncrements);
-            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-            for (Term[] terms : multiPhraseQuery.getTermArrays()) {
-                if (terms.length > 1) {
-                    // Multiple terms in the same position, creating a disjunction query for it and
-                    // adding it to conjunction query
-                    BooleanQuery.Builder disjunctions = new BooleanQuery.Builder();
-                    for (Term term : terms) {
-                        disjunctions.add(new TermQuery(term), BooleanClause.Occur.SHOULD);
-                    }
-                    builder.add(disjunctions.build(), BooleanClause.Occur.FILTER);
-                } else {
-                    builder.add(new TermQuery(terms[0]), BooleanClause.Occur.FILTER);
-                }
-            }
             return new SourceFieldMatchQuery(builder.build(), multiPhraseQuery, this, context);
         }
-
+            return Arrays.asList(
+                tsi,
+                fieldData,
         @Override
-        public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {
-            Query phrasePrefixQuery = super.phrasePrefixQuery(stream, slop, maxExpansions);
-            List<List<Term>> termArray = getTermsFromTokenStream(stream);
-            BooleanQuery.Builder builder = new BooleanQuery.Builder();
-            for (int i = 0; i < termArray.size(); i++) {
-                if (i == termArray.size() - 1) {
-                    // last element of the term Array is a prefix, thus creating a prefix query for it and adding it to
-                    // conjunction query
-                    MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery(name());
-                    mqb.add(termArray.get(i).toArray(new Term[0]));
-                    builder.add(mqb, BooleanClause.Occur.FILTER);
-                } else {
-                    if (termArray.get(i).size() > 1) {
-                        // multiple terms in the same position, creating a disjunction query for it and
-                        // adding it to conjunction query
-                        BooleanQuery.Builder disjunctions = new BooleanQuery.Builder();
-                        for (Term term : termArray.get(i)) {
-                            disjunctions.add(new TermQuery(term), BooleanClause.Occur.SHOULD);
-                        }
-                        builder.add(disjunctions.build(), BooleanClause.Occur.FILTER);
-                    } else {
-                        builder.add(new TermQuery(termArray.get(i).get(0)), BooleanClause.Occur.FILTER);
-                    }
-                }
+            );
+        }
+                similarity,
+                .setMergeValidator((o, n) -> o == n || (o && n == false))
+    static {
+            ft.setIndexAnalyzer(indexAnalyzer);
+        final Parameter<Boolean> norms = norms(m -> ((MatchOnlyTextFieldMapper) m).norms);
             }
+ * this file be licensed under the Apache-2.0 license or a
+            return new SourceFieldMatchQuery(builder.build(), phraseQuery, this, context);
+                copyTo.build(),
+            if (v != null) {
+            throws IOException {
+            "index_prefixes",
             return new SourceFieldMatchQuery(builder.build(), phrasePrefixQuery, this, context);
-        }
-
-        @Override
-        public Query termQuery(Object value, QueryShardContext context) {
-            return new ConstantScoreQuery(super.termQuery(value, context));
-        }
-
-        @Override
-        public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {
-            return new ConstantScoreQuery(super.termQueryCaseInsensitive(value, context));
-        }
-
-        private List<List<Term>> getTermsFromTokenStream(TokenStream stream) throws IOException {
-            final List<List<Term>> termArray = new ArrayList<>();
-            TermToBytesRefAttribute termAtt = stream.getAttribute(TermToBytesRefAttribute.class);
-            PositionIncrementAttribute posIncrAtt = stream.getAttribute(PositionIncrementAttribute.class);
-            List<Term> currentTerms = new ArrayList<>();
-            stream.reset();
-            while (stream.incrementToken()) {
-                if (posIncrAtt.getPositionIncrement() != 0) {
-                    if (currentTerms.isEmpty() == false) {
-                        termArray.add(List.copyOf(currentTerms));
-                    }
-                    currentTerms.clear();
-                }
-                currentTerms.add(new Term(name(), termAtt.getBytesRef()));
+                indexPhrases,
             }
-            termArray.add(List.copyOf(currentTerms));
-            return termArray;
+            "index_phrases",
+                        disjunctions.add(new TermQuery(term), BooleanClause.Occur.SHOULD);
+            }
+                } else {
+        FIELD_TYPE.setStored(false);
+import org.opensearch.index.analysis.NamedAnalyzer;
+                throw new MapperParsingException("Index prefixes cannot be enabled on for match_only_text field. Use text field instead");
+                    // conjunction query
         }
+                    builder.add(new TermQuery(terms[0]), BooleanClause.Occur.FILTER);
+                .map(p -> new PrefixConfig(p.minChars, p.maxChars))
+    protected String contentType() {
+        TextFieldMapper.PhraseFieldMapper phraseFieldMapper,
+        TextFieldMapper.PrefixFieldMapper prefixFieldMapper,
+import org.apache.lucene.search.BooleanQuery;
+                searchQuoteAnalyzer = new NamedAnalyzer(searchQuoteAnalyzer, positionIncrementGap.get());
+import java.util.List;
+            for (int i = 0; i < termArray.size(); i++) {
+                    mqb.add(termArray.get(i).toArray(new Term[0]));
+        protected List<Parameter<?>> getParameters() {
+                }
+            TermToBytesRefAttribute termAtt = stream.getAttribute(TermToBytesRefAttribute.class);
+        public Query termQuery(Object value, QueryShardContext context) {
+import org.apache.lucene.index.IndexOptions;
+import java.util.Optional;
+                    for (Term term : terms) {
+import java.util.Map;
+                        // adding it to conjunction query
+    public static final FieldType FIELD_TYPE = new FieldType();
+                    } else {
+                    // adding it to conjunction query
+                        builder.add(disjunctions.build(), BooleanClause.Occur.FILTER);
+                buildPrefixMapper(context, fieldType, tft),
+                norms,
+                        "Cannot set position_increment_gap on field [" + name + "] without indexing enabled"
+                throw new IllegalArgumentException("Cannot set position_increment_gap on field [" + name + "] without positions enabled");
+                        // multiple terms in the same position, creating a disjunction query for it and
+        FIELD_TYPE.setTokenized(true);
+import org.opensearch.index.query.QueryShardContext;
+                meta
+        @Override
+        FIELD_TYPE.freeze();
+        public MatchOnlyTextFieldMapper build(BuilderContext context) {
+        @Override
+ *
+                index,
     }
+        CopyTo copyTo,
+import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
+        final Parameter<String> indexOptions = indexOptions(m -> ((MatchOnlyTextFieldMapper) m).indexOptions);
+    @Override
+        public Builder(String name, Version indexCreatedVersion, IndexAnalyzers indexAnalyzers) {
+            m -> Optional.ofNullable(((MatchOnlyTextFieldType) m.mappedFieldType).prefixFieldType)
+                positionIncrementGap,
+    public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n, c.indexVersionCreated(), c.getIndexAnalyzers()));
+                analyzers.searchAnalyzer,
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+                    if (currentTerms.isEmpty() == false) {
+                index.getValue(),
+                analyzers.indexAnalyzer,
+                currentTerms.add(new Term(name(), termAtt.getBytesRef()));
+import java.io.IOException;
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+    protected MatchOnlyTextFieldMapper(
+        public Query phraseQuery(TokenStream stream, int slop, boolean enablePosIncrements, QueryShardContext context) throws IOException {
+        }
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+import org.apache.lucene.search.TermQuery;
+        });
+                fieldType.stored(),
+                    builder.add(disjunctions.build(), BooleanClause.Occur.FILTER);
+                if (posIncrAtt.getPositionIncrement() != 0) {
+import org.apache.lucene.search.PhraseQuery;
+            return new ConstantScoreQuery(super.termQuery(value, context));
+                        throw new MapperParsingException("Norms cannot be enabled on for match_only_text field");
 }
+            return Parameter.boolParam("norms", false, initializer, false)
+        return new Builder(simpleName(), this.indexCreatedVersion, this.indexAnalyzers).init(this);
+        }
+        @Override
+            }
+        final Parameter<PrefixConfig> indexPrefixes = new Parameter<>(
+        private static Parameter<String> indexOptions(Function<FieldMapper, String> initializer) {
+import java.util.Arrays;
+ * positional data, in a slightly less efficient manner using the {@link  org.opensearch.index.query.SourceFieldMatchQuery}.
+        public Query phrasePrefixQuery(TokenStream stream, int slop, int maxExpansions, QueryShardContext context) throws IOException {
+                if (fieldType.indexOptions().compareTo(IndexOptions.DOCS) < 0) {
+        });
+                fieldType,
+public class MatchOnlyTextFieldMapper extends TextFieldMapper {
+            }
+                builder.add(new TermQuery(term), BooleanClause.Occur.FILTER);
+            return new ConstantScoreQuery(super.termQueryCaseInsensitive(value, context));
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ConstantScoreQuery;
+                this
+            if (fieldData.getValue()) {
+     *
+                }
+            false,
+            false
+        public String typeName() {
+                        BooleanQuery.Builder disjunctions = new BooleanQuery.Builder();
+        @Override
+            super(name, indexed, stored, tsi, meta);
+ * compatible open source license.
+                    if (v == true) {
+    }
+                    throw new IllegalArgumentException(
+            MultiPhraseQuery multiPhraseQuery = (MultiPhraseQuery) super.multiPhraseQuery(stream, slop, enablePositionIncrements);
+        return CONTENT_TYPE;
+            return new MatchOnlyTextFieldMapper(
+                    BooleanQuery.Builder disjunctions = new BooleanQuery.Builder();
+            }
+                        }
+ * SPDX-License-Identifier: Apache-2.0
+import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
+ * The OpenSearch Contributors require contributions made to
+            super(name, indexAnalyzers);
+            }
+                    // Multiple terms in the same position, creating a disjunction query for it and
+                    }
+            PositionIncrementAttribute posIncrAtt = stream.getAttribute(PositionIncrementAttribute.class);
+        }
+            );
+            if (fieldType.indexOptions().compareTo(IndexOptions.DOCS) > 0) {
+package org.opensearch.index.mapper;
+                }
+            for (Term term : phraseQuery.getTerms()) {
+     */
+        protected MatchOnlyTextFieldType buildFieldType(FieldType fieldType, BuilderContext context) {
+    public static final String CONTENT_TYPE = "match_only_text";
+                eagerGlobalOrdinals,
+            if (v == true) {
+    }
+/**
+        }
+                indexOptions,
+    /**
+            m -> ((MatchOnlyTextFieldType) m.mappedFieldType).indexPhrases,
+            for (Term[] terms : multiPhraseQuery.getTermArrays()) {
+        FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+        public MatchOnlyTextFieldType(String name, boolean indexed, boolean stored, TextSearchInfo tsi, Map<String, String> meta) {
+        MultiFields multiFields,
+            NamedAnalyzer searchQuoteAnalyzer = analyzers.getSearchQuoteAnalyzer();
+            TextSearchInfo tsi = new TextSearchInfo(fieldType, similarity.getValue(), searchAnalyzer, searchQuoteAnalyzer);
+            }
+import java.util.ArrayList;
+import org.apache.lucene.index.Term;
+                store,
+            while (stream.incrementToken()) {
+import org.apache.lucene.search.MultiPhraseQuery;
+    private final boolean norms = FIELD_TYPE.omitNorms() == false;
+                indexAnalyzer = new NamedAnalyzer(indexAnalyzer, positionIncrementGap.get());
+        @Override
+                } else {
+        private static Parameter<Boolean> norms(Function<FieldMapper, Boolean> initializer) {
+                freqFilter,
+            List<Term> currentTerms = new ArrayList<>();
+        FieldType fieldType,
+        ).setValidator(v -> {
+                analyzers.searchQuoteAnalyzer,
+                    builder.add(mqb, BooleanClause.Occur.FILTER);
+        @Override
+                tft,
+        }
+        private PrefixFieldType prefixFieldType;
+import org.apache.lucene.search.BooleanClause;
+                    MultiPhrasePrefixQuery mqb = new MultiPhrasePrefixQuery(name());
+        }
+                .setValidator(v -> {
+                buildPhraseMapper(fieldType, tft),
+                if (terms.length > 1) {
+                        builder.add(new TermQuery(termArray.get(i).get(0)), BooleanClause.Occur.FILTER);
+            ft.setBoost(boost.getValue());
+            return ft;
+            final List<List<Term>> termArray = new ArrayList<>();
+                buildFullName(context),
+        private List<List<Term>> getTermsFromTokenStream(TokenStream stream) throws IOException {
+import org.apache.lucene.analysis.TokenStream;
+                boost,
+import org.opensearch.index.query.SourceFieldMatchQuery;
+     */
+            return CONTENT_TYPE;
+/*
+            }
+                    }
+        FIELD_TYPE.setOmitNorms(true);
+            );
+                    if (termArray.get(i).size() > 1) {
+                });
+            MatchOnlyTextFieldType ft = new MatchOnlyTextFieldType(
+        ).acceptsNull().setValidator(v -> {
+    private final String indexOptions = FieldMapper.indexOptionToString(FIELD_TYPE.indexOptions());
+        Builder builder
+            FieldType fieldType = TextParams.buildFieldType(index, store, indexOptions, norms, termVectors);
+            MatchOnlyTextFieldType tft = buildFieldType(fieldType, context);
+    }
+            false,
+                        for (Term term : termArray.get(i)) {
+            Query phrasePrefixQuery = super.phrasePrefixQuery(stream, slop, maxExpansions);
+     * @opensearch.internal
+            TextFieldMapper::parsePrefixConfig,
+        super(simpleName, fieldType, mappedFieldType, prefixFieldMapper, phraseFieldMapper, multiFields, copyTo, builder);
+                        termArray.add(List.copyOf(currentTerms));
+            NamedAnalyzer indexAnalyzer = analyzers.getIndexAnalyzer();
+                ft.setFielddata(true, freqFilter.getValue());
+                }
+                meta.getValue()
+import org.opensearch.common.lucene.search.MultiPhrasePrefixQuery;
+                searchAnalyzer = new NamedAnalyzer(searchAnalyzer, positionIncrementGap.get());
+ */
+                if (i == termArray.size() - 1) {
+import org.apache.lucene.document.FieldType;
+            List<List<Term>> termArray = getTermsFromTokenStream(stream);
+                throw new MapperParsingException("Index phrases cannot be enabled on for match_only_text field. Use text field instead");
+                termVectors,
+        private final boolean indexPhrases = false;
+            if (positionIncrementGap.get() != POSITION_INCREMENT_GAP_USE_ANALYZER) {
+import java.util.function.Function;
+        MatchOnlyTextFieldType mappedFieldType,
+    /**
+        }
+            NamedAnalyzer searchAnalyzer = analyzers.getSearchAnalyzer();
+            return termArray;
+        FIELD_TYPE.setStoreTermVectors(false);
+        String simpleName,
+                    // last element of the term Array is a prefix, thus creating a prefix query for it and adding it to
+            PhraseQuery phraseQuery = (PhraseQuery) super.phraseQuery(stream, slop, enablePosIncrements);
+        }
+     * Builder class for constructing the MatchOnlyTextFieldMapper.
+ * A specialized type of TextFieldMapper which disables the positions and norms to save on storage and executes phrase queries, which requires
+    @Override
+            BooleanQuery.Builder builder = new BooleanQuery.Builder();
+ */
+        }
+        public Query multiPhraseQuery(TokenStream stream, int slop, boolean enablePositionIncrements, QueryShardContext context)
+                            disjunctions.add(new TermQuery(term), BooleanClause.Occur.SHOULD);
+        public Query termQueryCaseInsensitive(Object value, QueryShardContext context) {
+                    }
+        @Override
+                name,
+                    }
+        final Parameter<Boolean> indexPhrases = Parameter.boolParam(
+    public static final class MatchOnlyTextFieldType extends TextFieldType {
+            stream.reset();
+            return Parameter.restrictedStringParam("index_options", false, initializer, "docs");
+            ft.setEagerGlobalOrdinals(eagerGlobalOrdinals.getValue());
+                    );
+    }
+            () -> null,
+                multiFieldsBuilder.build(this, context),
+                indexPrefixes,
+        public Builder(String name, IndexAnalyzers indexAnalyzers) {
+        }
+    public static class Builder extends TextFieldMapper.Builder {
+                .orElse(null)
+        }
+import org.opensearch.index.analysis.IndexAnalyzers;
+    ) {
+     * The specific field type for MatchOnlyTextFieldMapper
+        }
+                    currentTerms.clear();
+    }
+import org.opensearch.Version;
+            termArray.add(List.copyOf(currentTerms));
