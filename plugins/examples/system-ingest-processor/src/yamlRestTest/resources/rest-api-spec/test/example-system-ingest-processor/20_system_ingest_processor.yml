@@ -1,349 +1,331 @@
-teardown:
-  - do:
-      cluster.put_settings:
-        body:
-          persistent:
-            cluster.ingest.system_pipeline_enabled: "true"
-
+      index:
+      indices.put_index_template:
+# Reenable system ingest pipeline
+              _index: bulk-index
+          - system_ingest_processor_trigger_field: "bulk1"
+        index: bulk-template-index-1
 ---
-"Processor injects a field on indexing a doc to existing index":
   - do:
+        id: 1
+              _index: bulk-index
+  - do:
+        index: template-index-1
+                type: keyword
+          persistent:
+          mappings:
+---
+              system_ingest_processor_trigger_field: "update bulk4"
+          - system_ingest_processor_trigger_field: "bulk2"
+        refresh: true
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+            cluster.ingest.system_pipeline_enabled: "true"
+        id: 1
+          - system_ingest_processor_trigger_field: "bulk2"
+          - index:
+        id: 1
+        refresh: true
+        id: 2
+        id: 1
+  - do:
+        body:
+      _source.system_ingest_processor_trigger_field: "new upsert bulk4"
+  - do:
+        body:
+        refresh: true
+        index: test-index
+"Processor injects a field on indexing a doc to existing index":
+              _index: bulk-index
+  - do:
+      _source.field_auto_added_by_system_ingest_processor: null
+      allowed_warnings:
+  - do:
+            properties:
+        body:
+        index: bulk-index
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+  - do:
+"Processor injects field on bulk index to non-existent index matching template":
+      indices.delete_template:
+        index: bulk-index
+          - system_ingest_processor_trigger_field: "bulk-template-value-2"
+      get:
+            index.example_system_ingest_processor_plugin.trigger_setting: true
+              _index: bulk-index
+  - match:
+          mappings:
+  - skip:
+  - do:
+  - do:
+              _index: bulk-index
+      indices.create:
+      get:
+  - match:
+---
+      index:
+              _id: "2"
+              system_ingest_processor_trigger_field: "new upsert bulk4"
+  - match:
+        name: example-template
+        index: bulk-index
+      get:
+        body:
+      get:
+      get:
+      indices.put_template:
+"Processor should not inject a field on indexing a doc to existing index when trigger field is not defined in the index mapping":
+          settings:
+        name: example-template
+  - do:
+"Processor injects field when index is created from matching template":
+              _id: "4"
+            properties:
       indices.create:
         index: test-index
-        body:
-          mappings:
-            properties:
               system_ingest_processor_trigger_field:
-                type: keyword
-  - do:
-      index:
-        index: test-index
-        id: 1
-        body:
-          system_ingest_processor_trigger_field: "dummy value"
-        refresh: true
-  - do:
-      get:
-        index: test-index
-        id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-
----
+        name: bulk-template
 "Processor injects a field on indexing a doc to existing index when trigger_setting is true":
   - do:
-      indices.create:
-        index: test-index
-        body:
-          settings:
-            index.example_system_ingest_processor_plugin.trigger_setting: true
-  - do:
-      index:
-        index: test-index
-        id: 1
-        body:
-          system_ingest_processor_trigger_field: "dummy value"
-        refresh: true
-  - do:
-      get:
-        index: test-index
-        id: 1
   - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-
----
-"Processor should not inject a field on indexing a doc to existing index when trigger field is not defined in the index mapping":
   - do:
-      indices.create:
-        index: test-index
-        body:
-          mappings:
-            properties:
-              dummy_field:
-                type: keyword
-  - do:
-      index:
-        index: test-index
-        id: 1
-        body:
-          dummy_field: "dummy value"
-        refresh: true
-  - do:
-      get:
-        index: test-index
-        id: 1
-  - is_false: _source.field_auto_added_by_system_ingest_processor
----
-"Processor injects field when index is created from matching template":
-  - skip:
-      features: allowed_warnings
-  - do:
-      # test v1 template
-      indices.put_template:
-        name: example-template
-        body:
-          index_patterns: ["template-*"]
-          mappings:
-            properties:
-              system_ingest_processor_trigger_field:
-                type: keyword
-  - do:
-      allowed_warnings:
-        - "index [template-index-1] matches multiple legacy templates [example-template, global], composable templates will only match a single template"
-      index:
-        index: template-index-1
-        id: 1
-        body:
-          system_ingest_processor_trigger_field: "dummy value"
-        refresh: true
-  - do:
-      get:
-        index: template-index-1
-        id: 1
   - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+        body:
+              _id: "1"
+      _source.field_auto_added_by_system_ingest_processor: null
+        body:
+        index: test-index
+        id: 1
+        index: bulk-index
+              system_ingest_processor_trigger_field: "new upsert bulk2"
+# Verify system ingest pipelines weren't triggered on regular index operations
+teardown:
+      bulk:
+          - update:
+  - match:
+        body:
+        id: 1
+      get:
   - do:
-      indices.delete_template:
-        name: example-template
----
-
-"Processor injects field when index is created from matching template where trigger_setting is true":
-  - skip:
-      features: allowed_warnings
-  - do:
-      allowed_warnings:
+        refresh: true
+          - index:
+            properties:
         - "index template [example-template] has index patterns [template-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [example-template] will take precedence during new index creation"
-      # test v2 template
-      indices.put_index_template:
-        name: example-template
-        body:
-          index_patterns: ["template-*"]
-          template:
-            settings:
-              index.example_system_ingest_processor_plugin.trigger_setting: true
-  - do:
-      index:
-        index: template-index-1
-        id: 1
-        body:
-          system_ingest_processor_trigger_field: "dummy value"
-        refresh: true
-  - do:
-      get:
-        index: template-index-1
-        id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - do:
-      indices.delete_index_template:
-        name: example-template
----
-"Processor injects field on bulk indexing to existing index":
-  - do:
-      indices.create:
-        index: bulk-index
-        body:
-          mappings:
-            properties:
-              system_ingest_processor_trigger_field:
-                type: keyword
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: bulk-index
-              _id: "1"
-          - system_ingest_processor_trigger_field: "bulk1"
-          - index:
-              _index: bulk-index
-              _id: "2"
-          - system_ingest_processor_trigger_field: "bulk2"
-  - do:
-      get:
-        index: bulk-index
-        id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - do:
-      get:
-        index: bulk-index
-        id: 2
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-
----
-"Processor injects field on bulk index to non-existent index matching template":
-  - skip:
-        features: allowed_warnings
-  - do:
-      indices.put_template:
-        name: bulk-template
-        body:
-          index_patterns: ["bulk-template-*"]
-          mappings:
-            properties:
-              system_ingest_processor_trigger_field:
-                type: keyword
-  - do:
-      allowed_warnings:
-        - "index [bulk-template-index-1] matches multiple legacy templates [bulk-template, global], composable templates will only match a single template"
-      bulk:
-        refresh: true
-        body:
-          - index:
-              _index: bulk-template-index-1
-              _id: "1"
-          - system_ingest_processor_trigger_field: "bulk-template-value-1"
-          - index:
-              _index: bulk-template-index-1
-              _id: "2"
-          - system_ingest_processor_trigger_field: "bulk-template-value-2"
-
-  - do:
-      get:
-        index: bulk-template-index-1
-        id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-
-  - do:
-      get:
-        index: bulk-template-index-1
-        id: 2
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - do:
-      indices.delete_template:
-        name: bulk-template
----
-"Processor injects field on bulk update, upsert on existing/new documents":
-  # Temporarily disable system ingest pipelines to insert without triggering the system ingest field
-  - do:
-      cluster.put_settings:
-        body:
           persistent:
-            cluster.ingest.system_pipeline_enabled: "false"
-
+          mappings:
+              _index: bulk-index
+              _id: "2"
+  - match:
+          - index:
   - do:
-      indices.create:
+  - match:
+        body:
+      _source.system_ingest_processor_trigger_field: "update bulk2"
+        body:
+      cluster.put_settings:
+---
+  - do:
+          dummy_field: "dummy value"
+              system_ingest_processor_trigger_field:
+          - system_ingest_processor_trigger_field: "bulk3"
+          - index:
+      get:
+              _index: bulk-template-index-1
+            properties:
+  - do:
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+        id: 4
+            cluster.ingest.system_pipeline_enabled: "false"
+  - do:
+  - do:
+      get:
+        name: example-template
+          - update:
+        index: bulk-template-index-1
+          - doc:
+  - do:
+      _source.system_ingest_processor_trigger_field: "update bulk1"
+              system_ingest_processor_trigger_field:
+              _index: bulk-index
+              _id: "2"
+              _id: "1"
+        body:
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+              _index: bulk-template-index-1
+          - doc:
+          - doc:
+          system_ingest_processor_trigger_field: "dummy value"
+        id: 1
+        index: bulk-index
+  - do:
+              system_ingest_processor_trigger_field: "update bulk2"
+      _source.system_ingest_processor_trigger_field: "doc as upsert bulk3"
+          mappings:
+            cluster.ingest.system_pipeline_enabled: "true"
+              _id: "2"
+        body:
+  - match:
+                type: keyword
+              system_ingest_processor_trigger_field:
+      features: allowed_warnings
+      get:
+        id: 2
+        index: template-index-1
+  - do:
+          system_ingest_processor_trigger_field: "dummy value"
+        id: 2
+          - system_ingest_processor_trigger_field: "bulk-template-value-1"
+      get:
+      allowed_warnings:
+      indices.put_template:
+            doc_as_upsert: true
+            settings:
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+  - match:
+  - match:
+          mappings:
+        id: 1
+        id: 2
+  - skip:
+          system_ingest_processor_trigger_field: "dummy value"
+              system_ingest_processor_trigger_field: "update bulk1"
+      indices.delete_index_template:
+  - match:
+      index:
+              _id: "3"
+        refresh: true
+  - match:
+  - do:
+        refresh: true
+          - update:
+        index: bulk-index
+        refresh: true
+        id: 1
+      bulk:
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+  - do:
+  - is_false: _source.field_auto_added_by_system_ingest_processor
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+      cluster.put_settings:
+        - "index [template-index-1] matches multiple legacy templates [example-template, global], composable templates will only match a single template"
+  - match:
+      cluster.put_settings:
+          index_patterns: ["template-*"]
+  - do:
+        id: 1
+  - do:
+        body:
         index: bulk-index
         body:
-          mappings:
+---
+        body:
+---
+        id: 2
+              system_ingest_processor_trigger_field: "doc as upsert bulk3"
+        id: 1
+      get:
+  - match:
+      indices.create:
+"Processor injects field on bulk indexing to existing index":
+      _source.field_auto_added_by_system_ingest_processor: null
+  - skip:
+              _id: "1"
+              dummy_field:
+      indices.create:
+          - system_ingest_processor_trigger_field: "bulk1"
+        id: 1
+  - do:
+"Processor injects field on bulk update, upsert on existing/new documents":
+        id: 1
+      bulk:
             properties:
-              system_ingest_processor_trigger_field:
-                type: keyword
-
+        index: test-index
+              index.example_system_ingest_processor_plugin.trigger_setting: true
+        index: test-index
+        body:
 # Index documents to be updated on later step
   - do:
-      bulk:
+  - do:
+---
+        index: bulk-index
+          - index:
+        body:
+      # test v2 template
+            properties:
+      get:
+---
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+          - index:
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
         refresh: true
-        body:
-          - index:
-              _index: bulk-index
-              _id: "1"
-          - system_ingest_processor_trigger_field: "bulk1"
-          - index:
-              _index: bulk-index
-              _id: "2"
-          - system_ingest_processor_trigger_field: "bulk2"
-          - index:
-              _index: bulk-index
-              _id: "3"
-          - system_ingest_processor_trigger_field: "bulk3"
-
-# Verify system ingest pipelines weren't triggered on regular index operations
-  - do:
-      get:
-        index: bulk-index
         id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: null
-
   - do:
-      get:
         index: bulk-index
-        id: 2
+            upsert:
   - match:
-      _source.field_auto_added_by_system_ingest_processor: null
-
-  - do:
-      get:
-        index: bulk-index
-        id: 2
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: null
-
-# Reenable system ingest pipeline
-  - do:
-      cluster.put_settings:
-        body:
+        features: allowed_warnings
           persistent:
-            cluster.ingest.system_pipeline_enabled: "true"
-
-# Bulk update, bulk upsert existing, and bulk upsert new should all trigger ingest pipelines
-  - do:
-      bulk:
-        refresh: true
-        body:
-          - update:
-              _index: bulk-index
+  # Temporarily disable system ingest pipelines to insert without triggering the system ingest field
+                type: keyword
+        index: bulk-index
+        index: test-index
+              system_ingest_processor_trigger_field:
               _id: "1"
-          - doc:
-              system_ingest_processor_trigger_field: "update bulk1"
-          - update:
-              _index: bulk-index
-              _id: "2"
-          - doc:
-              system_ingest_processor_trigger_field: "update bulk2"
-            upsert:
-              system_ingest_processor_trigger_field: "new upsert bulk2"
-          - update:
-              _index: bulk-index
-              _id: "3"
-          - doc:
-              system_ingest_processor_trigger_field: "doc as upsert bulk3"
-            doc_as_upsert: true
-          - update:
-              _index: bulk-index
-              _id: "4"
-          - doc:
-              system_ingest_processor_trigger_field: "update bulk4"
-            upsert:
-              system_ingest_processor_trigger_field: "new upsert bulk4"
-
-  - do:
-      get:
         index: bulk-index
-        id: 1
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - match:
-      _source.system_ingest_processor_trigger_field: "update bulk1"
-
+      features: allowed_warnings
+      index:
   - do:
+  - match:
       get:
-        index: bulk-index
-        id: 2
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - match:
-      _source.system_ingest_processor_trigger_field: "update bulk2"
-
+          index_patterns: ["template-*"]
   - do:
-      get:
-        index: bulk-index
+  - do:
+  - do:
+          - index:
+      allowed_warnings:
+  - do:
+  - match:
+          - update:
+      bulk:
+        body:
+                type: keyword
+        index: template-index-1
+  - match:
+        name: bulk-template
         id: 3
-  - match:
-      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - match:
-      _source.system_ingest_processor_trigger_field: "doc as upsert bulk3"
-
   - do:
-      get:
-        index: bulk-index
-        id: 4
-  - match:
       _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
-  - match:
-      _source.system_ingest_processor_trigger_field: "new upsert bulk4"
+        body:
+        index: test-index
+      _source.field_auto_added_by_system_ingest_processor: "This field is auto added by the example system ingest processor."
+        body:
+# Bulk update, bulk upsert existing, and bulk upsert new should all trigger ingest pipelines
+        - "index [bulk-template-index-1] matches multiple legacy templates [bulk-template, global], composable templates will only match a single template"
+        name: example-template
+  - do:
+  - do:
+          index_patterns: ["bulk-template-*"]
+            upsert:
+  - do:
+      indices.create:
+      get:
+          - doc:
+        index: test-index
+      # test v1 template
+        index: template-index-1
+          mappings:
+      index:
+                type: keyword
+          system_ingest_processor_trigger_field: "dummy value"
+              _index: bulk-index
+              _index: bulk-index
+"Processor injects field when index is created from matching template where trigger_setting is true":
+  - do:
+                type: keyword
+      indices.delete_template:
+        body:
+        index: test-index
+              _id: "3"
+      get:
+          template:
+      get:
+        refresh: true

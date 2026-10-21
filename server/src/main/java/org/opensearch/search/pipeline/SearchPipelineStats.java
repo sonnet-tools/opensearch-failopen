@@ -1,556 +1,487 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.search.pipeline;
-
-import org.opensearch.Version;
-import org.opensearch.common.metrics.OperationMetrics;
-import org.opensearch.common.metrics.OperationStats;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeMap;
-
-import reactor.util.annotation.NonNull;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.unmodifiableList;
-import static java.util.Collections.unmodifiableMap;
-
-/**
- * Serializable, immutable search pipeline statistics to be returned via stats APIs.
- *
- * @opensearch.internal
- */
-public class SearchPipelineStats implements Writeable, ToXContentFragment {
-
-    private final OperationStats totalRequestStats;
-    private final OperationStats totalResponseStats;
-    private final List<PerPipelineStats> perPipelineStats;
-    private final Map<String, PipelineDetailStats> perPipelineProcessorStats;
-    private FactoryDetailStats systemGeneratedFactoryStats;
-    private PipelineDetailStats systemGeneratedProcessorStats;
-
-    public SearchPipelineStats(
-        OperationStats totalRequestStats,
-        OperationStats totalResponseStats,
-        List<PerPipelineStats> perPipelineStats,
-        Map<String, PipelineDetailStats> perPipelineProcessorStats,
-        FactoryDetailStats systemGeneratedFactoryStats,
-        PipelineDetailStats systemGeneratedProcessorStats
-    ) {
-        this.totalRequestStats = totalRequestStats;
-        this.totalResponseStats = totalResponseStats;
-        this.perPipelineStats = perPipelineStats;
-        this.perPipelineProcessorStats = perPipelineProcessorStats;
-        this.systemGeneratedFactoryStats = systemGeneratedFactoryStats;
-        this.systemGeneratedProcessorStats = systemGeneratedProcessorStats;
-    }
-
-    public SearchPipelineStats(StreamInput in) throws IOException {
-        this.totalRequestStats = new OperationStats(in);
-        this.totalResponseStats = new OperationStats(in);
-        int size = in.readVInt();
-        List<PerPipelineStats> perPipelineStats = new ArrayList<>(size);
-        Map<String, PipelineDetailStats> pipelineDetailStatsMap = new TreeMap<>();
-        for (int i = 0; i < size; i++) {
-            PerPipelineStats perPipelineStat = new PerPipelineStats(in);
-            perPipelineStats.add(perPipelineStat);
-            pipelineDetailStatsMap.put(perPipelineStat.pipelineId, new PipelineDetailStats(in));
-        }
-        this.perPipelineStats = unmodifiableList(perPipelineStats);
-        this.perPipelineProcessorStats = unmodifiableMap(pipelineDetailStatsMap);
-        if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
-            this.systemGeneratedFactoryStats = new FactoryDetailStats(in);
-            this.systemGeneratedProcessorStats = new PipelineDetailStats(in);
-        }
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("search_pipeline");
-        builder.startObject("total_request");
-        totalRequestStats.toXContent(builder, params);
-        builder.endObject();
-        builder.startObject("total_response");
-        totalResponseStats.toXContent(builder, params);
-        builder.endObject();
-        builder.startObject("pipelines");
-        for (PerPipelineStats pipelineStat : perPipelineStats) {
-            builder.startObject(pipelineStat.pipelineId);
-            builder.startObject("request");
-            pipelineStat.requestStats.toXContent(builder, params);
-            builder.endObject();
-            builder.startObject("response");
-            pipelineStat.responseStats.toXContent(builder, params);
-            builder.endObject();
-
-            PipelineDetailStats pipelineDetailStats = perPipelineProcessorStats.get(pipelineStat.pipelineId);
-            pipelineDetailStats.toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-        if (systemGeneratedProcessorStats != null) {
-            builder.startObject("system_generated_processors");
-            systemGeneratedProcessorStats.toXContent(builder, params);
-            builder.endObject();
-        }
-        if (systemGeneratedFactoryStats != null) {
-            builder.startObject("system_generated_factories");
-            systemGeneratedFactoryStats.toXContent(builder, params);
-            builder.endObject();
-        }
-        builder.endObject();
-        return builder;
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        totalRequestStats.writeTo(out);
-        totalResponseStats.writeTo(out);
-        out.writeVInt(perPipelineStats.size());
-        for (PerPipelineStats pipelineStat : perPipelineStats) {
-            pipelineStat.writeTo(out);
-            PipelineDetailStats pipelineDetailStats = perPipelineProcessorStats.get(pipelineStat.pipelineId);
-            pipelineDetailStats.writeTo(out);
-        }
-        if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
-            systemGeneratedFactoryStats.writeTo(out);
-            systemGeneratedProcessorStats.writeTo(out);
-        }
-    }
-
-    static class Builder {
-        private OperationStats totalRequestStats;
-        private OperationStats totalResponseStats;
-        private final List<PerPipelineStats> perPipelineStats = new ArrayList<>();
-        private final Map<String, List<ProcessorStats>> requestProcessorStatsPerPipeline = new HashMap<>();
-        private final Map<String, List<ProcessorStats>> responseProcessorStatsPerPipeline = new HashMap<>();
-        private FactoryDetailStats systemGeneratedFactoryStats = new FactoryDetailStats(emptyList(), emptyList());
-        private PipelineDetailStats systemGeneratedProcessorStats = new PipelineDetailStats(emptyList(), emptyList());
-
-        Builder withTotalStats(OperationMetrics totalRequestMetrics, OperationMetrics totalResponseMetrics) {
-            this.totalRequestStats = totalRequestMetrics.createStats();
-            this.totalResponseStats = totalResponseMetrics.createStats();
-            return this;
-        }
-
-        Builder addPipelineStats(String pipelineId, OperationMetrics pipelineRequestMetrics, OperationMetrics pipelineResponseMetrics) {
-            this.perPipelineStats.add(
-                new PerPipelineStats(pipelineId, pipelineRequestMetrics.createStats(), pipelineResponseMetrics.createStats())
-            );
-            return this;
-        }
-
-        Builder addRequestProcessorStats(String pipelineId, String processorName, String processorType, OperationMetrics processorMetrics) {
-            this.requestProcessorStatsPerPipeline.computeIfAbsent(pipelineId, k -> new ArrayList<>())
-                .add(new ProcessorStats(processorName, processorType, processorMetrics.createStats()));
-            return this;
-        }
-
-        Builder addResponseProcessorStats(
-            String pipelineId,
-            String processorName,
-            String processorType,
-            OperationMetrics processorMetrics
+            evaluationStats = new OperationStats(in);
         ) {
-            this.responseProcessorStatsPerPipeline.computeIfAbsent(pipelineId, k -> new ArrayList<>())
-                .add(new ProcessorStats(processorName, processorType, processorMetrics.createStats()));
-            return this;
+    private PipelineDetailStats systemGeneratedProcessorStats;
+        private final List<ProcessorStats> requestProcessorStats;
         }
-
-        Builder withSystemGeneratedProcessorMetrics(@NonNull final SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics) {
-            systemGeneratedFactoryStats = systemGeneratedProcessorMetrics.getFactoryStats();
-            systemGeneratedProcessorStats = systemGeneratedProcessorMetrics.getProcessorStats();
-            return this;
-        }
-
-        SearchPipelineStats build() {
-            Map<String, PipelineDetailStats> pipelineDetailStatsMap = new TreeMap<>();
-            for (PerPipelineStats pipelineStat : perPipelineStats) {
-                List<ProcessorStats> requestProcessorStats = requestProcessorStatsPerPipeline.getOrDefault(
-                    pipelineStat.pipelineId,
-                    emptyList()
-                );
-                List<ProcessorStats> responseProcessorStats = responseProcessorStatsPerPipeline.getOrDefault(
-                    pipelineStat.pipelineId,
-                    emptyList()
-                );
-                PipelineDetailStats pipelineDetailStats = new PipelineDetailStats(
-                    unmodifiableList(requestProcessorStats),
-                    unmodifiableList(responseProcessorStats)
-                );
-                pipelineDetailStatsMap.put(pipelineStat.pipelineId, pipelineDetailStats);
-            }
-            return new SearchPipelineStats(
-                totalRequestStats,
-                totalResponseStats,
-                unmodifiableList(perPipelineStats),
-                unmodifiableMap(pipelineDetailStatsMap),
-                systemGeneratedFactoryStats,
-                systemGeneratedProcessorStats
-            );
-        }
+            return requestProcessorStats.equals(that.requestProcessorStats) && responseProcessorStats.equals(that.responseProcessorStats);
     }
-
-    static class PerPipelineStats implements Writeable {
-        private final String pipelineId;
-        private final OperationStats requestStats;
-        private final OperationStats responseStats;
-
-        public PerPipelineStats(String pipelineId, OperationStats requestStats, OperationStats responseStats) {
-            this.pipelineId = pipelineId;
-            this.requestStats = requestStats;
-            this.responseStats = responseStats;
-        }
-
-        public PerPipelineStats(StreamInput in) throws IOException {
-            pipelineId = in.readString();
-            requestStats = new OperationStats(in);
-            responseStats = new OperationStats(in);
-        }
-
+            builder.endArray();
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(pipelineId);
-            requestStats.writeTo(out);
-            responseStats.writeTo(out);
+import java.util.HashMap;
         }
-
-        public String getPipelineId() {
-            return pipelineId;
+            writeFactoryStatsArray(builder, params, "response_processor_factories", responseProcessorFactoryStats);
         }
-
-        public OperationStats getRequestStats() {
+        }
+        for (PerPipelineStats pipelineStat : perPipelineStats) {
+    private final Map<String, PipelineDetailStats> perPipelineProcessorStats;
+            if (this == o) return true;
+    public void writeTo(StreamOutput out) throws IOException {
+        }
+            systemGeneratedProcessorStats
+    }
+        private final List<FactoryStats> responseProcessorFactoryStats;
+            builder.endObject();
+        public PipelineDetailStats(StreamInput in) throws IOException {
+            String processorName,
+        public int hashCode() {
+        }
             return requestStats;
         }
-
-        public OperationStats getResponseStats() {
-            return responseStats;
-        }
-
+/*
+                processorStats.writeTo(out);
         @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            PerPipelineStats that = (PerPipelineStats) o;
-            return pipelineId.equals(that.pipelineId) && requestStats.equals(that.requestStats) && responseStats.equals(that.responseStats);
         }
-
+            builder.startObject("evaluation_stats");
         @Override
-        public int hashCode() {
-            return Objects.hash(pipelineId, requestStats, responseStats);
         }
-    }
-
-    static class PipelineDetailStats implements ToXContentFragment, Writeable {
-        private final List<ProcessorStats> requestProcessorStats;
-        private final List<ProcessorStats> responseProcessorStats;
-
-        public PipelineDetailStats(List<ProcessorStats> requestProcessorStats, List<ProcessorStats> responseProcessorStats) {
-            this.requestProcessorStats = requestProcessorStats;
+    static class PerPipelineStats implements Writeable {
             this.responseProcessorStats = responseProcessorStats;
-        }
-
-        public PipelineDetailStats(StreamInput in) throws IOException {
-            int numRequestProcessors = in.readVInt();
-            requestProcessorStats = new ArrayList<>(numRequestProcessors);
-            for (int j = 0; j < numRequestProcessors; j++) {
-                requestProcessorStats.add(new ProcessorStats(in));
+            for (int j = 0; j < numRequestProcessorFactories; j++) {
+            builder.endObject();
             }
-            int numResponseProcessors = in.readVInt();
-            responseProcessorStats = new ArrayList<>(numResponseProcessors);
-            for (int j = 0; j < numResponseProcessors; j++) {
-                responseProcessorStats.add(new ProcessorStats(in));
+            builder.endObject();
+import org.opensearch.core.xcontent.XContentBuilder;
+            for (FactoryStats factoryStats : stats) {
+        private void writeProcessorStatsArray(XContentBuilder builder, Params params, String fieldName, List<ProcessorStats> stats)
+            builder.endObject();
+            if (o == null || getClass() != o.getClass()) return false;
+                && generationStats.equals(that.generationStats);
+        this.totalRequestStats = totalRequestStats;
+        private PipelineDetailStats systemGeneratedProcessorStats = new PipelineDetailStats(emptyList(), emptyList());
+                processorStats.writeTo(out);
+    Map<String, PipelineDetailStats> getPerPipelineProcessorStats() {
+ * The OpenSearch Contributors require contributions made to
+            stats = new OperationStats(in);
+                .add(new ProcessorStats(processorName, processorType, processorMetrics.createStats()));
+        String getProcessorName() {
             }
+                );
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        return totalRequestStats.equals(stats.totalRequestStats)
         }
-
+        }
+            generationStats.toXContent(builder, params);
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(requestProcessorStats.size());
-            for (ProcessorStats processorStats : requestProcessorStats) {
-                processorStats.writeTo(out);
+            PipelineDetailStats that = (PipelineDetailStats) o;
+            stats.writeTo(out);
+            this.generationStats = generationStats;
+import static java.util.Collections.unmodifiableList;
+            out.writeString(factoryType);
+        Builder withTotalStats(OperationMetrics totalRequestMetrics, OperationMetrics totalResponseMetrics) {
+            if (this == o) return true;
             }
-            out.writeVInt(responseProcessorStats.size());
-            for (ProcessorStats processorStats : responseProcessorStats) {
-                processorStats.writeTo(out);
-            }
-        }
-
-        public List<ProcessorStats> requestProcessorStats() {
+        builder.startObject("search_pipeline");
             return requestProcessorStats;
+        public void writeTo(StreamOutput out) throws IOException {
+            responseProcessorStats = new ArrayList<>(numResponseProcessors);
+    static class ProcessorStats implements ToXContentFragment, Writeable {
+            out.writeString(pipelineId);
+                    emptyList()
+        public boolean equals(Object o) {
+            this.requestProcessorStatsPerPipeline.computeIfAbsent(pipelineId, k -> new ArrayList<>())
+            this.evaluationStats = evaluationStats;
+            writeFactoryStatsArray(builder, params, "request_processor_factories", requestProcessorFactoryStats);
+        for (PerPipelineStats pipelineStat : perPipelineStats) {
+            return this;
+        totalRequestStats.toXContent(builder, params);
+            for (int j = 0; j < numRequestProcessors; j++) {
+        builder.startObject("total_request");
+            builder.startObject("system_generated_processors");
+        SearchPipelineStats build() {
+            Map<String, PipelineDetailStats> pipelineDetailStatsMap = new TreeMap<>();
+                );
         }
-
-        public List<ProcessorStats> responseProcessorStats() {
+            return this;
+    @Override
+        }
+            builder.field("type", processorType);
+import org.opensearch.Version;
+            return new SearchPipelineStats(
+ * Serializable, immutable search pipeline statistics to be returned via stats APIs.
+            systemGeneratedFactoryStats,
+        PipelineDetailStats systemGeneratedProcessorStats
+ *
+        );
+            perPipelineStats.add(perPipelineStat);
+            generationStats.writeTo(out);
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            PipelineDetailStats pipelineDetailStats = perPipelineProcessorStats.get(pipelineStat.pipelineId);
+        }
+            builder.startObject(processorName);
+            for (ProcessorStats processorStats : stats) {
+            return builder;
+package org.opensearch.search.pipeline;
+        }
+            return requestProcessorFactoryStats.equals(that.requestProcessorFactoryStats)
+            return Objects.hash(requestProcessorFactoryStats, responseProcessorFactoryStats);
+        @Override
+        this.totalResponseStats = totalResponseStats;
+        }
+            systemGeneratedFactoryStats.writeTo(out);
+        private final OperationStats stats;
             return responseProcessorStats;
         }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            PipelineDetailStats that = (PipelineDetailStats) o;
-            return requestProcessorStats.equals(that.requestProcessorStats) && responseProcessorStats.equals(that.responseProcessorStats);
+            int numRequestProcessors = in.readVInt();
+    }
         }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(requestProcessorStats, responseProcessorStats);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            writeProcessorStatsArray(builder, params, "request_processors", requestProcessorStats);
-            writeProcessorStatsArray(builder, params, "response_processors", responseProcessorStats);
             return builder;
-        }
-
-        private void writeProcessorStatsArray(XContentBuilder builder, Params params, String fieldName, List<ProcessorStats> stats)
-            throws IOException {
-            builder.startArray(fieldName);
-            for (ProcessorStats processorStats : stats) {
-                builder.startObject();
-                processorStats.toXContent(builder, params);
-                builder.endObject();
-            }
-            builder.endArray();
-        }
-    }
-
-    static class ProcessorStats implements ToXContentFragment, Writeable {
-        private final String processorName; // type:tag
-        private final String processorType;
-        private final OperationStats stats;
-
-        public ProcessorStats(String processorName, String processorType, OperationStats stats) {
-            this.processorName = processorName;
-            this.processorType = processorType;
-            this.stats = stats;
-        }
-
-        public ProcessorStats(StreamInput in) throws IOException {
-            processorName = in.readString();
-            processorType = in.readString();
-            stats = new OperationStats(in);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(processorName);
-            out.writeString(processorType);
-            stats.writeTo(out);
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ProcessorStats that = (ProcessorStats) o;
-            return processorName.equals(that.processorName) && processorType.equals(that.processorType) && stats.equals(that.stats);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(processorName, processorType, stats);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(processorName);
-            builder.field("type", processorType);
-            builder.startObject("stats");
-            stats.toXContent(builder, params);
-            builder.endObject();
-            builder.endObject();
-            return builder;
-        }
-
-        String getProcessorName() {
-            return processorName;
-        }
-
-        String getProcessorType() {
-            return processorType;
-        }
-
-        OperationStats getStats() {
-            return stats;
-        }
-    }
-
-    static class FactoryStats implements ToXContentFragment, Writeable {
-        private final String factoryType;
-        private final OperationStats evaluationStats;
-        private final OperationStats generationStats;
-
-        FactoryStats(String factoryType, OperationStats evaluationStats, OperationStats generationStats) {
-            this.factoryType = factoryType;
-            this.evaluationStats = evaluationStats;
-            this.generationStats = generationStats;
-        }
-
-        FactoryStats(StreamInput in) throws IOException {
-            factoryType = in.readString();
-            evaluationStats = new OperationStats(in);
-            generationStats = new OperationStats(in);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(factoryType);
-            evaluationStats.writeTo(out);
-            generationStats.writeTo(out);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(factoryType);
-            builder.field("type", factoryType);
-            builder.startObject("evaluation_stats");
-            evaluationStats.toXContent(builder, params);
-            builder.endObject();
-            builder.startObject("generation_stats");
-            generationStats.toXContent(builder, params);
-            builder.endObject();
-            builder.endObject();
-            return builder;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            FactoryStats that = (FactoryStats) o;
-            return factoryType.equals(that.factoryType)
-                && evaluationStats.equals(that.evaluationStats)
-                && generationStats.equals(that.generationStats);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(factoryType, evaluationStats, generationStats);
-        }
-    }
-
-    static class FactoryDetailStats implements ToXContentFragment, Writeable {
-        private final List<FactoryStats> requestProcessorFactoryStats;
-        private final List<FactoryStats> responseProcessorFactoryStats;
-
-        FactoryDetailStats(List<FactoryStats> requestProcessorFactoryStats, List<FactoryStats> responseProcessorFactoryStats) {
-            this.requestProcessorFactoryStats = requestProcessorFactoryStats;
-            this.responseProcessorFactoryStats = responseProcessorFactoryStats;
-        }
-
-        FactoryDetailStats(StreamInput in) throws IOException {
-            int numRequestProcessorFactories = in.readVInt();
-            requestProcessorFactoryStats = new ArrayList<>(numRequestProcessorFactories);
-            for (int j = 0; j < numRequestProcessorFactories; j++) {
-                requestProcessorFactoryStats.add(new FactoryStats(in));
-            }
-            int numResponseProcessorFactories = in.readVInt();
-            responseProcessorFactoryStats = new ArrayList<>(numResponseProcessorFactories);
-            for (int j = 0; j < numResponseProcessorFactories; j++) {
-                responseProcessorFactoryStats.add(new FactoryStats(in));
-            }
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(requestProcessorFactoryStats.size());
-            for (FactoryStats factoryStats : requestProcessorFactoryStats) {
-                factoryStats.writeTo(out);
-            }
-            out.writeVInt(responseProcessorFactoryStats.size());
-            for (FactoryStats factoryStats : responseProcessorFactoryStats) {
-                factoryStats.writeTo(out);
-            }
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            writeFactoryStatsArray(builder, params, "request_processor_factories", requestProcessorFactoryStats);
-            writeFactoryStatsArray(builder, params, "response_processor_factories", responseProcessorFactoryStats);
-            return builder;
-        }
-
-        private void writeFactoryStatsArray(XContentBuilder builder, Params params, String fieldName, List<FactoryStats> stats)
-            throws IOException {
-            builder.startArray(fieldName);
-            for (FactoryStats factoryStats : stats) {
-                builder.startObject();
-                factoryStats.toXContent(builder, params);
-                builder.endObject();
-            }
-            builder.endArray();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            FactoryDetailStats that = (FactoryDetailStats) o;
-            return requestProcessorFactoryStats.equals(that.requestProcessorFactoryStats)
-                && responseProcessorFactoryStats.equals(that.responseProcessorFactoryStats);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(requestProcessorFactoryStats, responseProcessorFactoryStats);
-        }
-    }
-
-    OperationStats getTotalRequestStats() {
-        return totalRequestStats;
-    }
-
-    OperationStats getTotalResponseStats() {
-        return totalResponseStats;
-    }
-
-    List<PerPipelineStats> getPipelineStats() {
-        return perPipelineStats;
-    }
-
-    Map<String, PipelineDetailStats> getPerPipelineProcessorStats() {
-        return perPipelineProcessorStats;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        SearchPipelineStats stats = (SearchPipelineStats) o;
-        return totalRequestStats.equals(stats.totalRequestStats)
-            && totalResponseStats.equals(stats.totalResponseStats)
-            && perPipelineStats.equals(stats.perPipelineStats)
-            && perPipelineProcessorStats.equals(stats.perPipelineProcessorStats)
-            && systemGeneratedFactoryStats.equals(stats.systemGeneratedFactoryStats)
-            && systemGeneratedProcessorStats.equals(stats.systemGeneratedProcessorStats);
-    }
-
-    @Override
     public int hashCode() {
-        return Objects.hash(
-            totalRequestStats,
-            totalResponseStats,
+            }
+            pipelineDetailStats.toXContent(builder, params);
+            builder.endObject();
+        private final List<ProcessorStats> responseProcessorStats;
+        totalRequestStats.writeTo(out);
+                List<ProcessorStats> responseProcessorStats = responseProcessorStatsPerPipeline.getOrDefault(
+            this.processorType = processorType;
             perPipelineStats,
-            perPipelineProcessorStats,
-            systemGeneratedFactoryStats,
-            systemGeneratedProcessorStats
-        );
+    @Override
+        this.perPipelineProcessorStats = unmodifiableMap(pipelineDetailStatsMap);
+            return processorName;
+            && perPipelineProcessorStats.equals(stats.perPipelineProcessorStats)
+            writeProcessorStatsArray(builder, params, "response_processors", responseProcessorStats);
+            return responseStats;
+            );
+            this.requestProcessorFactoryStats = requestProcessorFactoryStats;
+            out.writeString(processorName);
+            pipelineStat.responseStats.toXContent(builder, params);
+            systemGeneratedFactoryStats.toXContent(builder, params);
+        if (systemGeneratedProcessorStats != null) {
+            && totalResponseStats.equals(stats.totalResponseStats)
+        }
     }
+        private final Map<String, List<ProcessorStats>> requestProcessorStatsPerPipeline = new HashMap<>();
+        public void writeTo(StreamOutput out) throws IOException {
+            responseProcessorFactoryStats = new ArrayList<>(numResponseProcessorFactories);
+    private final OperationStats totalResponseStats;
+        }
+                    unmodifiableList(requestProcessorStats),
+            this.responseProcessorFactoryStats = responseProcessorFactoryStats;
+            responseStats.writeTo(out);
+        public void writeTo(StreamOutput out) throws IOException {
+        return totalResponseStats;
+        private final Map<String, List<ProcessorStats>> responseProcessorStatsPerPipeline = new HashMap<>();
+    ) {
+        List<PerPipelineStats> perPipelineStats = new ArrayList<>(size);
+        }
+            if (this == o) return true;
+        @Override
+                requestProcessorStats.add(new ProcessorStats(in));
+        @Override
+        for (int i = 0; i < size; i++) {
+import reactor.util.annotation.NonNull;
+            requestProcessorStats = new ArrayList<>(numRequestProcessors);
+        public List<ProcessorStats> requestProcessorStats() {
+            int numResponseProcessorFactories = in.readVInt();
+            if (o == null || getClass() != o.getClass()) return false;
+        public ProcessorStats(String processorName, String processorType, OperationStats stats) {
+                totalRequestStats,
+            builder.endObject();
+                pipelineDetailStatsMap.put(pipelineStat.pipelineId, pipelineDetailStats);
+        }
+                );
+        builder.startObject("pipelines");
+            builder.endObject();
+                .add(new ProcessorStats(processorName, processorType, processorMetrics.createStats()));
+        FactoryStats(StreamInput in) throws IOException {
+        public int hashCode() {
+            for (FactoryStats factoryStats : responseProcessorFactoryStats) {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            this.responseStats = responseStats;
+        if (in.getVersion().onOrAfter(Version.V_3_3_0)) {
+    OperationStats getTotalResponseStats() {
+        }
+    static class FactoryStats implements ToXContentFragment, Writeable {
+            this.responseProcessorStatsPerPipeline.computeIfAbsent(pipelineId, k -> new ArrayList<>())
+            }
+        public void writeTo(StreamOutput out) throws IOException {
+        FactoryDetailStats(StreamInput in) throws IOException {
+        @Override
+                new PerPipelineStats(pipelineId, pipelineRequestMetrics.createStats(), pipelineResponseMetrics.createStats())
+        this.totalResponseStats = new OperationStats(in);
+import java.util.ArrayList;
+        public boolean equals(Object o) {
+            systemGeneratedProcessorStats.writeTo(out);
+            if (o == null || getClass() != o.getClass()) return false;
+            responseStats = new OperationStats(in);
+        }
+            );
+        }
+import org.opensearch.core.common.io.stream.Writeable;
+            processorName = in.readString();
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) return false;
+            requestStats.writeTo(out);
+        if (out.getVersion().onOrAfter(Version.V_3_3_0)) {
+        List<PerPipelineStats> perPipelineStats,
+import static java.util.Collections.emptyList;
+import org.opensearch.common.metrics.OperationMetrics;
+        public int hashCode() {
+        }
+            builder.startObject("generation_stats");
+        FactoryDetailStats(List<FactoryStats> requestProcessorFactoryStats, List<FactoryStats> responseProcessorFactoryStats) {
+            pipelineStat.requestStats.toXContent(builder, params);
+ * compatible open source license.
+        public boolean equals(Object o) {
+        builder.startObject("total_response");
+        public OperationStats getResponseStats() {
+            requestStats = new OperationStats(in);
+        @Override
+        totalResponseStats.toXContent(builder, params);
+            totalRequestStats,
+    List<PerPipelineStats> getPipelineStats() {
+        }
+        private final String processorName; // type:tag
+        private final List<PerPipelineStats> perPipelineStats = new ArrayList<>();
+            PipelineDetailStats pipelineDetailStats = perPipelineProcessorStats.get(pipelineStat.pipelineId);
+            this.factoryType = factoryType;
+            return builder;
+            }
+            PerPipelineStats perPipelineStat = new PerPipelineStats(in);
+        if (this == o) return true;
+        }
+            this.requestStats = requestStats;
+            this.totalResponseStats = totalResponseMetrics.createStats();
+            this.perPipelineStats.add(
+        Builder addPipelineStats(String pipelineId, OperationMetrics pipelineRequestMetrics, OperationMetrics pipelineResponseMetrics) {
+            return Objects.hash(requestProcessorStats, responseProcessorStats);
+            builder.startObject("system_generated_factories");
+        return perPipelineProcessorStats;
+    @Override
+    }
+        }
+        builder.endObject();
+        }
+        private final OperationStats evaluationStats;
+import java.util.TreeMap;
+                    pipelineStat.pipelineId,
+        out.writeVInt(perPipelineStats.size());
+    OperationStats getTotalRequestStats() {
+            this.processorName = processorName;
+            return factoryType.equals(that.factoryType)
+            this.systemGeneratedFactoryStats = new FactoryDetailStats(in);
+            }
+import org.opensearch.core.common.io.stream.StreamInput;
+        }
+        }
+            perPipelineProcessorStats,
+        public ProcessorStats(StreamInput in) throws IOException {
+        return totalRequestStats;
+public class SearchPipelineStats implements Writeable, ToXContentFragment {
+                factoryStats.writeTo(out);
+        totalResponseStats.writeTo(out);
+        builder.endObject();
+        @Override
+        public String getPipelineId() {
+        builder.endObject();
+        private final OperationStats responseStats;
+                unmodifiableMap(pipelineDetailStatsMap),
+            && systemGeneratedFactoryStats.equals(stats.systemGeneratedFactoryStats)
+                processorStats.toXContent(builder, params);
+        }
+                    pipelineStat.pipelineId,
+    }
+    @Override
+        }
+    }
+                builder.startObject();
+ *
+        }
+            return stats;
+        private final String factoryType;
+        this.perPipelineProcessorStats = perPipelineProcessorStats;
+            evaluationStats.writeTo(out);
+            if (this == o) return true;
+        private OperationStats totalResponseStats;
+            return this;
+            }
+            factoryType = in.readString();
+        }
+import static java.util.Collections.unmodifiableMap;
+            this.stats = stats;
+    }
+                builder.endObject();
+ */
+            return processorType;
+        int size = in.readVInt();
+            processorType = in.readString();
+            out.writeVInt(responseProcessorStats.size());
+        }
+            this.totalRequestStats = totalRequestMetrics.createStats();
+ * this file be licensed under the Apache-2.0 license or a
+        if (systemGeneratedFactoryStats != null) {
+            builder.startObject("response");
+                totalResponseStats,
+            return processorName.equals(that.processorName) && processorType.equals(that.processorType) && stats.equals(that.stats);
+                requestProcessorFactoryStats.add(new FactoryStats(in));
+        Builder addResponseProcessorStats(
+import java.util.Objects;
+            ProcessorStats that = (ProcessorStats) o;
+        }
+        public boolean equals(Object o) {
+            return builder;
+        return Objects.hash(
+            stats.toXContent(builder, params);
+            builder.startObject(pipelineStat.pipelineId);
+        @Override
+        }
+            systemGeneratedProcessorStats.toXContent(builder, params);
+        @Override
+        private final OperationStats generationStats;
+                builder.startObject();
+        public void writeTo(StreamOutput out) throws IOException {
+            return Objects.hash(pipelineId, requestStats, responseStats);
+        }
+    public SearchPipelineStats(StreamInput in) throws IOException {
+            pipelineDetailStats.writeTo(out);
+    }
+            return pipelineId.equals(that.pipelineId) && requestStats.equals(that.requestStats) && responseStats.equals(that.responseStats);
+            requestProcessorFactoryStats = new ArrayList<>(numRequestProcessorFactories);
+    }
+            builder.endObject();
+        public PerPipelineStats(String pipelineId, OperationStats requestStats, OperationStats responseStats) {
+        this.systemGeneratedFactoryStats = systemGeneratedFactoryStats;
+                factoryStats.writeTo(out);
+            if (this == o) return true;
+import org.opensearch.core.xcontent.ToXContentFragment;
+            return this;
+        }
+            builder.field("type", factoryType);
+        public int hashCode() {
+            pipelineDetailStatsMap.put(perPipelineStat.pipelineId, new PipelineDetailStats(in));
+        Builder addRequestProcessorStats(String pipelineId, String processorName, String processorType, OperationMetrics processorMetrics) {
+    }
+            systemGeneratedFactoryStats = systemGeneratedProcessorMetrics.getFactoryStats();
+        SearchPipelineStats stats = (SearchPipelineStats) o;
+        Builder withSystemGeneratedProcessorMetrics(@NonNull final SystemGeneratedProcessorMetrics systemGeneratedProcessorMetrics) {
+        String getProcessorType() {
+            }
+        private void writeFactoryStatsArray(XContentBuilder builder, Params params, String fieldName, List<FactoryStats> stats)
+        }
+        }
+                factoryStats.toXContent(builder, params);
+        public OperationStats getRequestStats() {
+        private final String processorType;
+            String processorType,
+        @Override
+        public List<ProcessorStats> responseProcessorStats() {
+        this.perPipelineStats = perPipelineStats;
+            pipelineId = in.readString();
+        FactoryDetailStats systemGeneratedFactoryStats,
+            if (o == null || getClass() != o.getClass()) return false;
+        public int hashCode() {
+        public PerPipelineStats(StreamInput in) throws IOException {
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            out.writeVInt(requestProcessorFactoryStats.size());
+        @Override
+ * @opensearch.internal
+        if (o == null || getClass() != o.getClass()) return false;
+/**
+        builder.endObject();
+            return pipelineId;
+                && evaluationStats.equals(that.evaluationStats)
+            }
+        @Override
+import org.opensearch.core.common.io.stream.StreamOutput;
+            return Objects.hash(processorName, processorType, stats);
+        @Override
+                && responseProcessorFactoryStats.equals(that.responseProcessorFactoryStats);
+        return builder;
+        OperationStats totalRequestStats,
+        return perPipelineStats;
+                    unmodifiableList(responseProcessorStats)
+    public boolean equals(Object o) {
+            out.writeVInt(requestProcessorStats.size());
+            for (int j = 0; j < numResponseProcessorFactories; j++) {
+            for (FactoryStats factoryStats : requestProcessorFactoryStats) {
+            this.requestProcessorStats = requestProcessorStats;
+import java.io.IOException;
+            builder.endObject();
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                systemGeneratedProcessorStats
+            generationStats = new OperationStats(in);
+            int numResponseProcessors = in.readVInt();
+import java.util.Map;
+            throws IOException {
+        public PipelineDetailStats(List<ProcessorStats> requestProcessorStats, List<ProcessorStats> responseProcessorStats) {
+        }
+        this.perPipelineStats = unmodifiableList(perPipelineStats);
+            OperationMetrics processorMetrics
+        }
+        }
+            && perPipelineStats.equals(stats.perPipelineStats)
+        OperationStats totalResponseStats,
 }
+            for (ProcessorStats processorStats : requestProcessorStats) {
+    }
+    private FactoryDetailStats systemGeneratedFactoryStats;
+            out.writeString(processorType);
+    public SearchPipelineStats(
+            PerPipelineStats that = (PerPipelineStats) o;
+            return this;
+        FactoryStats(String factoryType, OperationStats evaluationStats, OperationStats generationStats) {
+            for (PerPipelineStats pipelineStat : perPipelineStats) {
+            builder.endArray();
+            builder.startObject(factoryType);
+            builder.endObject();
+        private final List<FactoryStats> requestProcessorFactoryStats;
+            builder.startArray(fieldName);
+    private final List<PerPipelineStats> perPipelineStats;
+        @Override
+    }
+        private final OperationStats requestStats;
+import java.util.List;
+            totalResponseStats,
+            systemGeneratedProcessorStats = systemGeneratedProcessorMetrics.getProcessorStats();
+            && systemGeneratedProcessorStats.equals(stats.systemGeneratedProcessorStats);
+                PipelineDetailStats pipelineDetailStats = new PipelineDetailStats(
+            writeProcessorStatsArray(builder, params, "request_processors", requestProcessorStats);
+                List<ProcessorStats> requestProcessorStats = requestProcessorStatsPerPipeline.getOrDefault(
+            String pipelineId,
+        this.systemGeneratedProcessorStats = systemGeneratedProcessorStats;
+                systemGeneratedFactoryStats,
+        private OperationStats totalRequestStats;
+        }
+            return Objects.hash(factoryType, evaluationStats, generationStats);
+            pipelineStat.writeTo(out);
+        }
+                responseProcessorFactoryStats.add(new FactoryStats(in));
+                responseProcessorStats.add(new ProcessorStats(in));
+        }
+            int numRequestProcessorFactories = in.readVInt();
+            builder.startArray(fieldName);
+            builder.startObject("stats");
+    private final OperationStats totalRequestStats;
+                builder.endObject();
+ */
+    static class FactoryDetailStats implements ToXContentFragment, Writeable {
+        @Override
+            for (int j = 0; j < numResponseProcessors; j++) {
+        @Override
+        this.totalRequestStats = new OperationStats(in);
+            this.pipelineId = pipelineId;
+    }
+                    emptyList()
+    }
+        }
+            throws IOException {
+    static class PipelineDetailStats implements ToXContentFragment, Writeable {
+            FactoryDetailStats that = (FactoryDetailStats) o;
+            FactoryStats that = (FactoryStats) o;
+        private final String pipelineId;
+            builder.startObject("request");
+            evaluationStats.toXContent(builder, params);
+            }
+        private FactoryDetailStats systemGeneratedFactoryStats = new FactoryDetailStats(emptyList(), emptyList());
+    }
+            for (ProcessorStats processorStats : responseProcessorStats) {
+ * SPDX-License-Identifier: Apache-2.0
+        OperationStats getStats() {
+        }
+import org.opensearch.common.metrics.OperationStats;
+            out.writeVInt(responseProcessorFactoryStats.size());
+    static class Builder {
+        Map<String, PipelineDetailStats> perPipelineProcessorStats,
+        }
+                unmodifiableList(perPipelineStats),
+        Map<String, PipelineDetailStats> pipelineDetailStatsMap = new TreeMap<>();
+            this.systemGeneratedProcessorStats = new PipelineDetailStats(in);

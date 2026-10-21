@@ -1,225 +1,204 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.AbstractDiffable;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.MapperService;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-
-/**
- * A template consists of optional settings, mappings, or alias configuration for an index, however,
- * it is entirely independent from an index. It's a building block forming part of a regular index
- * template and a {@link ComponentTemplate}.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class Template extends AbstractDiffable<Template> implements ToXContentObject {
-    private static final ParseField SETTINGS = new ParseField("settings");
-    private static final ParseField MAPPINGS = new ParseField("mappings");
-    private static final ParseField ALIASES = new ParseField("aliases");
-
-    @SuppressWarnings("unchecked")
-    public static final ConstructingObjectParser<Template, Void> PARSER = new ConstructingObjectParser<>(
-        "template",
-        false,
-        a -> new Template((Settings) a[0], (CompressedXContent) a[1], (Map<String, AliasMetadata>) a[2])
-    );
-
-    static {
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), (p, c) -> Settings.fromXContent(p), SETTINGS);
-        PARSER.declareObject(
-            ConstructingObjectParser.optionalConstructorArg(),
-            (p, c) -> new CompressedXContent(MediaTypeRegistry.JSON.contentBuilder().map(p.mapOrdered()).toString()),
-            MAPPINGS
-        );
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), (p, c) -> {
-            Map<String, AliasMetadata> aliasMap = new HashMap<>();
-            while ((p.nextToken()) != XContentParser.Token.END_OBJECT) {
-                AliasMetadata alias = AliasMetadata.Builder.fromXContent(p);
-                aliasMap.put(alias.alias(), alias);
-            }
-            return aliasMap;
-        }, ALIASES);
-    }
-
-    @Nullable
-    private final Settings settings;
-    @Nullable
-    private CompressedXContent mappings;
-    @Nullable
-    private final Map<String, AliasMetadata> aliases;
-
-    public Template(@Nullable Settings settings, @Nullable CompressedXContent mappings, @Nullable Map<String, AliasMetadata> aliases) {
+        if (obj.getClass() != getClass()) {
         this.settings = settings;
-        this.mappings = mappings;
         this.aliases = aliases;
-    }
-
     public Template(StreamInput in) throws IOException {
-        if (in.readBoolean()) {
-            this.settings = Settings.readSettingsFromStream(in);
-        } else {
-            this.settings = null;
-        }
-        if (in.readBoolean()) {
-            this.mappings = CompressedXContent.readCompressedString(in);
-        } else {
-            this.mappings = null;
-        }
-        if (in.readBoolean()) {
-            this.aliases = in.readMap(StreamInput::readString, AliasMetadata::new);
-        } else {
-            this.aliases = null;
-        }
+            Settings.writeSettingsToStream(this.settings, out);
     }
-
-    public Settings settings() {
-        return settings;
-    }
-
+    @Nullable
+        if (this.mappings == null) {
+ * the Apache License, Version 2.0 (the "License"); you may
+    private static final ParseField ALIASES = new ParseField("aliases");
+        if (obj == null) {
+package org.opensearch.cluster.metadata;
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), (p, c) -> {
+            builder.endObject();
+        if (in.readBoolean()) {
     public CompressedXContent mappings() {
-        return mappings;
-    }
-
-    public Map<String, AliasMetadata> aliases() {
         return aliases;
     }
-
+    @SuppressWarnings("unchecked")
+            Map<String, AliasMetadata> aliasMap = new HashMap<>();
+    public Settings settings() {
+        if (in.readBoolean()) {
+        return builder;
+            for (AliasMetadata alias : this.aliases.values()) {
+import org.opensearch.core.xcontent.XContentParser;
+    private CompressedXContent mappings;
+        }
+import org.opensearch.core.common.Strings;
+ * this file be licensed under the Apache-2.0 license or a
+ * SPDX-License-Identifier: Apache-2.0
+        } else {
+            out.writeBoolean(false);
+        }
+            while ((p.nextToken()) != XContentParser.Token.END_OBJECT) {
+ * specific language governing permissions and limitations
+            out.writeBoolean(true);
+import org.opensearch.common.compress.CompressedXContent;
+ * template and a {@link ComponentTemplate}.
+ * compatible open source license.
+import java.util.HashMap;
+ *
+            return aliasMap;
+ * software distributed under the License is distributed on an
+            }
+    @SuppressWarnings("unchecked")
+            }
+ * ownership. Elasticsearch licenses this file to you under
+        return Objects.equals(settings, other.settings)
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        if (this.settings == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Settings.writeSettingsToStream(this.settings, out);
-        }
-        if (this.mappings == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            this.mappings.writeTo(out);
-        }
-        if (this.aliases == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
+        }, ALIASES);
+    }
+    }
+        return mappings;
             out.writeMap(this.aliases, StreamOutput::writeString, (stream, aliasMetadata) -> aliasMetadata.writeTo(stream));
         }
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(settings, mappings, aliases);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
         }
-        if (obj.getClass() != getClass()) {
-            return false;
-        }
-        Template other = (Template) obj;
-        return Objects.equals(settings, other.settings)
-            && Objects.equals(mappings, other.mappings)
-            && Objects.equals(aliases, other.aliases);
-    }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        if (this.settings != null) {
-            builder.startObject(SETTINGS.getPreferredName());
-            this.settings.toXContent(builder, params);
-            builder.endObject();
-        }
-        if (this.mappings != null) {
-            Map<String, Object> uncompressedMapping = XContentHelper.convertToMap(
-                this.mappings.uncompressed(),
-                true,
-                MediaTypeRegistry.JSON
-            ).v2();
-            if (uncompressedMapping.size() > 0) {
-                builder.field(MAPPINGS.getPreferredName());
-                builder.map(reduceMapping(uncompressedMapping));
-            }
-        }
-        if (this.aliases != null) {
+ * not use this file except in compliance with the License.
             builder.startObject(ALIASES.getPreferredName());
-            for (AliasMetadata alias : this.aliases.values()) {
-                AliasMetadata.Builder.toXContent(alias, builder, params);
-            }
-            builder.endObject();
-        }
-        builder.endObject();
-        return builder;
+        if (this.settings != null) {
+                AliasMetadata alias = AliasMetadata.Builder.fromXContent(p);
+    public boolean equals(Object obj) {
     }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> reduceMapping(Map<String, Object> mapping) {
-        if (mapping.size() == 1 && MapperService.SINGLE_MAPPING_NAME.equals(mapping.keySet().iterator().next())) {
-            return (Map<String, Object>) mapping.values().iterator().next();
-        } else {
-            return mapping;
-        }
-    }
-
-    public void setMappings(CompressedXContent mappings) {
+import org.opensearch.core.xcontent.MediaTypeRegistry;
         this.mappings = mappings;
+ * The OpenSearch Contributors require contributions made to
+ *
+            this.settings = Settings.readSettingsFromStream(in);
+ */
+/*
+import org.opensearch.common.Nullable;
+        if (this.aliases != null) {
+import java.util.Objects;
+ * under the License.
+        if (this.settings == null) {
+    static {
+import org.opensearch.core.xcontent.XContentBuilder;
+import java.io.IOException;
+        }
+            builder.endObject();
+        PARSER.declareObject(
+            Map<String, Object> uncompressedMapping = XContentHelper.convertToMap(
+        if (mapping.size() == 1 && MapperService.SINGLE_MAPPING_NAME.equals(mapping.keySet().iterator().next())) {
+import org.opensearch.core.common.io.stream.StreamOutput;
+            out.writeBoolean(true);
+                builder.map(reduceMapping(uncompressedMapping));
+            this.mappings.writeTo(out);
+    public void writeTo(StreamOutput out) throws IOException {
+        } else {
     }
+/*
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }
+    }
+        a -> new Template((Settings) a[0], (CompressedXContent) a[1], (Map<String, AliasMetadata>) a[2])
+        false,
+    }
+        } else {
+        }
+        }
+ * A template consists of optional settings, mappings, or alias configuration for an index, however,
+        }
+            this.aliases = null;
+            this.mappings = null;
+ */
+@PublicApi(since = "1.0.0")
+            return (Map<String, Object>) mapping.values().iterator().next();
+    public void setMappings(CompressedXContent mappings) {
+        }
+ *
+    @Override
+        } else {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            MAPPINGS
+import org.opensearch.core.ParseField;
+    @Override
+ * GitHub history for details.
+        } else {
+    public Template(@Nullable Settings settings, @Nullable CompressedXContent mappings, @Nullable Map<String, AliasMetadata> aliases) {
+        );
+        Template other = (Template) obj;
+        }
+ * @opensearch.api
+ */
+/*
+import org.opensearch.common.settings.Settings;
+            return false;
+        } else {
+    private static final ParseField SETTINGS = new ParseField("settings");
+        } else {
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.common.xcontent.XContentHelper;
+            builder.startObject(SETTINGS.getPreferredName());
+        builder.endObject();
+        if (in.readBoolean()) {
+                AliasMetadata.Builder.toXContent(alias, builder, params);
+            ConstructingObjectParser.optionalConstructorArg(),
+    }
+                builder.field(MAPPINGS.getPreferredName());
+            if (uncompressedMapping.size() > 0) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                this.mappings.uncompressed(),
+ * license agreements. See the NOTICE file distributed with
+            out.writeBoolean(false);
+    @Nullable
+            out.writeBoolean(true);
+                true,
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), (p, c) -> Settings.fromXContent(p), SETTINGS);
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the
+public class Template extends AbstractDiffable<Template> implements ToXContentObject {
+    public static final ConstructingObjectParser<Template, Void> PARSER = new ConstructingObjectParser<>(
+            this.mappings = CompressedXContent.readCompressedString(in);
+ *
+            return mapping;
+ */
+ * Licensed to Elasticsearch under one or more contributor
+            this.settings.toXContent(builder, params);
+import org.opensearch.core.xcontent.ToXContentObject;
+    private final Map<String, AliasMetadata> aliases;
+            return false;
+    private final Settings settings;
+/**
+    }
+    @Override
+    }
+        return Objects.hash(settings, mappings, aliases);
+            }
+            ).v2();
+            this.settings = null;
+    private static Map<String, Object> reduceMapping(Map<String, Object> mapping) {
+    public int hashCode() {
+import org.opensearch.common.annotation.PublicApi;
+        if (this.mappings != null) {
+        return settings;
+    public Map<String, AliasMetadata> aliases() {
+                MediaTypeRegistry.JSON
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+            this.aliases = in.readMap(StreamInput::readString, AliasMetadata::new);
+    public String toString() {
+import java.util.Map;
+ * it is entirely independent from an index. It's a building block forming part of a regular index
+import org.opensearch.cluster.AbstractDiffable;
+    );
+ * Unless required by applicable law or agreed to in writing,
+            (p, c) -> new CompressedXContent(MediaTypeRegistry.JSON.contentBuilder().map(p.mapOrdered()).toString()),
+                aliasMap.put(alias.alias(), alias);
+import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.index.mapper.MapperService;
+            && Objects.equals(mappings, other.mappings)
 }
+            out.writeBoolean(false);
+ * You may obtain a copy of the License at
+    private static final ParseField MAPPINGS = new ParseField("mappings");
+    }
+        }
+        "template",
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+            && Objects.equals(aliases, other.aliases);
+        if (this.aliases == null) {
+    @Nullable
+    @Override
+        this.mappings = mappings;
+        builder.startObject();

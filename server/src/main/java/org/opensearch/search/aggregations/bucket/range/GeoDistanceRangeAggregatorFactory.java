@@ -1,236 +1,215 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
+    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
+     * The source location for the distance calculation
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+        );
+    private final Range[] ranges;
+                metadata,
  * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
+            },
+                keyed,
+        CardinalityUpperBound cardinality,
+        public SortedBinaryDocValues bytesValues(LeafReaderContext ctx) {
+        public boolean isBigInteger() {
+        ) {
+                factories,
+        private final DistanceUnit units;
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
+            metadata
+                config
+            GeoDistanceAggregationBuilder.REGISTRY_KEY,
+                config.getValuesSource(),
+                unit,
+ * this file be licensed under the Apache-2.0 license or a
+            CoreValuesSourceType.GEOPOINT,
+     * @opensearch.internal
+                    metadata,
+        GeoDistance distanceType,
+     */
+    }
+import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
  * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.range;
-
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.SortedNumericDocValues;
 import org.opensearch.common.geo.GeoDistance;
+/**
+                    rangeFactory,
+ * under the License.
+            );
+        DistanceSource(
+    public GeoDistanceRangeAggregatorFactory(
+                rangeFactory,
+ * @opensearch.internal
+            parent,
+    }
+            return GeoUtils.distanceValues(distanceType, units, geoValues, origin);
+                cardinality,
+                ranges,
+ * KIND, either express or implied.  See the License for the
+                    ranges,
+ * this work for additional information regarding copyright
+    }
+        SearchContext searchContext,
+            true
+    }
+                rangeFactory,
+     *
+                context,
+                name,
+    private final GeoPoint origin;
+            this.distanceType = distanceType;
+        }
+import java.io.IOException;
+                    name,
+import org.apache.lucene.index.LeafReaderContext;
+        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
+    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
+    ) throws IOException {
+            this.source = source;
+    /**
+            ranges,
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        DistanceUnit unit,
+            final MultiGeoPointValues geoValues = source.geoPointValues(ctx);
+import org.apache.lucene.index.SortedNumericDocValues;
+        @Override
+ * compatible open source license.
+                );
+ * not use this file except in compliance with the License.
+        String name,
+            this.origin = origin;
+import org.opensearch.index.query.QueryShardContext;
+            ValuesSource.GeoPoint source,
+                searchContext,
+import org.opensearch.search.internal.SearchContext;
+}
+        }
+import org.opensearch.index.fielddata.SortedBinaryDocValues;
+                    format,
+        @Override
+ * SPDX-License-Identifier: Apache-2.0
+        public SortedNumericDoubleValues doubleValues(LeafReaderContext ctx) {
+        AggregatorFactory parent,
+/*
+ */
+    private final InternalRange.Factory<InternalGeoDistance.Bucket, InternalGeoDistance> rangeFactory = InternalGeoDistance.FACTORY;
+        this.unit = unit;
+                    distanceSource,
+import org.opensearch.search.aggregations.Aggregator;
+            GeoDistance distanceType,
+        }
+            this.units = units;
+    }
+            name,
+import java.util.Map;
+    private static class DistanceSource extends ValuesSource.Numeric {
+            keyed,
+        this.keyed = keyed;
+    @Override
+ * The OpenSearch Contributors require contributions made to
+                ranges,
+            return false;
+                valuesSource,
+        AggregatorFactories.Builder subFactoriesBuilder,
+    @Override
+            searchContext,
+        this.origin = origin;
+                    parent,
+import org.opensearch.search.aggregations.AggregatorFactory;
+            config.format(),
+        public SortedNumericDocValues longValues(LeafReaderContext ctx) {
+/*
+                factories,
+ * specific language governing permissions and limitations
+import org.opensearch.common.unit.DistanceUnit;
+/*
+import org.opensearch.search.aggregations.support.CoreValuesSourceType;
+            (
+                    keyed,
+                DistanceSource distanceSource = new DistanceSource((ValuesSource.GeoPoint) valuesSource, distanceType, origin, units);
+                distanceType,
+import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder.Range;
+            org.opensearch.common.geo.GeoPoint origin,
+        @Override
+        QueryShardContext queryShardContext,
+        private final GeoDistance distanceType;
+                cardinality,
+            // distances are
+ */
+            .getAggregator(GeoDistanceAggregationBuilder.REGISTRY_KEY, config)
+import org.opensearch.index.fielddata.SortedNumericDoubleValues;
+    @Override
+        this.distanceType = distanceType;
+        Aggregator parent,
+ *
+    private final DistanceUnit unit;
+            DistanceUnit units
+                origin,
+                parent,
 import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.common.geo.GeoUtils;
-import org.opensearch.common.unit.DistanceUnit;
-import org.opensearch.index.fielddata.MultiGeoPointValues;
-import org.opensearch.index.fielddata.SortedBinaryDocValues;
-import org.opensearch.index.fielddata.SortedNumericDoubleValues;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.aggregations.Aggregator;
-import org.opensearch.search.aggregations.AggregatorFactories;
-import org.opensearch.search.aggregations.AggregatorFactory;
-import org.opensearch.search.aggregations.CardinalityUpperBound;
-import org.opensearch.search.aggregations.bucket.range.GeoDistanceAggregationBuilder.Range;
-import org.opensearch.search.aggregations.support.CoreValuesSourceType;
-import org.opensearch.search.aggregations.support.ValuesSource;
-import org.opensearch.search.aggregations.support.ValuesSourceAggregatorFactory;
-import org.opensearch.search.aggregations.support.ValuesSourceConfig;
-import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
-import org.opensearch.search.internal.SearchContext;
-
-import java.io.IOException;
-import java.util.Map;
-
-/**
- * Aggregation Factory for geo_distance agg
- *
- * @opensearch.internal
- */
-public class GeoDistanceRangeAggregatorFactory extends ValuesSourceAggregatorFactory {
-
-    public static void registerAggregators(ValuesSourceRegistry.Builder builder) {
-        builder.register(
-            GeoDistanceAggregationBuilder.REGISTRY_KEY,
-            CoreValuesSourceType.GEOPOINT,
-            (
-                name,
-                factories,
-                distanceType,
-                origin,
-                units,
-                valuesSource,
-                format,
-                rangeFactory,
-                ranges,
                 keyed,
-                context,
-                parent,
-                cardinality,
-                metadata,
-                config) -> {
-                DistanceSource distanceSource = new DistanceSource((ValuesSource.GeoPoint) valuesSource, distanceType, origin, units);
-                return new RangeAggregator(
-                    name,
-                    factories,
-                    distanceSource,
-                    format,
-                    rangeFactory,
-                    ranges,
-                    keyed,
-                    context,
-                    parent,
-                    cardinality,
-                    metadata,
-                    config
-                );
-            },
-            true
-        );
-    }
-
-    private final InternalRange.Factory<InternalGeoDistance.Bucket, InternalGeoDistance> rangeFactory = InternalGeoDistance.FACTORY;
-    private final GeoPoint origin;
-    private final Range[] ranges;
-    private final DistanceUnit unit;
-    private final GeoDistance distanceType;
-    private final boolean keyed;
-
-    public GeoDistanceRangeAggregatorFactory(
-        String name,
-        ValuesSourceConfig config,
-        GeoPoint origin,
-        Range[] ranges,
-        DistanceUnit unit,
-        GeoDistance distanceType,
-        boolean keyed,
-        QueryShardContext queryShardContext,
-        AggregatorFactory parent,
-        AggregatorFactories.Builder subFactoriesBuilder,
-        Map<String, Object> metadata
-    ) throws IOException {
-        super(name, config, queryShardContext, parent, subFactoriesBuilder, metadata);
-        this.origin = origin;
-        this.ranges = ranges;
-        this.unit = unit;
-        this.distanceType = distanceType;
-        this.keyed = keyed;
-    }
-
-    @Override
-    protected Aggregator createUnmapped(SearchContext searchContext, Aggregator parent, Map<String, Object> metadata) throws IOException {
-        return new RangeAggregator.Unmapped<>(
-            name,
-            factories,
-            ranges,
-            keyed,
-            config.format(),
-            searchContext,
-            parent,
-            rangeFactory,
-            metadata
-        );
-    }
-
-    @Override
-    protected Aggregator doCreateInternal(
-        SearchContext searchContext,
-        Aggregator parent,
-        CardinalityUpperBound cardinality,
-        Map<String, Object> metadata
-    ) throws IOException {
         return queryShardContext.getValuesSourceRegistry()
-            .getAggregator(GeoDistanceAggregationBuilder.REGISTRY_KEY, config)
-            .build(
-                name,
-                factories,
-                distanceType,
-                origin,
-                unit,
-                config.getValuesSource(),
-                config.format(),
-                rangeFactory,
-                ranges,
-                keyed,
-                searchContext,
-                parent,
-                cardinality,
-                metadata,
-                config
-            );
-    }
-
-    @Override
-    protected boolean supportsConcurrentSegmentSearch() {
-        return true;
-    }
-
-    /**
-     * The source location for the distance calculation
-     *
-     * @opensearch.internal
-     */
-    private static class DistanceSource extends ValuesSource.Numeric {
-
-        private final ValuesSource.GeoPoint source;
-        private final GeoDistance distanceType;
-        private final DistanceUnit units;
+        return new RangeAggregator.Unmapped<>(
+        builder.register(
         private final org.opensearch.common.geo.GeoPoint origin;
-
-        DistanceSource(
-            ValuesSource.GeoPoint source,
-            GeoDistance distanceType,
-            org.opensearch.common.geo.GeoPoint origin,
-            DistanceUnit units
-        ) {
-            this.source = source;
+import org.opensearch.search.aggregations.CardinalityUpperBound;
+                    cardinality,
+        boolean keyed,
+                origin,
+    private final boolean keyed;
+    }
+import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
+                config.format(),
             // even if the geo points are unique, there's no guarantee the
-            // distances are
-            this.distanceType = distanceType;
-            this.units = units;
-            this.origin = origin;
         }
-
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.index.fielddata.MultiGeoPointValues;
+ * ownership. Elasticsearch licenses this file to you under
+                    config
         @Override
+ *
+import org.opensearch.search.aggregations.support.ValuesSource;
+    private final GeoDistance distanceType;
         public boolean isFloatingPoint() {
             return true;
-        }
-
-        @Override
-        public boolean isBigInteger() {
-            return false;
-        }
-
-        @Override
-        public SortedNumericDocValues longValues(LeafReaderContext ctx) {
+package org.opensearch.search.aggregations.bucket.range;
+        Map<String, Object> metadata
+                    factories,
+ */
+        GeoPoint origin,
+    protected boolean supportsConcurrentSegmentSearch() {
+            .build(
+ * GitHub history for details.
+import org.opensearch.search.aggregations.support.ValuesSourceConfig;
+ * You may obtain a copy of the License at
+ * software distributed under the License is distributed on an
+            rangeFactory,
+                name,
+        private final ValuesSource.GeoPoint source;
+                parent,
+ *
+                metadata,
             throw new UnsupportedOperationException();
+                config) -> {
+public class GeoDistanceRangeAggregatorFactory extends ValuesSourceAggregatorFactory {
+import org.opensearch.search.aggregations.AggregatorFactories;
+                format,
+ * Aggregation Factory for geo_distance agg
+        ValuesSourceConfig config,
+                    context,
+        );
+            factories,
+        Range[] ranges,
         }
-
-        @Override
-        public SortedNumericDoubleValues doubleValues(LeafReaderContext ctx) {
-            final MultiGeoPointValues geoValues = source.geoPointValues(ctx);
-            return GeoUtils.distanceValues(distanceType, units, geoValues, origin);
+ * license agreements. See the NOTICE file distributed with
+                return new RangeAggregator(
+                distanceType,
         }
-
+                units,
+        Map<String, Object> metadata
+        this.ranges = ranges;
         @Override
-        public SortedBinaryDocValues bytesValues(LeafReaderContext ctx) {
+        return true;
+    protected Aggregator doCreateInternal(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    ) throws IOException {
             throw new UnsupportedOperationException();
-        }
-
-    }
-}
+ *

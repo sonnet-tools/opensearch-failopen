@@ -1,375 +1,335 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.MultiTermQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.lucene.BytesRefs;
-import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.support.QueryParsers;
-
-import java.io.IOException;
-import java.util.Objects;
-
-/**
- * A Query that does fuzzy matching for a specific value.
- *
- * @opensearch.internal
- */
-public class RegexpQueryBuilder extends AbstractQueryBuilder<RegexpQueryBuilder> implements MultiTermQueryBuilder {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RegexpQueryBuilder.class);
-
-    public static final String NAME = "regexp";
-
-    public static final int DEFAULT_FLAGS_VALUE = RegexpFlag.ALL.value();
-    public static final int DEFAULT_DETERMINIZE_WORK_LIMIT = Operations.DEFAULT_DETERMINIZE_WORK_LIMIT;
-    /**
-     * Upper bound for {@code max_determinized_states}. The determinize work limit exists to cap the
-     * amount of work Lucene performs while determinizing a regexp automaton; allowing an arbitrarily
-     * large value (e.g. {@link Integer#MAX_VALUE}) effectively disables that safeguard and lets a
-     * crafted pattern exhaust the heap before Lucene ever throws {@code TooComplexToDeterminizeException}.
-     * This ceiling (100x the default) still permits legitimately complex expressions while keeping the
-     * safeguard effective. See CVE-2026-63136.
-     */
-    public static final int MAX_DETERMINIZE_WORK_LIMIT = 1_000_000;
-    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
-
-    private static final ParseField FLAGS_VALUE_FIELD = new ParseField("flags_value");
-    private static final ParseField MAX_DETERMINIZED_STATES_FIELD = new ParseField("max_determinized_states");
-    private static final ParseField FLAGS_FIELD = new ParseField("flags");
-    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
-    private static final ParseField REWRITE_FIELD = new ParseField("rewrite");
-    private static final ParseField VALUE_FIELD = new ParseField("value");
-
-    private final String fieldName;
-
-    private final String value;
-
-    private int syntaxFlagsValue = DEFAULT_FLAGS_VALUE;
-    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
-
-    private int maxDeterminizedStates = DEFAULT_DETERMINIZE_WORK_LIMIT;
-
-    private String rewrite;
-
-    /**
-     * Constructs a new regex query.
-     *
-     * @param fieldName  The name of the field
-     * @param value The regular expression
-     */
-    public RegexpQueryBuilder(String fieldName, String value) {
-        if (Strings.isEmpty(fieldName)) {
-            throw new IllegalArgumentException("field name is null or empty");
-        }
-        if (value == null) {
-            throw new IllegalArgumentException("value cannot be null");
-        }
-        this.fieldName = fieldName;
-        this.value = value;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public RegexpQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        fieldName = in.readString();
-        value = in.readString();
-        syntaxFlagsValue = in.readVInt();
-        // Route through the setter so the CVE-2026-63136 bound is enforced on the transport
-        // deserialization path too, not just REST/XContent. Protects a patched data node from an
-        // unbounded value sent by an unpatched coordinating node in a mixed-version cluster.
-        maxDeterminizedStates(in.readVInt());
-        rewrite = in.readOptionalString();
-        caseInsensitive = in.readBoolean();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
-        out.writeString(value);
-        out.writeVInt(syntaxFlagsValue);
-        out.writeVInt(maxDeterminizedStates);
-        out.writeOptionalString(rewrite);
-        out.writeBoolean(caseInsensitive);
-    }
-
-    /** Returns the field name used in this query. */
-    @Override
-    public String fieldName() {
-        return this.fieldName;
-    }
-
-    /**
-     *  Returns the value used in this query.
-     */
-    public String value() {
-        return this.value;
-    }
-
-    public RegexpQueryBuilder flags(RegexpFlag... flags) {
-        if (flags == null) {
-            this.syntaxFlagsValue = DEFAULT_FLAGS_VALUE;
-            return this;
-        }
-        int value = 0;
-        if (flags.length == 0) {
-            value = RegexpFlag.ALL.value;
-        } else {
-            for (RegexpFlag flag : flags) {
-                value |= flag.value;
-            }
-        }
-        this.syntaxFlagsValue = value;
-        return this;
-    }
-
-    public RegexpQueryBuilder flags(int flags) {
-        this.syntaxFlagsValue = flags;
-        return this;
-    }
-
-    public int flags() {
-        return this.syntaxFlagsValue;
-    }
-
-    public RegexpQueryBuilder caseInsensitive(boolean caseInsensitive) {
         this.caseInsensitive = caseInsensitive;
-        return this;
-    }
-
-    public boolean caseInsensitive() {
-        return this.caseInsensitive;
-    }
-
+                value = parser.textOrNull();
+            query = new RegexpQuery(
+            }
+    public int flags() {
+            } else if (token == XContentParser.Token.START_OBJECT) {
+/*
     /**
-     * Sets the regexp maxDeterminizedStates.
-     */
-    public RegexpQueryBuilder maxDeterminizedStates(int value) {
-        if (value < 0) {
+}
+import org.opensearch.core.common.Strings;
             throw new IllegalArgumentException("[" + NAME + "] max_determinized_states cannot be negative but was [" + value + "]");
+            && Objects.equals(rewrite, other.rewrite);
+        if ((syntaxFlagsValue & RegexpFlag.COMPLEMENT.value()) != 0) {
         }
-        if (value > MAX_DETERMINIZE_WORK_LIMIT) {
-            throw new IllegalArgumentException(
-                "[" + NAME + "] max_determinized_states cannot exceed [" + MAX_DETERMINIZE_WORK_LIMIT + "] but was [" + value + "]"
+ * software distributed under the License is distributed on an
+            && Objects.equals(value, other.value)
+            if (token == XContentParser.Token.FIELD_NAME) {
+                            flagsValue = RegexpFlag.resolveValue(flags);
+public class RegexpQueryBuilder extends AbstractQueryBuilder<RegexpQueryBuilder> implements MultiTermQueryBuilder {
+import org.apache.lucene.util.automaton.Operations;
+            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
+    protected int doHashCode() {
+ * license agreements. See the NOTICE file distributed with
+                matchFlagsValue,
+    public static final int MAX_DETERMINIZE_WORK_LIMIT = 1_000_000;
+                            rewrite = parser.textOrNull();
+            builder.field(REWRITE_FIELD.getPreferredName(), rewrite);
+        int value = 0;
+import org.opensearch.core.common.io.stream.StreamInput;
+        int sanitisedSyntaxFlag = syntaxFlagsValue & (RegExp.ALL | RegExp.DEPRECATED_COMPLEMENT);
+    public RegexpQueryBuilder caseInsensitive(boolean caseInsensitive) {
+    }
+                        } else if (CASE_INSENSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+                    + "] used in the Regexp Query request has exceeded "
+import org.apache.lucene.search.MultiTermQuery;
+        int matchFlagsValue = caseInsensitive ? RegExp.ASCII_CASE_INSENSITIVE : 0;
             );
+        if (value.length() > maxAllowedRegexLength) {
+    }
+    private int syntaxFlagsValue = DEFAULT_FLAGS_VALUE;
+import org.apache.lucene.search.RegexpQuery;
+    public RegexpQueryBuilder flags(RegexpFlag... flags) {
+import org.opensearch.core.ParseField;
+    public String fieldName() {
+     * amount of work Lucene performs while determinizing a regexp automaton; allowing an arbitrarily
+    }
+        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
+     */
+                currentFieldName = parser.currentName();
+                fieldName = currentFieldName;
+                            throw new ParsingException(
+        // Route through the setter so the CVE-2026-63136 bound is enforced on the transport
+            this.syntaxFlagsValue = DEFAULT_FLAGS_VALUE;
+        // The hexadecimal for DEPRECATED_COMPLEMENT is 0x10000. The OR condition ensures COMPLEMENT ~ is preserved
+            throw new IllegalArgumentException("value cannot be null");
+                            maxDeterminizedStates = parser.intValue();
+import java.util.Objects;
+    private static final ParseField MAX_DETERMINIZED_STATES_FIELD = new ParseField("max_determinized_states");
+                    }
+                fieldName = currentFieldName;
+        RegexpQueryBuilder result = new RegexpQueryBuilder(fieldName, value).flags(flagsValue)
+            );
+import java.io.IOException;
+ */
+        if (flags == null) {
+        if (rewrite != null) {
+    }
+            && Objects.equals(syntaxFlagsValue, other.syntaxFlagsValue)
+    }
+ * Modifications Copyright OpenSearch Contributors. See
+        if (flags.length == 0) {
+        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {
         }
-        this.maxDeterminizedStates = value;
+        }
+            } else {
         return this;
-    }
-
-    public int maxDeterminizedStates() {
-        return this.maxDeterminizedStates;
-    }
-
-    public RegexpQueryBuilder rewrite(String rewrite) {
-        this.rewrite = rewrite;
-        return this;
-    }
-
+        return query;
+     * This ceiling (100x the default) still permits legitimately complex expressions while keeping the
+    public boolean caseInsensitive() {
+        }
+     */
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
+        out.writeString(fieldName);
+        }
+ * specific language governing permissions and limitations
     public String rewrite() {
         return this.rewrite;
+                "regexp_complement_operator",
+            }
+                        } else if (MAX_DETERMINIZED_STATES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        // For BWC we mask irrelevant bits (RegExp changed ALL from 0xffff to 0xff)
+    public static final String NAME = "regexp";
+        return this.caseInsensitive;
+    public static final int DEFAULT_DETERMINIZE_WORK_LIMIT = Operations.DEFAULT_DETERMINIZE_WORK_LIMIT;
+            && Objects.equals(maxDeterminizedStates, other.maxDeterminizedStates)
+    public static RegexpQueryBuilder fromXContent(XContentParser parser) throws IOException {
+     * Constructs a new regex query.
+                "The length of regex ["
+        String rewrite = null;
+        final int maxAllowedRegexLength = context.getIndexSettings().getMaxRegexLength();
+            );
+     * @param fieldName  The name of the field
+        MappedFieldType fieldType = context.fieldMapper(fieldName);
+ * A Query that does fuzzy matching for a specific value.
+    public static final int DEFAULT_FLAGS_VALUE = RegexpFlag.ALL.value();
+            .rewrite(rewrite)
+        out.writeString(value);
+        return this.fieldName;
+        return this.value;
+ */
+import org.opensearch.index.IndexSettings;
+        syntaxFlagsValue = in.readVInt();
+        builder.endObject();
+        value = in.readString();
+/*
+ * ownership. Elasticsearch licenses this file to you under
+                            queryName = parser.text();
+            throw new IllegalArgumentException(
     }
-
+    }
+     * large value (e.g. {@link Integer#MAX_VALUE}) effectively disables that safeguard and lets a
+        out.writeVInt(maxDeterminizedStates);
+    private boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
+     */
+    public RegexpQueryBuilder flags(int flags) {
+        this.fieldName = fieldName;
+    }
+                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+ * compatible open source license.
+ * under the License.
+        caseInsensitive = in.readBoolean();
+            throw new IllegalArgumentException("field name is null or empty");
+    }
+        out.writeVInt(syntaxFlagsValue);
+    private final String fieldName;
+    @Override
+    private static final ParseField VALUE_FIELD = new ParseField("value");
+import org.apache.lucene.index.Term;
+        this.value = value;
+        builder.field(MAX_DETERMINIZED_STATES_FIELD.getPreferredName(), maxDeterminizedStates);
+ * SPDX-License-Identifier: Apache-2.0
+    /**
+        rewrite = in.readOptionalString();
+        return this;
+     */
+    public RegexpQueryBuilder(StreamInput in) throws IOException {
+    public static final boolean DEFAULT_CASE_INSENSITIVITY = false;
+        }
+        String queryName = null;
+package org.opensearch.index.query;
+                        } else {
+     * Sets the regexp maxDeterminizedStates.
+        String value = null;
+        return this.syntaxFlagsValue;
+        fieldName = in.readString();
+        return this;
+        builder.startObject(fieldName);
+    }
+        }
+     * Upper bound for {@code max_determinized_states}. The determinize work limit exists to cap the
+    private final String value;
+                "The complement operator (~) for arbitrary patterns in regexp queries is deprecated and will be removed in a future version. "
+    public RegexpQueryBuilder rewrite(String rewrite) {
+        String fieldName = null;
+    @Override
+import org.opensearch.common.lucene.BytesRefs;
+    /**
+    public String value() {
+        int flagsValue = RegexpQueryBuilder.DEFAULT_FLAGS_VALUE;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                            flagsValue = parser.intValue();
+                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
+                new Term(fieldName, BytesRefs.toBytesRef(value)),
+    }
+ * Unless required by applicable law or agreed to in writing,
+        builder.field(VALUE_FIELD.getPreferredName(), this.value);
+        int maxDeterminizedStates = RegexpQueryBuilder.DEFAULT_DETERMINIZE_WORK_LIMIT;
+                        currentFieldName = parser.currentName();
+                                "[regexp] query does not support [" + currentFieldName + "]"
+    }
+    public RegexpQueryBuilder maxDeterminizedStates(int value) {
+        builder.field(FLAGS_VALUE_FIELD.getPreferredName(), syntaxFlagsValue);
+                    + value.length()
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(RegexpQueryBuilder.class);
+        return result;
+/**
+        } else {
+        }
+        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
+    public int maxDeterminizedStates() {
+                    + maxAllowedRegexLength
+    private static final ParseField CASE_INSENSITIVE_FIELD = new ParseField("case_insensitive");
+        if (value < 0) {
+    /**
+ * the Apache License, Version 2.0 (the "License"); you may
+    public RegexpQueryBuilder(String fieldName, String value) {
+ *
+            );
+ * The OpenSearch Contributors require contributions made to
+import org.apache.lucene.util.automaton.RegExp;
+    }
+     */
+        if (query == null) {
+        return Objects.equals(fieldName, other.fieldName)
+        builder.startObject(NAME);
+        out.writeBoolean(caseInsensitive);
+                            value = parser.textOrNull();
+        out.writeOptionalString(rewrite);
+ */
+import org.opensearch.core.common.io.stream.StreamOutput;
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+        this.syntaxFlagsValue = value;
+        // This deprecation warning helps users migrate their queries before the feature is completely removed
+        }
+            throw new IllegalArgumentException(
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.index.query.support.QueryParsers;
+                            );
+     *  Returns the value used in this query.
+            && Objects.equals(caseInsensitive, other.caseInsensitive)
+                        if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    }
+ */
+        this.rewrite = rewrite;
+        XContentParser.Token token;
+        String currentFieldName = null;
+        return this;
+        return this;
+        // unbounded value sent by an unpatched coordinating node in a mixed-version cluster.
+ * @opensearch.internal
+    }
+                method = MultiTermQuery.CONSTANT_SCORE_REWRITE;
+        result.caseInsensitive(caseInsensitive);
+            .queryName(queryName);
+    protected Query doToQuery(QueryShardContext context) throws QueryShardException, IOException {
+                RegexpQuery.DEFAULT_PROVIDER,
+    }
+                    + "]. "
+                            String flags = parser.textOrNull();
+            }
+        MultiTermQuery.RewriteMethod method = QueryParsers.parseRewriteMethod(rewrite, null, LoggingDeprecationHandler.INSTANCE);
+        this.maxDeterminizedStates = value;
+                        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * You may obtain a copy of the License at
+            deprecationLogger.deprecate(
+        }
+ * Licensed to Elasticsearch under one or more contributor
+ * this work for additional information regarding copyright
+    @Override
+                        } else if (REWRITE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        }
+    private static final ParseField FLAGS_FIELD = new ParseField("flags");
+        maxDeterminizedStates(in.readVInt());
+ * KIND, either express or implied.  See the License for the
+    }
+        if (value > MAX_DETERMINIZE_WORK_LIMIT) {
+    }
+import org.opensearch.index.mapper.MappedFieldType;
+/*
+     *
+    @Override
+        }
+                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import org.opensearch.core.xcontent.XContentBuilder;
+    public String getWriteableName() {
+        }
+            .boost(boost)
+    /**
+    private int maxDeterminizedStates = DEFAULT_DETERMINIZE_WORK_LIMIT;
+                        } else if (FLAGS_VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+        return Objects.hash(fieldName, value, syntaxFlagsValue, caseInsensitive, maxDeterminizedStates, rewrite);
+     * safeguard effective. See CVE-2026-63136.
+ * not use this file except in compliance with the License.
+        if (value == null) {
+        // deserialization path too, not just REST/XContent. Protects a patched data node from an
+    /** Returns the field name used in this query. */
+     * crafted pattern exhaust the heap before Lucene ever throws {@code TooComplexToDeterminizeException}.
+                method
+    protected boolean doEquals(RegexpQueryBuilder other) {
+import org.apache.lucene.search.Query;
+                }
+                    + "] index level setting."
     @Override
     protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAME);
-        builder.startObject(fieldName);
-        builder.field(VALUE_FIELD.getPreferredName(), this.value);
-        builder.field(FLAGS_VALUE_FIELD.getPreferredName(), syntaxFlagsValue);
-        if (caseInsensitive != DEFAULT_CASE_INSENSITIVITY) {
-            builder.field(CASE_INSENSITIVE_FIELD.getPreferredName(), caseInsensitive);
-        }
-        builder.field(MAX_DETERMINIZED_STATES_FIELD.getPreferredName(), maxDeterminizedStates);
-        if (rewrite != null) {
-            builder.field(REWRITE_FIELD.getPreferredName(), rewrite);
-        }
-        printBoostAndQueryName(builder);
-        builder.endObject();
-        builder.endObject();
     }
-
-    public static RegexpQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        String fieldName = null;
-        String rewrite = null;
-        String value = null;
-        float boost = AbstractQueryBuilder.DEFAULT_BOOST;
-        int flagsValue = RegexpQueryBuilder.DEFAULT_FLAGS_VALUE;
-        boolean caseInsensitive = DEFAULT_CASE_INSENSITIVITY;
-        int maxDeterminizedStates = RegexpQueryBuilder.DEFAULT_DETERMINIZE_WORK_LIMIT;
-        String queryName = null;
-        String currentFieldName = null;
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, currentFieldName);
-                fieldName = currentFieldName;
-                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                    if (token == XContentParser.Token.FIELD_NAME) {
-                        currentFieldName = parser.currentName();
-                    } else {
-                        if (VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            value = parser.textOrNull();
-                        } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            boost = parser.floatValue();
-                        } else if (REWRITE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            rewrite = parser.textOrNull();
-                        } else if (FLAGS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            String flags = parser.textOrNull();
-                            flagsValue = RegexpFlag.resolveValue(flags);
-                        } else if (MAX_DETERMINIZED_STATES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            maxDeterminizedStates = parser.intValue();
-                        } else if (FLAGS_VALUE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            flagsValue = parser.intValue();
-                        } else if (CASE_INSENSITIVE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            caseInsensitive = parser.booleanValue();
-                        } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                            queryName = parser.text();
-                        } else {
-                            throw new ParsingException(
-                                parser.getTokenLocation(),
-                                "[regexp] query does not support [" + currentFieldName + "]"
-                            );
-                        }
-                    }
-                }
-            } else {
-                throwParsingExceptionOnMultipleFields(NAME, parser.getTokenLocation(), fieldName, parser.currentName());
-                fieldName = currentFieldName;
-                value = parser.textOrNull();
-            }
-        }
-
-        RegexpQueryBuilder result = new RegexpQueryBuilder(fieldName, value).flags(flagsValue)
-            .maxDeterminizedStates(maxDeterminizedStates)
-            .rewrite(rewrite)
-            .boost(boost)
-            .queryName(queryName);
-        result.caseInsensitive(caseInsensitive);
-        return result;
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    protected Query doToQuery(QueryShardContext context) throws QueryShardException, IOException {
-        final int maxAllowedRegexLength = context.getIndexSettings().getMaxRegexLength();
-        if (value.length() > maxAllowedRegexLength) {
-            throw new IllegalArgumentException(
-                "The length of regex ["
-                    + value.length()
-                    + "] used in the Regexp Query request has exceeded "
-                    + "the allowed maximum of ["
-                    + maxAllowedRegexLength
-                    + "]. "
-                    + "This maximum can be set by changing the ["
-                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()
-                    + "] index level setting."
-            );
-        }
-
-        // Check if COMPLEMENT flag is being used
-        // The COMPLEMENT flag maps to Lucene's DEPRECATED_COMPLEMENT which is marked for removal in Lucene 11
-        // This deprecation warning helps users migrate their queries before the feature is completely removed
-        if ((syntaxFlagsValue & RegexpFlag.COMPLEMENT.value()) != 0) {
-            deprecationLogger.deprecate(
-                "regexp_complement_operator",
-                "The complement operator (~) for arbitrary patterns in regexp queries is deprecated and will be removed in a future version. "
-                    + "Consider rewriting your query to use character class negation [^...] or other query types."
-            );
-        }
-
-        MultiTermQuery.RewriteMethod method = QueryParsers.parseRewriteMethod(rewrite, null, LoggingDeprecationHandler.INSTANCE);
-
-        int matchFlagsValue = caseInsensitive ? RegExp.ASCII_CASE_INSENSITIVE : 0;
-        Query query = null;
-        // For BWC we mask irrelevant bits (RegExp changed ALL from 0xffff to 0xff)
-        // The hexadecimal for DEPRECATED_COMPLEMENT is 0x10000. The OR condition ensures COMPLEMENT ~ is preserved
-        int sanitisedSyntaxFlag = syntaxFlagsValue & (RegExp.ALL | RegExp.DEPRECATED_COMPLEMENT);
-
-        MappedFieldType fieldType = context.fieldMapper(fieldName);
         if (fieldType != null) {
-            query = fieldType.regexpQuery(value, sanitisedSyntaxFlag, matchFlagsValue, maxDeterminizedStates, method, context);
-        }
-        if (query == null) {
-            if (method == null) {
-                method = MultiTermQuery.CONSTANT_SCORE_REWRITE;
-            }
-            query = new RegexpQuery(
-                new Term(fieldName, BytesRefs.toBytesRef(value)),
-                sanitisedSyntaxFlag,
-                matchFlagsValue,
-                RegexpQuery.DEFAULT_PROVIDER,
                 maxDeterminizedStates,
-                method
-            );
-        }
-        return query;
+ *
+        this.syntaxFlagsValue = flags;
+                value |= flag.value;
+import org.opensearch.common.logging.DeprecationLogger;
+     * Read from a stream.
+            .maxDeterminizedStates(maxDeterminizedStates)
+        // Check if COMPLEMENT flag is being used
+                        } else if (FLAGS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+    protected void doWriteTo(StreamOutput out) throws IOException {
+                "[" + NAME + "] max_determinized_states cannot exceed [" + MAX_DETERMINIZE_WORK_LIMIT + "] but was [" + value + "]"
+        return NAME;
+                            caseInsensitive = parser.booleanValue();
+                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()
+ *
+import org.opensearch.core.xcontent.XContentParser;
+            return this;
+    private static final ParseField REWRITE_FIELD = new ParseField("rewrite");
+        // The COMPLEMENT flag maps to Lucene's DEPRECATED_COMPLEMENT which is marked for removal in Lucene 11
     }
-
+                            boost = parser.floatValue();
+                sanitisedSyntaxFlag,
+        printBoostAndQueryName(builder);
+     * @param value The regular expression
+                                parser.getTokenLocation(),
+    private String rewrite;
+ * GitHub history for details.
+                    + "This maximum can be set by changing the ["
+            for (RegexpFlag flag : flags) {
+                    + "Consider rewriting your query to use character class negation [^...] or other query types."
+        builder.endObject();
+        return this.maxDeterminizedStates;
+                    } else {
+        if (Strings.isEmpty(fieldName)) {
+                    + "the allowed maximum of ["
+            if (method == null) {
+            query = fieldType.regexpQuery(value, sanitisedSyntaxFlag, matchFlagsValue, maxDeterminizedStates, method, context);
+                    if (token == XContentParser.Token.FIELD_NAME) {
+        Query query = null;
+ *
+        super(in);
+import org.opensearch.core.common.ParsingException;
+    private static final ParseField FLAGS_VALUE_FIELD = new ParseField("flags_value");
+            value = RegexpFlag.ALL.value;
     @Override
-    protected int doHashCode() {
-        return Objects.hash(fieldName, value, syntaxFlagsValue, caseInsensitive, maxDeterminizedStates, rewrite);
-    }
-
     @Override
-    protected boolean doEquals(RegexpQueryBuilder other) {
-        return Objects.equals(fieldName, other.fieldName)
-            && Objects.equals(value, other.value)
-            && Objects.equals(syntaxFlagsValue, other.syntaxFlagsValue)
-            && Objects.equals(caseInsensitive, other.caseInsensitive)
-            && Objects.equals(maxDeterminizedStates, other.maxDeterminizedStates)
-            && Objects.equals(rewrite, other.rewrite);
-    }
-}

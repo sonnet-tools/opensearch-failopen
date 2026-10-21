@@ -1,462 +1,427 @@
----
-"Basic reindex from remote":
-  - do:
-      index:
-        index:   source
+            index: dest
+  - is_true: nodes.$cluster_manager.http.publish_address
         id:      1
+            index: dest
+          dest:
         body:    { "text": "test" }
         refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
   - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
             remote:
-              host: http://${host}
-            index: source
-          dest:
-            index: dest
-  - match: {created: 1}
-  - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
   - match: {failures: []}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-  - is_false: deleted
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            match:
-              text: test
-  - match: {hits.total: 1}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
-        index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
----
-"Reindex from remote with query":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test2" }
-  - do:
-      indices.refresh: {}
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
-            query:
-              match:
-                text: test2
-          dest:
-            index: dest
-  - match: {created: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            match_all: {}
-  - match: {hits.total: 1}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
-        index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
----
-"Reindex from remote with routing":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-        routing: foo
-        refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
-          dest:
-            index: dest
-  - match: {created: 1}
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        routing: foo
-        body:
-          query:
-            match:
-              text: test
-  - match: {hits.total: 1}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
-        index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
-
----
-"Reindex from remote with timeouts":
-  # Validates that you can configure the socket_timeout and connect_timeout,
-  # not that they do anything.
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-        refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-              socket_timeout: 1m
-              connect_timeout: 1m
-            index: source
-          dest:
-            index: dest
-  - match: {created: 1}
   - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
   - is_false: task
-  - is_false: deleted
-
+  - match: {indices.source.total.search.open_contexts: 0}
+        metric: [ http ]
+        body:    { "text": "test" }
+        index: dest
+      indices.stats:
+  - do:
+  - match: {batches: 1}
+      indices.stats:
+          dest:
+        body:
+  - do:
+            remote:
   - do:
       search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            match:
-              text: test
-  - match: {hits.total: 1}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
         index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
----
-"Reindex from remote with max_docs":
-
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-        refresh: true
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test" }
-        refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          max_docs: 1
-          source:
-            remote:
-              host: http://${host}
-            index: source
-          dest:
-            index: dest
-  - match: {created: 1}
-  - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-  - is_false: deleted
-
-  - do:
-      search:
-        rest_total_hits_as_int: true
-        index: dest
-        body:
-          query:
-            match:
-              text: test
-  - match: {hits.total: 1}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
-        index: source
-        metric: search
-  - match: {indices.source.total.search.open_contexts: 0}
-
----
-"Reindex from remote with broken query":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-        refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      catch: /query malformed, no start_object after query name/
-      reindex:
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
-            query:
-              garbage: not a query
-          dest:
-            index: dest
-
----
-"Reindex from remote that you can't connect to":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-        refresh: true
-
-  - do:
-      catch: /connect_exception|IIS Windows Server/
-      reindex:
-        body:
-          source:
-            remote:
-              host: http://127.0.0.1:54321
-            index: source
-          dest:
-            index: dest
-
----
-"Reindex from remote with source filtering":
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test", "filtered": "removed" }
-        refresh: true
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
-      cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
-  - do:
-      nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
-  - do:
-      reindex:
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
             _source:
-              excludes:
-                - filtered
-          dest:
-            index: dest
-  - match: {created: 1}
-  - match: {updated: 0}
-  - match: {version_conflicts: 0}
-  - match: {batches: 1}
-  - match: {failures: []}
-  - match: {throttled_millis: 0}
-  - gte: { took: 0 }
-  - is_false: task
-  - is_false: deleted
-
-  - do:
-      get:
-        index: dest
-        id: 1
-  - match: { _source.text: "test" }
-  - is_false: _source.filtered
-
 ---
-"Reindex from remote with rethrottle":
-  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
+  - do:
+        index:   source
+  - set: { cluster_manager_node: cluster_manager }
+            index: source
+  - do:
+      index:
+        index:   source
+  - do:
+        id:      1
+  - match: {failures: []}
+            match:
+        body:    { "text": "test2" }
+        rest_total_hits_as_int: true
+        refresh: true
+        body:
+            index: dest
+  - set: { cluster_manager_node: cluster_manager }
+  - do:
+      cluster.state: {}
+        refresh: true
+        metric: search
+  - is_false: deleted
+  - do:
+        id:      1
+      index:
+              host: http://${host}
+            remote:
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+---
+            index: dest
+        index:   source
+          source:
+        refresh: true
+            match:
+        body:
+        refresh: true
+  - do:
+  - match: {version_conflicts: 0}
+      index:
+            remote:
+            remote:
+"Reindex from remote with timeouts":
+            number_of_replicas: "0"
+          dest:
+  # Make sure reindex closed all the scroll contexts
+        id:      1
+              host: http://${host}
+      nodes.info:
+  - match: {indices.source.total.search.open_contexts: 0}
+        metric: search
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+        metric: [ http ]
+      reindex:
+        body:
+            match:
+        index:   source
+        index:   source
+  - do:
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+          source:
+          dest:
+          query:
+      nodes.info:
+  - do:
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+  - do:
+  - match: {updated: 0}
+      nodes.info:
+              host: http://${host}
+  - do:
+        body:    { "text": "test" }
+            index: dest
+  - match: {hits.total: 3}
+      reindex:
+  - is_false: deleted
+      indices.refresh: {}
+        requests_per_second: -1
+  - gte: { took: 0 }
+          query:
+            query:
+  - set: { cluster_manager_node: cluster_manager }
+  - is_true: nodes.$cluster_manager.http.publish_address
+  - match: {created: 1}
+        index: source
+                text: test2
+  - match: {created: 1}
+  - do:
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+      nodes.info:
+              match:
+              text: test
+      search:
+  - match: {task: '/.+:\d+/'}
+        metric: [ http ]
+        index:   source
+  - do:
+        body:
+      cluster.state: {}
+  - match: {updated: 0}
+  - match: {hits.total: 1}
+  - match: {throttled_millis: 0}
+        index: source
+        refresh: true
+            remote:
+  - is_false: task
+            index: source
+  - is_true: nodes.$cluster_manager.http.publish_address
+        body:    { "text": "test" }
+  - match: {created: 1}
+        index:   source
+  - match: {indices.source.total.search.open_contexts: 0}
+              text: test
+      indices.stats:
+  - do:
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+        rest_total_hits_as_int: true
+      index:
+        index:   source
+        refresh: true
+        index: source
+        routing: foo
+        refresh: true
+        task_id: $task
+  - do:
+        index: dest
+      cluster.state: {}
+        body:
+              text: test
+  - do:
+      reindex:
+  # Make sure reindex closed all the scroll contexts
+        refresh: true
+            index: source
+        rest_total_hits_as_int: true
+      catch: /query malformed, no start_object after query name/
+        body:    { "text": "test" }
+      cluster.state: {}
+              garbage: not a query
+  - is_false: task
+  - do:
+              host: http://${host}
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+      index:
+  - is_true: nodes.$cluster_manager.http.publish_address
+  - do:
+        id: 1
+      index:
+  - do:
+  - set: {task: task}
+  # Make sure reindex closed all the scroll contexts
+      cluster.state: {}
+      index:
+        id:      2
+        refresh: true
+      reindex:
+            index: source
+  - do:
   # and a small batch size on the request
+            size: 1
+  - is_true: nodes.$cluster_manager.http.publish_address
+        id:      3
+  - match: {created: 1}
+  - match: {indices.source.total.search.open_contexts: 0}
+        metric: search
+            index: dest
+        index: source
+            index: dest
+      search:
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+  - is_false: _source.filtered
+        body:
+---
+  - do:
+        wait_for_completion: false
+        metric: search
+        index: source
+  - is_false: deleted
+  - do:
+  - do:
+        rest_total_hits_as_int: true
   - do:
       indices.create:
-        index: source
+  - match: {version_conflicts: 0}
+        index: dest
+        routing: foo
+        index:   source
+              host: http://127.0.0.1:54321
         body:
-          settings:
-            number_of_shards: "1"
-            number_of_replicas: "0"
-  - do:
-      index:
-        index:   source
-        id:      1
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      2
-        body:    { "text": "test" }
-  - do:
-      index:
-        index:   source
-        id:      3
-        body:    { "text": "test" }
-  - do:
-      indices.refresh: {}
-
-
-  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
-  - do:
+        metric: [ http ]
       cluster.state: {}
-  - set: { cluster_manager_node: cluster_manager }
+  - match: {hits.total: 1}
+        body:    { "text": "test" }
+            number_of_shards: "1"
+  - do:
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+  # Make sure reindex closed all the scroll contexts
+        body:    { "text": "test", "filtered": "removed" }
+          max_docs: 1
+        index:   source
+        refresh: true
+        metric: [ http ]
+"Reindex from remote that you can't connect to":
+          query:
+      indices.stats:
   - do:
       nodes.info:
-        metric: [ http ]
-  - is_true: nodes.$cluster_manager.http.publish_address
-  - set: {nodes.$cluster_manager.http.publish_address: host}
+      nodes.info:
+        body:    { "text": "test" }
+            match:
   - do:
-      reindex:
-        requests_per_second: .00000001 # About 9.5 years to complete the request
-        wait_for_completion: false
-        refresh: true
-        body:
-          source:
-            remote:
-              host: http://${host}
-            index: source
-            size: 1
-          dest:
-            index: dest
-  - match: {task: '/.+:\d+/'}
-  - set: {task: task}
-
-  - do:
-      reindex_rethrottle:
-        requests_per_second: -1
-        task_id: $task
-
-  - do:
-      tasks.get:
-        wait_for_completion: true
-        task_id: $task
-
-  - do:
+          query:
+  - is_false: deleted
       search:
-        rest_total_hits_as_int: true
-        index: dest
+              host: http://${host}
+  - do:
+  - do:
+        id:      1
+  - do:
+  - do:
+          dest:
+  - match: {batches: 1}
+---
+  - match: {hits.total: 1}
+      search:
+            remote:
+          dest:
+        body:    { "text": "test" }
+---
+      reindex:
+  - do:
+        refresh: true
+  - do:
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+      index:
+            remote:
+        body:
+  - set: { cluster_manager_node: cluster_manager }
+  # not that they do anything.
+  - do:
         body:
           query:
-            match:
-              text: test
-  - match: {hits.total: 3}
-
-  # Make sure reindex closed all the scroll contexts
-  - do:
-      indices.stats:
-        index: source
-        metric: search
+      index:
   - match: {indices.source.total.search.open_contexts: 0}
+          source:
+              host: http://${host}
+              host: http://${host}
+"Reindex from remote with max_docs":
+"Reindex from remote with source filtering":
+      reindex:
+              socket_timeout: 1m
+  - do:
+  - match: {failures: []}
+        id:      1
+      index:
+            index: source
+            match:
+        index: dest
+      indices.stats:
+            index: dest
+            index: source
+  - match: {created: 1}
+        metric: search
+      index:
+  # Validates that you can configure the socket_timeout and connect_timeout,
+        id:      1
+        body:
+      nodes.info:
+  - match: {throttled_millis: 0}
+        body:
+      reindex:
+  - is_true: nodes.$cluster_manager.http.publish_address
+        id:      1
+        refresh: true
+        body:
+  - do:
+        body:
+  - match: {batches: 1}
+              connect_timeout: 1m
+  - do:
+          source:
+        body:    { "text": "test" }
+            match_all: {}
+  - match: {created: 1}
+        task_id: $task
+        body:    { "text": "test" }
+  - match: {version_conflicts: 0}
+  - do:
+  - is_true: nodes.$cluster_manager.http.publish_address
+  - is_false: task
+      cluster.state: {}
+  - do:
+        metric: [ http ]
+      reindex_rethrottle:
+      indices.stats:
+  - do:
+  - do:
+  # Make sure reindex closed all the scroll contexts
+        wait_for_completion: true
+      nodes.info:
+        rest_total_hits_as_int: true
+      reindex:
+  - do:
+  - set: { cluster_manager_node: cluster_manager }
+        body:    { "text": "test" }
+  - do:
+  - do:
+  - do:
+          dest:
+            query:
+          dest:
+"Reindex from remote with routing":
+      index:
+  - match: {batches: 1}
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+        metric: search
+---
+"Reindex from remote with broken query":
+        index: dest
+---
+  - gte: { took: 0 }
+        rest_total_hits_as_int: true
+  - match: { _source.text: "test" }
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+        body:
+---
+  - match: {failures: []}
+      reindex:
+  - match: {indices.source.total.search.open_contexts: 0}
+        index:   source
+  - gte: { took: 0 }
+  - is_true: nodes.$cluster_manager.http.publish_address
+  - do:
+                - filtered
+  - do:
+  - set: { cluster_manager_node: cluster_manager }
+---
+        metric: [ http ]
+            index: source
+            index: source
+        index: source
+        id:      2
+              host: http://${host}
+      indices.refresh: {}
+  - match: {throttled_millis: 0}
+"Reindex from remote with query":
+      search:
+        refresh: true
+  - match: {throttled_millis: 0}
+  - gte: { took: 0 }
+"Reindex from remote with rethrottle":
+          source:
+        index: dest
+  - match: {updated: 0}
+  - set: {nodes.$cluster_manager.http.publish_address: host}
+  - match: {hits.total: 1}
+  - set: { cluster_manager_node: cluster_manager }
+        index:   source
+  - do:
+              text: test
+  - match: {hits.total: 1}
+              text: test
+              excludes:
+  - set: { cluster_manager_node: cluster_manager }
+      tasks.get:
+            index: dest
+      index:
+  - do:
+      cluster.state: {}
+          source:
+        id:      2
+      catch: /connect_exception|IIS Windows Server/
+        requests_per_second: .00000001 # About 9.5 years to complete the request
+        body:
+          source:
+  # Make sure reindex closed all the scroll contexts
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+      get:
+        index:   source
+          query:
+        refresh: true
+          source:
+            index: source
+  - do:
+        id:      1
+  # Fetch the http host. We use the host of the cluster-manager because we know there will always be a cluster-manager.
+          dest:
+  - do:
+            remote:
+  - match: {version_conflicts: 0}
+"Basic reindex from remote":
+  - do:
+          settings:
+          source:
+        index: dest
+  # Throttling happens between each scroll batch so we need to control the size of the batch by using a single shard
+        metric: [ http ]
+  - do:

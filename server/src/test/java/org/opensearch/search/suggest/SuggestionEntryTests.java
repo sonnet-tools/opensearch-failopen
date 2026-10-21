@@ -1,213 +1,196 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.text.Text;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
-import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
-import org.opensearch.search.suggest.completion.CompletionSuggestion;
-import org.opensearch.search.suggest.phrase.PhraseSuggestion;
-import org.opensearch.search.suggest.term.TermSuggestion;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.function.Predicate;
+                    || path.contains("_source")
+            Collections.singletonMap("key", Collections.singleton("value"))
+            new Text("somethingHighlighted"),
+            BytesReference originalBytes = toShuffledXContent(entry, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);
 import java.util.function.Supplier;
-
-import static org.opensearch.core.xcontent.XContentHelper.toXContent;
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
-import static org.opensearch.test.XContentTestUtils.insertRandomFields;
-import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
-
-public class SuggestionEntryTests extends OpenSearchTestCase {
-
-    private static final Map<Class<? extends Entry>, Function<XContentParser, ? extends Entry>> ENTRY_PARSERS = new HashMap<>();
-    static {
-        ENTRY_PARSERS.put(TermSuggestion.Entry.class, TermSuggestion.Entry::fromXContent);
-        ENTRY_PARSERS.put(PhraseSuggestion.Entry.class, PhraseSuggestion.Entry::fromXContent);
-        ENTRY_PARSERS.put(CompletionSuggestion.Entry.class, CompletionSuggestion.Entry::fromXContent);
-    }
-
-    /**
-     * Create a randomized Suggestion.Entry
-     */
-    @SuppressWarnings("unchecked")
-    public static <O extends Option> Entry<O> createTestItem(Class<? extends Entry> entryType) {
-        Text entryText = new Text(randomAlphaOfLengthBetween(5, 15));
-        int offset = randomInt();
-        int length = randomInt();
+ *
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            true
+                // also there can be inner search hits fields inside this option, we need to exclude another couple of paths
+        for (Class<? extends Entry> entryType : ENTRY_PARSERS.keySet()) {
+                assertEquals(entry.getOptions().get(i).getClass(), parsed.getOptions().get(i).getClass());
+                mutated = originalBytes;
         Entry entry;
-        Supplier<Option> supplier;
-        if (entryType == TermSuggestion.Entry.class) {
-            entry = new TermSuggestion.Entry(entryText, offset, length);
-            supplier = TermSuggestionOptionTests::createTestItem;
-        } else if (entryType == PhraseSuggestion.Entry.class) {
-            entry = new PhraseSuggestion.Entry(entryText, offset, length, randomDouble());
-            supplier = SuggestionOptionTests::createTestItem;
+ * You may obtain a copy of the License at
+            } else {
+            Entry<Option> parsed;
+ * specific language governing permissions and limitations
+            boolean humanReadable = randomBoolean();
+import java.util.Collections;
+                // on root level of SearchHit fields are interpreted as meta-fields and will be kept
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry.Option;
+        }
+                parsed = ENTRY_PARSERS.get(entry.getClass()).apply(parser);
+ * ownership. Elasticsearch licenses this file to you under
+                // "contexts" is an object consisting of key/array pairs, we shouldn't add anything random there
+        PhraseSuggestion.Entry.Option phraseOption = new PhraseSuggestion.Entry.Option(
+     * Create a randomized Suggestion.Entry
+ *
+            assertEquals(entry.getText(), parsed.getText());
+        for (int i = 0; i < numOptions; i++) {
+        xContent = toXContent(termEntry, MediaTypeRegistry.JSON, randomBoolean());
+ * Licensed to Elasticsearch under one or more contributor
+import java.io.IOException;
+                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+            new Text("someText"),
+ */
+                + "\"contexts\":{\"key\":[\"value\"]}"
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
+            3.13f,
+/*
+        completionEntry.addOption(completionOption);
+ * under the License.
+ * the Apache License, Version 2.0 (the "License"); you may
         } else if (entryType == CompletionSuggestion.Entry.class) {
+        );
+            "{\"text\":\"entryText\","
+                assertEquals(XContentParser.Token.END_OBJECT, parser.currentToken());
+            new Text("completionOption"),
+import static org.opensearch.test.hamcrest.OpenSearchAssertions.assertToXContentEquivalent;
+import org.opensearch.search.suggest.phrase.PhraseSuggestion;
+        assertEquals(
+ *
+    static {
+        );
+                + "\"options\":["
+    private static final Map<Class<? extends Entry>, Function<XContentParser, ? extends Entry>> ENTRY_PARSERS = new HashMap<>();
+import org.opensearch.search.suggest.term.TermSuggestion;
+                + "]}",
+import java.util.function.Function;
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.core.xcontent.XContentParser;
+            entry.addOption(supplier.get());
+ * Unless required by applicable law or agreed to in writing,
+ * compatible open source license.
+ * license agreements. See the NOTICE file distributed with
+            "{\"text\":\"entryText\","
+import org.opensearch.core.common.bytes.BytesReference;
+        phraseEntry.addOption(phraseOption);
+ * The OpenSearch Contributors require contributions made to
+            assertEquals(entry.getOptions().size(), parsed.getOptions().size());
+            entry = new PhraseSuggestion.Entry(entryText, offset, length, randomDouble());
+ */
+import org.opensearch.search.suggest.completion.CompletionSuggestion;
+            }
+        }
+                + "\"length\":313,"
+import java.util.function.Predicate;
+    @SuppressWarnings("unchecked")
+public class SuggestionEntryTests extends OpenSearchTestCase {
+/*
+import static org.opensearch.core.xcontent.XContentHelper.toXContent;
+        xContent = toXContent(completionEntry, MediaTypeRegistry.JSON, randomBoolean());
+        );
+import java.util.Map;
+/*
+ * not use this file except in compliance with the License.
+                + "\"score\":3.13,"
+        PhraseSuggestion.Entry phraseEntry = new PhraseSuggestion.Entry(new Text("entryText"), 42, 313);
+        doTestFromXContent(true);
+        } else if (entryType == PhraseSuggestion.Entry.class) {
+package org.opensearch.search.suggest;
+        );
+        int length = randomInt();
+            }
+        );
+                + "]}",
+                + "\"options\":["
+        BytesReference xContent = toXContent(phraseEntry, MediaTypeRegistry.JSON, randomBoolean());
+                // exclude "options" which contain SearchHits,
+                + "\"highlighted\":\"somethingHighlighted\","
+        TermSuggestion.Entry termEntry = new TermSuggestion.Entry(new Text("entryText"), 42, 313);
+    }
+            Entry<Option> entry = createTestItem(entryType);
+        TermSuggestion.Entry.Option termOption = new TermSuggestion.Entry.Option(new Text("termSuggestOption"), 42, 3.13f);
+            "{\"text\":\"entryText\","
+import org.opensearch.core.xcontent.ToXContent;
+            assertEquals(entry.getOffset(), parsed.getOffset());
+                + "\"score\":1.3,"
+            XContentType xContentType = randomFrom(XContentType.values());
+        termEntry.addOption(termOption);
+    @SuppressWarnings("unchecked")
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public void testFromXContent() throws IOException {
+            assertEquals(entry.getLength(), parsed.getLength());
+    }
+    }
+        CompletionSuggestion.Entry.Option completionOption = new CompletionSuggestion.Entry.Option(
+    }
+        CompletionSuggestion.Entry completionEntry = new CompletionSuggestion.Entry(new Text("entryText"), 42, 313);
+            if (addRandomFields) {
+}
+            xContent.utf8ToString()
+                + "\"offset\":42,"
+    }
+import static org.opensearch.test.XContentTestUtils.insertRandomFields;
+        Supplier<Option> supplier;
+        doTestFromXContent(false);
             entry = new CompletionSuggestion.Entry(entryText, offset, length);
-            supplier = CompletionSuggestionOptionTests::createTestItem;
-        } else {
+import org.opensearch.common.xcontent.XContentType;
+        assertEquals(
+                + "\"freq\":42}"
+                + "\"length\":313,"
+ * this file be licensed under the Apache-2.0 license or a
             throw new UnsupportedOperationException("entryType not supported [" + entryType + "]");
         }
-        int numOptions = randomIntBetween(0, 5);
-        for (int i = 0; i < numOptions; i++) {
-            entry.addOption(supplier.get());
-        }
-        return entry;
-    }
-
-    public void testFromXContent() throws IOException {
-        doTestFromXContent(false);
-    }
-
-    public void testFromXContentWithRandomFields() throws IOException {
-        doTestFromXContent(true);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void doTestFromXContent(boolean addRandomFields) throws IOException {
-        for (Class<? extends Entry> entryType : ENTRY_PARSERS.keySet()) {
-            Entry<Option> entry = createTestItem(entryType);
-            XContentType xContentType = randomFrom(XContentType.values());
-            boolean humanReadable = randomBoolean();
-            BytesReference originalBytes = toShuffledXContent(entry, xContentType, ToXContent.EMPTY_PARAMS, humanReadable);
-            BytesReference mutated;
-            if (addRandomFields) {
-                // "contexts" is an object consisting of key/array pairs, we shouldn't add anything random there
-                // also there can be inner search hits fields inside this option, we need to exclude another couple of paths
-                // where we cannot add random stuff
-                // exclude "options" which contain SearchHits,
-                // on root level of SearchHit fields are interpreted as meta-fields and will be kept
-                Predicate<String> excludeFilter = (path -> path.endsWith(CompletionSuggestion.Entry.Option.CONTEXTS.getPreferredName())
-                    || path.endsWith("highlight")
-                    || path.contains("fields")
-                    || path.contains("_source")
-                    || path.contains("inner_hits")
-                    || path.contains("options"));
-
-                mutated = insertRandomFields(xContentType, originalBytes, excludeFilter, random());
-            } else {
-                mutated = originalBytes;
-            }
-            Entry<Option> parsed;
+        Text entryText = new Text(randomAlphaOfLengthBetween(5, 15));
+import java.util.HashMap;
             try (XContentParser parser = createParser(xContentType.xContent(), mutated)) {
-                ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-                parsed = ENTRY_PARSERS.get(entry.getClass()).apply(parser);
-                assertEquals(XContentParser.Token.END_OBJECT, parser.currentToken());
-                assertNull(parser.nextToken());
-            }
-            assertEquals(entry.getClass(), parsed.getClass());
-            assertEquals(entry.getText(), parsed.getText());
-            assertEquals(entry.getLength(), parsed.getLength());
-            assertEquals(entry.getOffset(), parsed.getOffset());
-            assertEquals(entry.getOptions().size(), parsed.getOptions().size());
-            for (int i = 0; i < entry.getOptions().size(); i++) {
-                assertEquals(entry.getOptions().get(i).getClass(), parsed.getOptions().get(i).getClass());
-            }
-            assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);
-        }
-    }
-
-    public void testToXContent() throws IOException {
-        PhraseSuggestion.Entry.Option phraseOption = new PhraseSuggestion.Entry.Option(
-            new Text("someText"),
-            new Text("somethingHighlighted"),
-            1.3f,
-            true
-        );
-        PhraseSuggestion.Entry phraseEntry = new PhraseSuggestion.Entry(new Text("entryText"), 42, 313);
-        phraseEntry.addOption(phraseOption);
-        BytesReference xContent = toXContent(phraseEntry, MediaTypeRegistry.JSON, randomBoolean());
-        assertEquals(
-            "{\"text\":\"entryText\","
-                + "\"offset\":42,"
-                + "\"length\":313,"
-                + "\"options\":["
-                + "{\"text\":\"someText\","
-                + "\"highlighted\":\"somethingHighlighted\","
-                + "\"score\":1.3,"
-                + "\"collate_match\":true}"
-                + "]}",
-            xContent.utf8ToString()
-        );
-
-        TermSuggestion.Entry.Option termOption = new TermSuggestion.Entry.Option(new Text("termSuggestOption"), 42, 3.13f);
-        TermSuggestion.Entry termEntry = new TermSuggestion.Entry(new Text("entryText"), 42, 313);
-        termEntry.addOption(termOption);
-        xContent = toXContent(termEntry, MediaTypeRegistry.JSON, randomBoolean());
-        assertEquals(
-            "{\"text\":\"entryText\","
-                + "\"offset\":42,"
-                + "\"length\":313,"
-                + "\"options\":["
+    /**
                 + "{\"text\":\"termSuggestOption\","
-                + "\"score\":3.13,"
-                + "\"freq\":42}"
-                + "]}",
-            xContent.utf8ToString()
-        );
-
-        CompletionSuggestion.Entry.Option completionOption = new CompletionSuggestion.Entry.Option(
+    public static <O extends Option> Entry<O> createTestItem(Class<? extends Entry> entryType) {
+        ENTRY_PARSERS.put(CompletionSuggestion.Entry.class, CompletionSuggestion.Entry::fromXContent);
+                Predicate<String> excludeFilter = (path -> path.endsWith(CompletionSuggestion.Entry.Option.CONTEXTS.getPreferredName())
+ * KIND, either express or implied.  See the License for the
             -1,
-            new Text("completionOption"),
-            3.13f,
-            Collections.singletonMap("key", Collections.singleton("value"))
-        );
-        CompletionSuggestion.Entry completionEntry = new CompletionSuggestion.Entry(new Text("entryText"), 42, 313);
-        completionEntry.addOption(completionOption);
-        xContent = toXContent(completionEntry, MediaTypeRegistry.JSON, randomBoolean());
+        if (entryType == TermSuggestion.Entry.class) {
         assertEquals(
-            "{\"text\":\"entryText\","
-                + "\"offset\":42,"
+            supplier = SuggestionOptionTests::createTestItem;
+     */
                 + "\"length\":313,"
                 + "\"options\":["
-                + "{\"text\":\"completionOption\","
+ * software distributed under the License is distributed on an
                 + "\"score\":3.13,"
-                + "\"contexts\":{\"key\":[\"value\"]}"
-                + "}"
+ */
+                    || path.endsWith("highlight")
+                // where we cannot add random stuff
+            supplier = CompletionSuggestionOptionTests::createTestItem;
+import org.opensearch.core.common.text.Text;
+        return entry;
+            BytesReference mutated;
+ * GitHub history for details.
+            assertEquals(entry.getClass(), parsed.getClass());
+            xContent.utf8ToString()
+        ENTRY_PARSERS.put(TermSuggestion.Entry.class, TermSuggestion.Entry::fromXContent);
+            for (int i = 0; i < entry.getOptions().size(); i++) {
                 + "]}",
             xContent.utf8ToString()
-        );
+                + "\"collate_match\":true}"
+            1.3f,
+                    || path.contains("inner_hits")
+                mutated = insertRandomFields(xContentType, originalBytes, excludeFilter, random());
+        int numOptions = randomIntBetween(0, 5);
+        ENTRY_PARSERS.put(PhraseSuggestion.Entry.class, PhraseSuggestion.Entry::fromXContent);
+            entry = new TermSuggestion.Entry(entryText, offset, length);
+                + "{\"text\":\"someText\","
+                assertNull(parser.nextToken());
+                + "}"
+                + "{\"text\":\"completionOption\","
+            supplier = TermSuggestionOptionTests::createTestItem;
+import org.opensearch.search.suggest.Suggest.Suggestion.Entry;
+        } else {
+ * this work for additional information regarding copyright
+                    || path.contains("options"));
+            }
+    public void testFromXContentWithRandomFields() throws IOException {
+    private void doTestFromXContent(boolean addRandomFields) throws IOException {
+import org.opensearch.test.OpenSearchTestCase;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                + "\"offset\":42,"
     }
-
-}
+            assertToXContentEquivalent(originalBytes, toXContent(parsed, xContentType, humanReadable), xContentType);
+                + "\"offset\":42,"
+        int offset = randomInt();
+    public void testToXContent() throws IOException {
+                    || path.contains("fields")
+ * SPDX-License-Identifier: Apache-2.0

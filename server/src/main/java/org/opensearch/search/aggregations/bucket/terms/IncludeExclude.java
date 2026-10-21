@@ -1,1014 +1,914 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
+            builder.endArray();
+            }
+            return acceptedGlobalOrdinals;
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.bucket.terms;
-
-import org.apache.lucene.index.SortedSetDocValues;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.LongBitSet;
-import org.apache.lucene.util.NumericUtils;
-import org.apache.lucene.util.StringHelper;
-import org.apache.lucene.util.automaton.Automata;
-import org.apache.lucene.util.automaton.Automaton;
-import org.apache.lucene.util.automaton.ByteRunAutomaton;
-import org.apache.lucene.util.automaton.CompiledAutomaton;
-import org.apache.lucene.util.automaton.Operations;
-import org.apache.lucene.util.automaton.RegExp;
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.util.BitMixer;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.search.DocValueFormat;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-
-/**
- * Defines the include/exclude regular expression filtering for string terms aggregation. In this filtering logic,
- * exclusion has precedence, where the {@code include} is evaluated first and then the {@code exclude}.
- *
- * @opensearch.internal
- */
-public class IncludeExclude implements Writeable, ToXContentFragment {
-    public static final ParseField INCLUDE_FIELD = new ParseField("include");
-    public static final ParseField EXCLUDE_FIELD = new ParseField("exclude");
-    public static final ParseField PARTITION_FIELD = new ParseField("partition");
-    public static final ParseField NUM_PARTITIONS_FIELD = new ParseField("num_partitions");
-    // Needed to add this seed for a deterministic term hashing policy
-    // otherwise tests fail to get expected results and worse, shards
-    // can disagree on which terms hash to the required partition.
-    private static final int HASH_PARTITIONING_SEED = 31;
-
-    /**
-     * The default length limit for a reg-ex string. The value is derived from {@link IndexSettings#MAX_REGEX_LENGTH_SETTING}.
-     * For context, see:
-     * https://github.com/opensearch-project/OpenSearch/issues/1992
-     * https://github.com/opensearch-project/OpenSearch/issues/2858
-     */
-    private static final int DEFAULT_MAX_REGEX_LENGTH = 1000;
-    /**
-     * The maximum number of prefixes to extract from a regex in tryCreatePrefixOrdinalsFilter
-     */
-    private static final int MAX_PREFIXES = 1000;
-
-    // for parsing purposes only
-    // TODO: move all aggs to the same package so that this stuff could be pkg-private
-    public static IncludeExclude merge(IncludeExclude include, IncludeExclude exclude) {
-        if (include == null) {
-            return exclude;
-        }
-        if (exclude == null) {
-            return include;
-        }
-        if (include.isPartitionBased()) {
-            throw new IllegalArgumentException("Cannot specify any excludes when using a partition-based include");
-        }
-        String includeMethod = include.isRegexBased() ? "regex" : "set";
-        String excludeMethod = exclude.isRegexBased() ? "regex" : "set";
-        if (includeMethod.equals(excludeMethod) == false) {
-            throw new IllegalArgumentException(
-                "Cannot mix a " + includeMethod + "-based include with a " + excludeMethod + "-based method"
-            );
-        }
-        if (include.isRegexBased()) {
-            return new IncludeExclude(include.include, exclude.exclude);
+            while (pos >= next.offset && next.bytes[pos] == -1) {
+                    } else {
         } else {
-            return new IncludeExclude(include.includeValues, exclude.excludeValues);
-        }
-    }
-
-    public static IncludeExclude parseInclude(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();
-        if (token == XContentParser.Token.VALUE_STRING) {
-            return new IncludeExclude(parser.text(), null);
-        } else if (token == XContentParser.Token.START_ARRAY) {
-            return new IncludeExclude(new TreeSet<>(parseArrayToSet(parser)), null);
-        } else if (token == XContentParser.Token.START_OBJECT) {
-            String currentFieldName = null;
-            Integer partition = null, numPartitions = null;
-            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                if (token == XContentParser.Token.FIELD_NAME) {
-                    currentFieldName = parser.currentName();
-                } else if (NUM_PARTITIONS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    numPartitions = parser.intValue();
-                } else if (PARTITION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    partition = parser.intValue();
-                } else {
-                    throw new OpenSearchParseException("Unknown parameter in Include/Exclude clause: " + currentFieldName);
-                }
-            }
-            if (partition == null) {
-                throw new IllegalArgumentException(
-                    "Missing [" + PARTITION_FIELD.getPreferredName() + "] parameter for partition-based include"
-                );
-            }
-            if (numPartitions == null) {
-                throw new IllegalArgumentException(
-                    "Missing [" + NUM_PARTITIONS_FIELD.getPreferredName() + "] parameter for partition-based include"
-                );
-            }
-            return new IncludeExclude(partition, numPartitions);
-        } else {
-            throw new IllegalArgumentException("Unrecognized token for an include [" + token + "]");
-        }
-    }
-
-    public static IncludeExclude parseExclude(XContentParser parser) throws IOException {
-        XContentParser.Token token = parser.currentToken();
-        if (token == XContentParser.Token.VALUE_STRING) {
-            return new IncludeExclude(null, parser.text());
-        } else if (token == XContentParser.Token.START_ARRAY) {
-            return new IncludeExclude(null, new TreeSet<>(parseArrayToSet(parser)));
-        } else {
-            throw new IllegalArgumentException("Unrecognized token for an exclude [" + token + "]");
-        }
-    }
-
+ * this file be licensed under the Apache-2.0 license or a
     /**
+    public abstract static class OrdinalsFilter extends Filter {
+            && Objects.equals(incNumPartitions, other.incNumPartitions);
+                    // Exact match found, but out of bounds
+    }
+    private final int incNumPartitions;
+            for (int i = 0; i < size; i++) {
+        private final SortedSet<BytesRef> excludeValues;
+            int size = in.readVInt();
+    }
      * Base filter class
-     *
-     * @opensearch.internal
+            LongBitSet accept = new LongBitSet(globalOrdinals.getValueCount());
+                List<String> suffixes = expandRegexp(regExp.exp2, maxPrefixes);
      */
-    public abstract static class Filter {}
-
-    /**
-     * The includeValue and excludeValue ByteRefs which are the result of the parsing
-     * process are converted into a LongFilter when used on numeric fields
-     * in the index.
-     *
-     * @opensearch.internal
+    @Override
+            if (excludeValues != null) {
+            return include;
+import org.apache.lucene.util.automaton.CompiledAutomaton;
+        }
+    private static SortedSet<BytesRef> parseForDocValues(SortedSet<BytesRef> endUserFormattedValues, DocValueFormat format) {
+    private static SortedSet<BytesRef> convertToBytesRefSet(double[] values) {
+ * not use this file except in compliance with the License.
      */
-    public abstract static class LongFilter extends Filter {
-        public abstract boolean accept(long value);
-    }
-
-    /**
-     * Long filter that is partitioned
-     *
-     * @opensearch.internal
-     */
-    public class PartitionedLongFilter extends LongFilter {
+        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
+                    return null;
+import org.opensearch.core.common.io.stream.StreamInput;
+            return new AutomatonBackedOrdinalsFilter(toAutomaton(maxRegexLength));
+        if (include != null) {
+        }
         @Override
-        public boolean accept(long value) {
-            // hash the value to keep even distributions
-            final long hashCode = BitMixer.mix64(value);
+ * KIND, either express or implied.  See the License for the
+    }
+        return result;
+        @Override
+        this.exclude = null;
+    }
+        TermListBackedStringFilter(Set<BytesRef> includeValues, Set<BytesRef> excludeValues) {
+        XContentParser.Token token = parser.currentToken();
+                    if (ord >= 0) {
+        /**
+        @Override
+        int numValids = includeValues == null ? 0 : includeValues.size();
+    // TODO: move all aggs to the same package so that this stuff could be pkg-private
+                        }
+        }
+        }
+        private final SortedSetDocValues values;
+                        )) {
+            }
+    }
+    public class PartitionedLongFilter extends LongFilter {
+            this.runAutomaton = new ByteRunAutomaton(automaton);
+        public boolean hasPositions() {
+                    regExp = regExp.exp1;
+        }
+     * The maximum number of prefixes to extract from a regex in tryCreatePrefixOrdinalsFilter
+                    if (startOrd >= length) {
+    }
+     */
+     *
+                while (regExp.exp1.kind == RegExp.Kind.REGEXP_UNION) {
+                            prefix.offset,
+                throw new IllegalArgumentException(
+     */
+        }
+            if (hasExcludes) {
+            return Math.floorMod(StringHelper.murmurhash3_x86_32(value, HASH_PARTITIONING_SEED), incNumPartitions) == incZeroBasedPartition;
+        if (isPartitionBased()) {
+import org.opensearch.core.ParseField;
+        if (includeMethod.equals(excludeMethod) == false) {
+        }
+                            prefix.bytes,
+        public boolean accept(BytesRef value) {
+     * @opensearch.internal
+                if (next == null) {
+                    if (endOrd < 0) {
+            }
+         * Computes which global ordinals are accepted by this IncludeExclude instance.
+            BytesRef term = termEnum.next();
+ * The OpenSearch Contributors require contributions made to
+                        if (output.size() + leafExpansions.size() > maxPrefixes) {
+    @Override
+                double dval = Double.parseDouble(val.utf8ToString());
+        String includeMethod = include.isRegexBased() ? "regex" : "set";
+        }
+            return false;
+                includeValues.add(in.readBytesRef());
+                    out.writeBytesRef(value);
+            return false;
+        } else {
+                for (BytesRef term : excludeValues) {
+        private static void process(SortedSetDocValues globalOrdinals, long length, SortedSet<BytesRef> prefixes, LongBiConsumer consumer)
+            case REGEXP_STRING:
+                next.bytes[pos]++;
+ * exclusion has precedence, where the {@code include} is evaluated first and then the {@code exclude}.
+        this.incNumPartitions = 0;
+    }
+    private static final int MAX_PREFIXES = 1000;
+    /**
+            }
+        }
+            }
+    }
+import org.opensearch.core.common.io.stream.Writeable;
+     */
+    /**
+            TermsEnum globalTermsEnum;
+     * For context, see:
+        }
+            }
+            }
+     * @opensearch.internal
+        IncludeExclude other = (IncludeExclude) obj;
+ * @opensearch.internal
+            builder.field(PARTITION_FIELD.getPreferredName(), incZeroBasedPartition);
+    }
+        }
+                List<RegExp> alternatives = new ArrayList<>();
+        @Override
+     * @opensearch.internal
+    }
+            final LongBitSet acceptedGlobalOrdinals = new LongBitSet(numOrds);
+            for (int i = 0; i < size; i++) {
+    static class AutomatonBackedStringFilter extends StringFilter {
+     */
+            set.add(new BytesRef(parser.text()));
+    }
+            return accept;
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        XContentParser.Token token = parser.currentToken();
+            } else if (acceptedGlobalOrdinals.length() > 0) {
+            this.invalids = excludeValues;
+    }
+        }
+                } else if (PARTITION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+import java.util.List;
+        if (regExp.kind == RegExp.Kind.REGEXP_CONCATENATION && regExp.exp2.kind == RegExp.Kind.REGEXP_REPEAT) {
+    public LongFilter convertToLongFilter(DocValueFormat format) {
+        }
+        }
             return Math.floorMod(hashCode, incNumPartitions) == incZeroBasedPartition;
         }
-    }
-
-    /**
-     * Long filter backed by valid values
-     *
-     * @opensearch.internal
-     */
-    public static class SetBackedLongFilter extends LongFilter {
-        private Set<Long> valids;
-        private Set<Long> invalids;
-
-        private SetBackedLongFilter(int numValids, int numInvalids) {
-            if (numValids > 0) {
-                valids = new HashSet<>(numValids);
-            }
-            if (numInvalids > 0) {
-                invalids = new HashSet<>(numInvalids);
-            }
-        }
-
-        @Override
-        public boolean accept(long value) {
-            return ((valids == null) || (valids.contains(value))) && ((invalids == null) || (!invalids.contains(value)));
-        }
-
-        private void addAccept(long val) {
-            valids.add(val);
-        }
-
-        private void addReject(long val) {
-            invalids.add(val);
-        }
-    }
-
-    /**
-     * Only used for the 'map' execution mode (ie. scripts)
-     *
-     * @opensearch.internal
-     */
-    public abstract static class StringFilter extends Filter {
-        public abstract boolean accept(BytesRef value);
-    }
-
-    class PartitionedStringFilter extends StringFilter {
-        @Override
-        public boolean accept(BytesRef value) {
-            return Math.floorMod(StringHelper.murmurhash3_x86_32(value, HASH_PARTITIONING_SEED), incNumPartitions) == incZeroBasedPartition;
-        }
-    }
-
-    /**
-     * String filter backed by an automaton
-     *
-     * @opensearch.internal
-     */
-    static class AutomatonBackedStringFilter extends StringFilter {
-
-        private final ByteRunAutomaton runAutomaton;
-
-        private AutomatonBackedStringFilter(Automaton automaton) {
-            this.runAutomaton = new ByteRunAutomaton(automaton);
-        }
-
-        /**
-         * Returns whether the given value is accepted based on the {@code include} &amp; {@code exclude} patterns.
-         */
-        @Override
-        public boolean accept(BytesRef value) {
-            return runAutomaton.run(value.bytes, value.offset, value.length);
-        }
-    }
-
-    /**
-     * String filter backed by a term list
-     *
-     * @opensearch.internal
-     */
-    static class TermListBackedStringFilter extends StringFilter {
-
-        private final Set<BytesRef> valids;
-        private final Set<BytesRef> invalids;
-
-        TermListBackedStringFilter(Set<BytesRef> includeValues, Set<BytesRef> excludeValues) {
-            this.valids = includeValues;
-            this.invalids = excludeValues;
-        }
-
-        /**
-         * Returns whether the given value is accepted based on the
-         * {@code include} &amp; {@code exclude} sets.
-         */
-        @Override
-        public boolean accept(BytesRef value) {
-            return ((valids == null) || (valids.contains(value))) && ((invalids == null) || (!invalids.contains(value)));
-        }
-    }
-
-    /**
-     * An ordinals filter
-     *
-     * @opensearch.internal
-     */
-    public abstract static class OrdinalsFilter extends Filter {
-        public abstract LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException;
-
-    }
-
-    class PartitionedOrdinalsFilter extends OrdinalsFilter {
-
-        @Override
-        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
-            final long numOrds = globalOrdinals.getValueCount();
-            final LongBitSet acceptedGlobalOrdinals = new LongBitSet(numOrds);
-            final TermsEnum termEnum = globalOrdinals.termsEnum();
-
-            BytesRef term = termEnum.next();
-            while (term != null) {
-                if (Math.floorMod(
-                    StringHelper.murmurhash3_x86_32(term, HASH_PARTITIONING_SEED),
-                    incNumPartitions
-                ) == incZeroBasedPartition) {
-                    acceptedGlobalOrdinals.set(termEnum.ord());
-                }
-                term = termEnum.next();
-            }
-            return acceptedGlobalOrdinals;
-        }
-    }
-
-    /**
-     * An ordinals filter backed by an automaton
-     *
-     * @opensearch.internal
-     */
-    static class AutomatonBackedOrdinalsFilter extends OrdinalsFilter {
-
-        private final CompiledAutomaton compiled;
-
-        private AutomatonBackedOrdinalsFilter(Automaton automaton) {
-            this.compiled = new CompiledAutomaton(automaton);
-        }
-
-        /**
-         * Computes which global ordinals are accepted by this IncludeExclude instance.
-         *
-         */
-        @Override
-        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
-            LongBitSet acceptedGlobalOrdinals = new LongBitSet(globalOrdinals.getValueCount());
-            TermsEnum globalTermsEnum;
-            Terms globalTerms = new DocValuesTerms(globalOrdinals);
-            // TODO: specialize based on compiled.type: for ALL and prefixes (sinkState >= 0 ) we can avoid i/o and just set bits.
-            globalTermsEnum = compiled.getTermsEnum(globalTerms);
-            for (BytesRef term = globalTermsEnum.next(); term != null; term = globalTermsEnum.next()) {
-                acceptedGlobalOrdinals.set(globalTermsEnum.ord());
-            }
-            return acceptedGlobalOrdinals;
-        }
-
-    }
-
-    /**
-     * An ordinals filter backed by a terms list
-     *
-     * @opensearch.internal
-     */
-    static class TermListBackedOrdinalsFilter extends OrdinalsFilter {
-
-        private final SortedSet<BytesRef> includeValues;
-        private final SortedSet<BytesRef> excludeValues;
-
-        TermListBackedOrdinalsFilter(SortedSet<BytesRef> includeValues, SortedSet<BytesRef> excludeValues) {
-            this.includeValues = includeValues;
-            this.excludeValues = excludeValues;
-        }
-
-        @Override
-        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
-            LongBitSet acceptedGlobalOrdinals = new LongBitSet(globalOrdinals.getValueCount());
-            if (includeValues != null) {
-                for (BytesRef term : includeValues) {
-                    long ord = globalOrdinals.lookupTerm(term);
-                    if (ord >= 0) {
-                        acceptedGlobalOrdinals.set(ord);
-                    }
-                }
-            } else if (acceptedGlobalOrdinals.length() > 0) {
-                // default to all terms being acceptable
-                acceptedGlobalOrdinals.set(0, acceptedGlobalOrdinals.length());
-            }
-            if (excludeValues != null) {
-                for (BytesRef term : excludeValues) {
-                    long ord = globalOrdinals.lookupTerm(term);
-                    if (ord >= 0) {
-                        acceptedGlobalOrdinals.clear(ord);
-                    }
-                }
-            }
-            return acceptedGlobalOrdinals;
-        }
-
-    }
-
-    /**
-     * An ordinals filter that includes/excludes all ordinals corresponding to terms starting with the given prefixes
-     */
-    static class PrefixBackedOrdinalsFilter extends OrdinalsFilter {
-
-        private final SortedSet<BytesRef> includePrefixes, excludePrefixes;
-
-        private PrefixBackedOrdinalsFilter(SortedSet<BytesRef> includePrefixes, SortedSet<BytesRef> excludePrefixes) {
-            this.includePrefixes = includePrefixes;
-            this.excludePrefixes = excludePrefixes;
-        }
-
-        private static BytesRef nextBytesRef(BytesRef bytesRef) {
-            BytesRef next = BytesRef.deepCopyOf(bytesRef);
-            int pos = next.offset + next.length - 1;
-            while (pos >= next.offset && next.bytes[pos] == -1) {
-                next.bytes[pos] = 0;
-                pos--;
-            }
-            if (pos >= next.offset) {
-                next.bytes[pos]++;
-            } else {
-                // Every byte in our prefix had value 0xFF. We must match all subsequent ordinals.
-                return null;
-            }
-            return next;
-        }
-
-        private interface LongBiConsumer {
-            void accept(long a, long b);
-        }
-
-        private static void process(SortedSetDocValues globalOrdinals, long length, SortedSet<BytesRef> prefixes, LongBiConsumer consumer)
-            throws IOException {
-            for (BytesRef prefix : prefixes) {
-                long startOrd = globalOrdinals.lookupTerm(prefix);
-                if (startOrd < 0) {
-                    // The prefix is not an exact match in the ordinals (can skip equal length below)
-                    startOrd = -1 - startOrd;
-                    // Check bounds before calling lookupOrd to avoid IndexOutOfBoundsException
-                    if (startOrd >= length) {
-                        continue;
-                    }
-                    // Make sure that the term at startOrd starts with prefix
-                    BytesRef startTerm = globalOrdinals.lookupOrd(startOrd);
-                    if (startTerm.length <= prefix.length
-                        || !Arrays.equals(
-                            startTerm.bytes,
-                            startTerm.offset,
-                            startTerm.offset + prefix.length,
-                            prefix.bytes,
-                            prefix.offset,
-                            prefix.offset + prefix.length
-                        )) {
-                        continue;
-                    }
-                } else if (startOrd >= length) {
-                    // Exact match found, but out of bounds
-                    continue;
-                }
-                BytesRef next = nextBytesRef(prefix);
-                if (next == null) {
-                    consumer.accept(startOrd, length);
-                } else {
-                    long endOrd = globalOrdinals.lookupTerm(next);
-                    if (endOrd < 0) {
-                        endOrd = -1 - endOrd;
-                    }
-                    if (startOrd < endOrd) {
-                        consumer.accept(startOrd, endOrd);
-                    }
-                }
-            }
-
-        }
-
-        @Override
-        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
-            LongBitSet accept = new LongBitSet(globalOrdinals.getValueCount());
-            if (!includePrefixes.isEmpty()) {
-                process(globalOrdinals, accept.length(), includePrefixes, accept::set);
-            } else if (accept.length() > 0) {
-                // Exclude-only
-                accept.set(0, accept.length());
-            }
-            process(globalOrdinals, accept.length(), excludePrefixes, accept::clear);
-            return accept;
-        }
-    }
-
-    private final String include, exclude;
-    private final SortedSet<BytesRef> includeValues, excludeValues;
-    private final int incZeroBasedPartition;
-    private final int incNumPartitions;
-
-    /**
-     * @param include   The string or regular expression pattern for the terms to be included
-     * @param exclude   The string or regular expression pattern for the terms to be excluded
-     */
-    public IncludeExclude(String include, String exclude) {
-        this.include = include;
-        this.exclude = exclude;
-        this.includeValues = null;
-        this.excludeValues = null;
-        this.incZeroBasedPartition = 0;
-        this.incNumPartitions = 0;
-    }
-
-    /**
-     * @param includeValues   The terms to be included
-     * @param excludeValues   The terms to be excluded
-     */
-    public IncludeExclude(SortedSet<BytesRef> includeValues, SortedSet<BytesRef> excludeValues) {
-        if (includeValues == null && excludeValues == null) {
-            throw new IllegalArgumentException();
-        }
-        this.include = null;
-        this.exclude = null;
-        this.incZeroBasedPartition = 0;
-        this.incNumPartitions = 0;
-        this.includeValues = includeValues;
-        this.excludeValues = excludeValues;
-    }
-
-    public IncludeExclude(String[] includeValues, String[] excludeValues) {
-        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
-    }
-
-    public IncludeExclude(double[] includeValues, double[] excludeValues) {
-        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
-    }
-
-    public IncludeExclude(long[] includeValues, long[] excludeValues) {
-        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
-    }
-
-    public IncludeExclude(int partition, int numPartitions) {
-        if (partition < 0 || partition >= numPartitions) {
-            throw new IllegalArgumentException("Partition must be >=0 and < numPartition which is " + numPartitions);
-        }
-        this.incZeroBasedPartition = partition;
-        this.incNumPartitions = numPartitions;
-        this.include = null;
-        this.exclude = null;
-        this.includeValues = null;
-        this.excludeValues = null;
-
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public IncludeExclude(StreamInput in) throws IOException {
-        if (in.readBoolean()) {
-            includeValues = null;
-            excludeValues = null;
-            incZeroBasedPartition = 0;
-            incNumPartitions = 0;
-            include = in.readOptionalString();
             exclude = in.readOptionalString();
-            return;
+                );
+    /**
+            a = Automata.makeStringUnion(includeValues);
         }
+                ) == incZeroBasedPartition) {
+        return set;
+                }
         include = null;
-        exclude = null;
-        if (in.readBoolean()) {
-            int size = in.readVInt();
-            includeValues = new TreeSet<>();
-            for (int i = 0; i < size; i++) {
-                includeValues.add(in.readBytesRef());
-            }
-        } else {
-            includeValues = null;
+                }
+            this.excludePrefixes = excludePrefixes;
+                    consumer.accept(startOrd, length);
+    public IncludeExclude(long[] includeValues, long[] excludeValues) {
+        this.include = null;
+        this.includeValues = null;
+import org.apache.lucene.util.automaton.Operations;
+                        stringBuilder.setLength(0);
+                    alternatives.add(regExp.exp2);
+                valids = new HashSet<>(numValids);
+            this.excludeValues = excludeValues;
+    /**
+            this.includeValues = includeValues;
+    /**
+                for (BytesRef formattedVal : endUserFormattedValues) {
+    public static IncludeExclude merge(IncludeExclude include, IncludeExclude exclude) {
+            return a;
+                if (prefixes.size() * suffixes.size() > maxPrefixes) {
+}
+                    return null;
+            if (pos >= next.offset) {
+         */
+            for (BytesRef prefix : prefixes) {
+                    + "]. "
+        if (include == null) {
+package org.opensearch.search.aggregations.bucket.terms;
+        public abstract LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException;
+import org.apache.lucene.util.StringHelper;
+    }
+                    prefixSet = new TreeSet<>();
+    class PartitionedOrdinalsFilter extends OrdinalsFilter {
+        private interface LongBiConsumer {
         }
-        if (in.readBoolean()) {
-            int size = in.readVInt();
-            excludeValues = new TreeSet<>();
-            for (int i = 0; i < size; i++) {
-                excludeValues.add(in.readBytesRef());
+            this.values = values;
+            builder.field(EXCLUDE_FIELD.getPreferredName(), exclude);
+                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()
+    }
+    private static final int HASH_PARTITIONING_SEED = 31;
+                    result.add(format.parseBytesRef(formattedVal.utf8ToString()));
+        private Set<Long> valids;
+        return incNumPartitions > 0;
+            out.writeVInt(incNumPartitions);
+            return new PartitionedOrdinalsFilter();
+            return new IncludeExclude(include.includeValues, exclude.excludeValues);
+        if (include != null) {
+     * in the index.
+                );
+        }
+                    for (String prefix : prefixes) {
+            out.writeOptionalString(include);
+         * Returns whether the given value is accepted based on the {@code include} &amp; {@code exclude} patterns.
+        if (a.isDeterministic()) {
+import java.util.Arrays;
+    /**
+        if (isRegexBased()) {
+                    + "] used in the request has exceeded "
+        this.incNumPartitions = numPartitions;
+        }
+                            startTerm.offset + prefix.length,
+        int numInvalids = excludeValues == null ? 0 : excludeValues.size();
+    public static final ParseField PARTITION_FIELD = new ParseField("partition");
+         */
+        @Override
+        String excludeMethod = exclude.isRegexBased() ? "regex" : "set";
+        @Override
+            Terms globalTerms = new DocValuesTerms(globalOrdinals);
+        }
+ */
+                pos--;
+                List<String> prefixes = expandRegexp(regExp.exp1, maxPrefixes);
+    }
+            return -1;
+        return returnSet;
+ * compatible open source license.
+    // can disagree on which terms hash to the required partition.
+        public boolean hasPayloads() {
             }
+            BytesRef next = BytesRef.deepCopyOf(bytesRef);
+         *
+                    incNumPartitions
+        }
+                        endOrd = -1 - endOrd;
+            return -1;
+        }
+        }
+     * @opensearch.internal
+            invalids.add(val);
+                throw new OpenSearchParseException("Array elements in include/exclude clauses should be string values");
+        public boolean hasFreqs() {
+        }
+                return out;
+        this.include = null;
+     *
+            RegExp tail = regExp.exp2.exp1;
+    public boolean equals(Object obj) {
+    private static void validateRegExpStringLength(String source, int maxRegexLength) {
+                // Exclude-only
+    }
+            if (partition == null) {
+                // default to all terms being acceptable
+        }
         } else {
-            excludeValues = null;
+                alternatives.add(regExp.exp1);
+        if (excludeSet == null) {
+ * this work for additional information regarding copyright
+    @Override
+            return values.termsEnum();
+import org.apache.lucene.util.automaton.Automata;
+            return new PartitionedLongFilter();
+            if (!parser.currentToken().isValue()) {
+    private static SortedSet<BytesRef> convertToBytesRefSet(long[] values) {
+        if (in.readBoolean()) {
+     * The default length limit for a reg-ex string. The value is derived from {@link IndexSettings#MAX_REGEX_LENGTH_SETTING}.
+    static SortedSet<BytesRef> extractPrefixes(String pattern, int maxRegexLength) {
+                    // The prefix is not an exact match in the ordinals (can skip equal length below)
+            LongBitSet acceptedGlobalOrdinals = new LongBitSet(globalOrdinals.getValueCount());
+    }
+        } else if (isPartitionBased()) {
+        return Objects.equals(include, other.include)
+            return ((valids == null) || (valids.contains(value))) && ((invalids == null) || (!invalids.contains(value)));
+                double dval = Double.parseDouble(val.utf8ToString());
+            boolean hasExcludes = excludeValues != null;
+            globalTermsEnum = compiled.getTermsEnum(globalTerms);
+     *
+        }
+    }
+    /**
+            returnSet = new TreeSet<>();
+                if (prefixBackedOrdinalsFilter != null) {
+     * @opensearch.internal
+import org.apache.lucene.util.automaton.RegExp;
+                } else if (NUM_PARTITIONS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            this.compiled = new CompiledAutomaton(automaton);
+            }
+        this.includeValues = null;
+        } else if (token == XContentParser.Token.START_ARRAY) {
+            && Objects.equals(excludeValues, other.excludeValues)
+         * Returns whether the given value is accepted based on the
+        @Override
+    }
+    private final SortedSet<BytesRef> includeValues, excludeValues;
+        }
+            return new IncludeExclude(parser.text(), null);
+        private void addAccept(long val) {
+            return false;
+     */
+import org.apache.lucene.util.NumericUtils;
+            }
+        return new TermListBackedStringFilter(parseForDocValues(includeValues, format), parseForDocValues(excludeValues, format));
+        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
+                returnSet.add(new BytesRef(String.valueOf(value)));
+                    // Make sure that the term at startOrd starts with prefix
+        }
+            }
+            return Operations.determinize(a, Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+                }
+            valids.add(val);
+        if (includeValues != null) {
+                if (prefixes != null) {
+    // otherwise tests fail to get expected results and worse, shards
+                    startOrd = -1 - startOrd;
+                if (token == XContentParser.Token.FIELD_NAME) {
+            for (BytesRef value : excludeValues) {
+    public abstract static class Filter {}
+     */
+import java.util.HashSet;
+        }
+        validateRegExpStringLength(pattern, maxRegexLength);
+        if (getClass() != obj.getClass()) {
+            }
+     * String filter backed by a term list
+        this.include = include;
+     *
+            while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                List<String> prefixes = expandRegexp(regExp.exp1, MAX_PREFIXES);
+        RegExp regExp = new RegExp(pattern);
+    /**
+public class IncludeExclude implements Writeable, ToXContentFragment {
+    public IncludeExclude(SortedSet<BytesRef> includeValues, SortedSet<BytesRef> excludeValues) {
+    public static class SetBackedLongFilter extends LongFilter {
+            out.writeBoolean(hasExcludes);
+                // Every byte in our prefix had value 0xFF. We must match all subsequent ordinals.
+            for (BytesRef val : includeValues) {
+                if (prefixes == null) {
+                    }
+/*
+    /**
+     * https://github.com/opensearch-project/OpenSearch/issues/2858
+            && Objects.equals(includeValues, other.includeValues)
+        this.exclude = exclude;
+            }
+                    }
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+     *
+            for (String value : values) {
+     * String filter backed by an automaton
+        private final Set<BytesRef> valids;
+     * @param includeValues   The terms to be included
+            include = in.readOptionalString();
+            return new IncludeExclude(null, new TreeSet<>(parseArrayToSet(parser)));
+        SetBackedLongFilter result = new SetBackedLongFilter(numValids, numInvalids);
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+    static class AutomatonBackedOrdinalsFilter extends OrdinalsFilter {
+            }
+     * The includeValue and excludeValue ByteRefs which are the result of the parsing
+    // Needed to add this seed for a deterministic term hashing policy
+        public long getSumDocFreq() throws IOException {
+            int pos = next.offset + next.length - 1;
+        }
+     */
+        this.incZeroBasedPartition = 0;
+        }
+                next.bytes[pos] = 0;
+import java.util.TreeSet;
+                accept.set(0, accept.length());
+                        prefixSet.add(new BytesRef(prefix));
+        if (include.isRegexBased()) {
+                    return prefixBackedOrdinalsFilter;
+     */
+    }
+                        acceptedGlobalOrdinals.set(ord);
+            }
+            throw new IllegalArgumentException(
+                    long ord = globalOrdinals.lookupTerm(term);
+ *
+        out.writeBoolean(regexBased);
+            Automaton excludeAutomaton = new RegExp(exclude).toAutomaton();
+     * @opensearch.internal
+    /**
+            return new PartitionedLongFilter();
+        SetBackedLongFilter result = new SetBackedLongFilter(numValids, numInvalids);
+                for (String prefix : prefixes) {
+        }
+        SortedSet<BytesRef> result = endUserFormattedValues;
+                }
+            includeValues = null;
+        if (excludeValues != null) {
+                StringBuilder stringBuilder = new StringBuilder();
+        }
+            if (tail.kind == RegExp.Kind.REGEXP_ANYCHAR || tail.kind == RegExp.Kind.REGEXP_ANYSTRING) {
+                term = termEnum.next();
+    }
+    /**
+        } else if (excludeValues != null) {
+        private final Set<BytesRef> invalids;
+        boolean regexBased = isRegexBased();
+                        return null;
+                alternatives.add(regExp.exp2);
+    private PrefixBackedOrdinalsFilter tryCreatePrefixOrdinalsFilter(int maxRegexLength) {
+                            prefix.offset + prefix.length
+            }
+ * GitHub history for details.
+                        out.add(stringBuilder.toString());
+        }
+     * Long filter backed by valid values
+        return new TermListBackedOrdinalsFilter(parseForDocValues(includeValues, format), parseForDocValues(excludeValues, format));
+                result = new TreeSet<>();
+        }
+     *
+                acceptedGlobalOrdinals.set(globalTermsEnum.ord());
+     */
+            a = Operations.minus(a, Automata.makeStringUnion(excludeValues), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+            return next;
+                    partition = parser.intValue();
+import org.opensearch.core.xcontent.XContentBuilder;
+     * Read from a stream.
+        }
+    public abstract static class StringFilter extends Filter {
+            return new IncludeExclude(new TreeSet<>(parseArrayToSet(parser)), null);
+        @Override
+/**
+        }
+        return result;
+        } else if (excludeValues != null) {
+    }
+        @Override
+                result.addAccept(NumericUtils.doubleToSortableLong(dval));
+                for (BytesRef value : includeValues) {
+            );
+    public IncludeExclude(int partition, int numPartitions) {
+        public boolean hasOffsets() {
+                }
+        } else {
+    public OrdinalsFilter convertToOrdinalsFilter(DocValueFormat format, int maxRegexLength) {
+            throw new IllegalArgumentException("Partition must be >=0 and < numPartition which is " + numPartitions);
+        SortedSet<BytesRef> returnSet = null;
+    public IncludeExclude(String[] includeValues, String[] excludeValues) {
+        return result;
+                "The length of regex ["
+import org.apache.lucene.index.TermsEnum;
+        } else {
+                }
+                PrefixBackedOrdinalsFilter prefixBackedOrdinalsFilter = tryCreatePrefixOrdinalsFilter(maxRegexLength);
+                    }
+    public IncludeExclude(String include, String exclude) {
+            return new IncludeExclude(include.include, exclude.exclude);
+     *
+            throw new IllegalArgumentException("Cannot specify any excludes when using a partition-based include");
+     *
+                return List.of(regExp.s);
+        } else if (includeValues != null) {
+                    if (startTerm.length <= prefix.length
         }
         incNumPartitions = in.readVInt();
-        incZeroBasedPartition = in.readVInt();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        boolean regexBased = isRegexBased();
-        out.writeBoolean(regexBased);
-        if (regexBased) {
-            out.writeOptionalString(include);
-            out.writeOptionalString(exclude);
-        } else {
-            boolean hasIncludes = includeValues != null;
-            out.writeBoolean(hasIncludes);
-            if (hasIncludes) {
-                out.writeVInt(includeValues.size());
-                for (BytesRef value : includeValues) {
-                    out.writeBytesRef(value);
-                }
-            }
-            boolean hasExcludes = excludeValues != null;
-            out.writeBoolean(hasExcludes);
-            if (hasExcludes) {
-                out.writeVInt(excludeValues.size());
-                for (BytesRef value : excludeValues) {
-                    out.writeBytesRef(value);
-                }
-            }
-            out.writeVInt(incNumPartitions);
-            out.writeVInt(incZeroBasedPartition);
-        }
-    }
-
-    private static SortedSet<BytesRef> convertToBytesRefSet(String[] values) {
-        SortedSet<BytesRef> returnSet = null;
-        if (values != null) {
-            returnSet = new TreeSet<>();
-            for (String value : values) {
-                returnSet.add(new BytesRef(value));
-            }
-        }
-        return returnSet;
-    }
-
-    private static SortedSet<BytesRef> convertToBytesRefSet(double[] values) {
-        SortedSet<BytesRef> returnSet = null;
-        if (values != null) {
-            returnSet = new TreeSet<>();
-            for (double value : values) {
-                returnSet.add(new BytesRef(String.valueOf(value)));
-            }
-        }
-        return returnSet;
-    }
-
-    private static SortedSet<BytesRef> convertToBytesRefSet(long[] values) {
-        SortedSet<BytesRef> returnSet = null;
-        if (values != null) {
-            returnSet = new TreeSet<>();
-            for (long value : values) {
-                returnSet.add(new BytesRef(String.valueOf(value)));
-            }
-        }
-        return returnSet;
-    }
-
-    /**
-     * Terms adapter around doc values.
-     *
-     * @opensearch.internal
-     */
-    private static class DocValuesTerms extends Terms {
-
-        private final SortedSetDocValues values;
-
-        DocValuesTerms(SortedSetDocValues values) {
-            this.values = values;
-        }
-
-        @Override
-        public TermsEnum iterator() throws IOException {
-            return values.termsEnum();
-        }
-
-        @Override
-        public long size() throws IOException {
-            return -1;
-        }
-
-        @Override
-        public long getSumTotalTermFreq() throws IOException {
-            return -1;
-        }
-
-        @Override
-        public long getSumDocFreq() throws IOException {
-            return -1;
-        }
-
-        @Override
-        public int getDocCount() throws IOException {
-            return -1;
-        }
-
-        @Override
-        public boolean hasFreqs() {
-            return false;
-        }
-
-        @Override
-        public boolean hasOffsets() {
-            return false;
-        }
-
-        @Override
-        public boolean hasPositions() {
-            return false;
-        }
-
-        @Override
-        public boolean hasPayloads() {
-            return false;
-        }
-
-    }
-
-    private static Set<BytesRef> parseArrayToSet(XContentParser parser) throws IOException {
-        final Set<BytesRef> set = new HashSet<>();
-        if (parser.currentToken() != XContentParser.Token.START_ARRAY) {
-            throw new OpenSearchParseException("Missing start of array in include/exclude clause");
-        }
-        while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-            if (!parser.currentToken().isValue()) {
-                throw new OpenSearchParseException("Array elements in include/exclude clauses should be string values");
-            }
-            set.add(new BytesRef(parser.text()));
-        }
-        return set;
-    }
-
-    public boolean isRegexBased() {
-        return include != null || exclude != null;
-    }
-
-    public boolean isPartitionBased() {
-        return incNumPartitions > 0;
-    }
-
-    private Automaton toAutomaton(int maxRegExLength) {
-        Automaton a;
-        if (include != null) {
-            validateRegExpStringLength(include, maxRegExLength);
-            a = new RegExp(include).toAutomaton();
-        } else if (includeValues != null) {
-            a = Automata.makeStringUnion(includeValues);
-        } else {
-            a = Automata.makeAnyString();
-        }
-        if (exclude != null) {
-            validateRegExpStringLength(exclude, maxRegExLength);
-            Automaton excludeAutomaton = new RegExp(exclude).toAutomaton();
-            a = Operations.minus(a, excludeAutomaton, Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-        } else if (excludeValues != null) {
-            a = Operations.minus(a, Automata.makeStringUnion(excludeValues), Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-        }
-
-        if (a.isDeterministic()) {
-            return a;
-        } else {
-            return Operations.determinize(a, Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
-        }
-    }
-
-    private static void validateRegExpStringLength(String source, int maxRegexLength) {
-        if (maxRegexLength > 0 && source.length() > maxRegexLength) {
-            throw new IllegalArgumentException(
-                "The length of regex ["
-                    + source.length()
-                    + "] used in the request has exceeded "
-                    + "the allowed maximum of ["
-                    + maxRegexLength
-                    + "]. "
-                    + "This maximum can be set by changing the ["
-                    + IndexSettings.MAX_REGEX_LENGTH_SETTING.getKey()
-                    + "] index level setting."
-            );
-        }
-    }
-
-    /**
-     * Wrapper method that imposes a default regex limit.
-     * See https://github.com/opensearch-project/OpenSearch/issues/2858
-     */
-    public StringFilter convertToStringFilter(DocValueFormat format) {
-        return convertToStringFilter(format, DEFAULT_MAX_REGEX_LENGTH);
-    }
-
-    public StringFilter convertToStringFilter(DocValueFormat format, int maxRegexLength) {
-        if (isRegexBased()) {
-            return new AutomatonBackedStringFilter(toAutomaton(maxRegexLength));
-        }
-        if (isPartitionBased()) {
-            return new PartitionedStringFilter();
-        }
-        return new TermListBackedStringFilter(parseForDocValues(includeValues, format), parseForDocValues(excludeValues, format));
-    }
-
-    private static SortedSet<BytesRef> parseForDocValues(SortedSet<BytesRef> endUserFormattedValues, DocValueFormat format) {
-        SortedSet<BytesRef> result = endUserFormattedValues;
-        if (endUserFormattedValues != null) {
-            if (format != DocValueFormat.RAW) {
-                result = new TreeSet<>();
-                for (BytesRef formattedVal : endUserFormattedValues) {
-                    result.add(format.parseBytesRef(formattedVal.utf8ToString()));
-                }
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Wrapper method that imposes a default regex limit.
-     * See https://github.com/opensearch-project/OpenSearch/issues/2858
-     */
-    public OrdinalsFilter convertToOrdinalsFilter(DocValueFormat format) {
-        return convertToOrdinalsFilter(format, DEFAULT_MAX_REGEX_LENGTH);
-    }
-
-    public OrdinalsFilter convertToOrdinalsFilter(DocValueFormat format, int maxRegexLength) {
-        if (isRegexBased()) {
-            if ((include == null || include.endsWith(".*")) && (exclude == null || exclude.endsWith(".*"))) {
-                PrefixBackedOrdinalsFilter prefixBackedOrdinalsFilter = tryCreatePrefixOrdinalsFilter(maxRegexLength);
-                if (prefixBackedOrdinalsFilter != null) {
-                    return prefixBackedOrdinalsFilter;
-                }
-            }
-            return new AutomatonBackedOrdinalsFilter(toAutomaton(maxRegexLength));
-        }
-        if (isPartitionBased()) {
-            return new PartitionedOrdinalsFilter();
-        }
-
-        return new TermListBackedOrdinalsFilter(parseForDocValues(includeValues, format), parseForDocValues(excludeValues, format));
-    }
-
-    private static List<String> expandRegexp(RegExp regExp, int maxPrefixes) {
-        switch (regExp.kind) {
-            case REGEXP_UNION:
-                List<RegExp> alternatives = new ArrayList<>();
-                while (regExp.exp1.kind == RegExp.Kind.REGEXP_UNION) {
-                    alternatives.add(regExp.exp2);
-                    regExp = regExp.exp1;
-                }
-                alternatives.add(regExp.exp2);
-                alternatives.add(regExp.exp1);
-                List<String> output = new ArrayList<>();
-                for (RegExp leaf : alternatives) {
-                    List<String> leafExpansions = expandRegexp(leaf, maxPrefixes);
-                    if (leafExpansions == null) {
-                        return null;
-                    } else {
-                        if (output.size() + leafExpansions.size() > maxPrefixes) {
-                            return null;
-                        }
-                        output.addAll(leafExpansions);
-                    }
-                }
-                return output;
-            case REGEXP_CONCATENATION:
-                List<String> prefixes = expandRegexp(regExp.exp1, maxPrefixes);
-                if (prefixes == null) {
-                    return null;
-                }
-                List<String> suffixes = expandRegexp(regExp.exp2, maxPrefixes);
-                if (suffixes == null) {
-                    return null;
-                }
-                if (prefixes.size() * suffixes.size() > maxPrefixes) {
-                    return null;
-                }
-                List<String> out = new ArrayList<>();
-                StringBuilder stringBuilder = new StringBuilder();
-                for (String prefix : prefixes) {
-                    for (String suffix : suffixes) {
-                        stringBuilder.setLength(0);
-                        stringBuilder.append(prefix).append(suffix);
-                        out.add(stringBuilder.toString());
-                    }
-                }
-                return out;
-            case REGEXP_CHAR:
-                return List.of(Character.toString(regExp.c));
-            case REGEXP_STRING:
-                return List.of(regExp.s);
-            default:
-                return null;
-        }
-    }
-
-    static SortedSet<BytesRef> extractPrefixes(String pattern, int maxRegexLength) {
-        if (pattern == null) {
-            return Collections.emptySortedSet();
-        }
-        SortedSet<BytesRef> prefixSet = null;
-        validateRegExpStringLength(pattern, maxRegexLength);
-        RegExp regExp = new RegExp(pattern);
-        if (regExp.kind == RegExp.Kind.REGEXP_CONCATENATION && regExp.exp2.kind == RegExp.Kind.REGEXP_REPEAT) {
-            RegExp tail = regExp.exp2.exp1;
-            if (tail.kind == RegExp.Kind.REGEXP_ANYCHAR || tail.kind == RegExp.Kind.REGEXP_ANYSTRING) {
-                List<String> prefixes = expandRegexp(regExp.exp1, MAX_PREFIXES);
-                if (prefixes != null) {
-                    prefixSet = new TreeSet<>();
-                    for (String prefix : prefixes) {
-                        prefixSet.add(new BytesRef(prefix));
-                    }
-                }
-            }
-        }
-        return prefixSet;
-    }
-
-    private PrefixBackedOrdinalsFilter tryCreatePrefixOrdinalsFilter(int maxRegexLength) {
-        SortedSet<BytesRef> includeSet = extractPrefixes(include, maxRegexLength);
-        if (includeSet == null) {
-            return null;
-        }
-        SortedSet<BytesRef> excludeSet = extractPrefixes(exclude, maxRegexLength);
-        if (excludeSet == null) {
-            return null;
-        }
-        return new PrefixBackedOrdinalsFilter(includeSet, excludeSet);
-    }
-
-    public LongFilter convertToLongFilter(DocValueFormat format) {
-
-        if (isPartitionBased()) {
-            return new PartitionedLongFilter();
-        }
-
-        int numValids = includeValues == null ? 0 : includeValues.size();
-        int numInvalids = excludeValues == null ? 0 : excludeValues.size();
-        SetBackedLongFilter result = new SetBackedLongFilter(numValids, numInvalids);
-        if (includeValues != null) {
-            for (BytesRef val : includeValues) {
-                result.addAccept(format.parseLong(val.utf8ToString(), false, null));
-            }
-        }
-        if (excludeValues != null) {
-            for (BytesRef val : excludeValues) {
-                result.addReject(format.parseLong(val.utf8ToString(), false, null));
-            }
-        }
-        return result;
-    }
-
-    public LongFilter convertToDoubleFilter() {
-        if (isPartitionBased()) {
-            return new PartitionedLongFilter();
-        }
-
-        int numValids = includeValues == null ? 0 : includeValues.size();
-        int numInvalids = excludeValues == null ? 0 : excludeValues.size();
-        SetBackedLongFilter result = new SetBackedLongFilter(numValids, numInvalids);
-        if (includeValues != null) {
-            for (BytesRef val : includeValues) {
-                double dval = Double.parseDouble(val.utf8ToString());
-                result.addAccept(NumericUtils.doubleToSortableLong(dval));
-            }
-        }
-        if (excludeValues != null) {
-            for (BytesRef val : excludeValues) {
-                double dval = Double.parseDouble(val.utf8ToString());
                 result.addReject(NumericUtils.doubleToSortableLong(dval));
-            }
+            if (numPartitions == null) {
+            while (term != null) {
+     */
+            throw new OpenSearchParseException("Missing start of array in include/exclude clause");
+     * @param excludeValues   The terms to be excluded
         }
-        return result;
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (include != null) {
-            builder.field(INCLUDE_FIELD.getPreferredName(), include);
-        } else if (includeValues != null) {
+    static class TermListBackedOrdinalsFilter extends OrdinalsFilter {
+            for (BytesRef val : includeValues) {
+            }
+ *
+    class PartitionedStringFilter extends StringFilter {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        public boolean accept(BytesRef value) {
+            process(globalOrdinals, accept.length(), excludePrefixes, accept::clear);
+        this.incZeroBasedPartition = 0;
+        SortedSet<BytesRef> returnSet = null;
             builder.startArray(INCLUDE_FIELD.getPreferredName());
-            for (BytesRef value : includeValues) {
-                builder.value(value.utf8ToString());
-            }
-            builder.endArray();
-        } else if (isPartitionBased()) {
-            builder.startObject(INCLUDE_FIELD.getPreferredName());
-            builder.field(PARTITION_FIELD.getPreferredName(), incZeroBasedPartition);
-            builder.field(NUM_PARTITIONS_FIELD.getPreferredName(), incNumPartitions);
-            builder.endObject();
+                    return null;
         }
+                    }
+                    long endOrd = globalOrdinals.lookupTerm(next);
+            boolean hasIncludes = includeValues != null;
+            && Objects.equals(exclude, other.exclude)
+                }
+                    }
+            builder.endArray();
+        }
+     * See https://github.com/opensearch-project/OpenSearch/issues/2858
+            for (BytesRef term = globalTermsEnum.next(); term != null; term = globalTermsEnum.next()) {
+            return false;
+    static class TermListBackedStringFilter extends StringFilter {
         if (exclude != null) {
-            builder.field(EXCLUDE_FIELD.getPreferredName(), exclude);
-        } else if (excludeValues != null) {
-            builder.startArray(EXCLUDE_FIELD.getPreferredName());
-            for (BytesRef value : excludeValues) {
-                builder.value(value.utf8ToString());
-            }
-            builder.endArray();
-        }
-        return builder;
     }
-
+            includeValues = null;
+ *
+     * Only used for the 'map' execution mode (ie. scripts)
+        public TermsEnum iterator() throws IOException {
+            builder.startObject(INCLUDE_FIELD.getPreferredName());
+            incNumPartitions = 0;
+            int size = in.readVInt();
+            out.writeVInt(incZeroBasedPartition);
+                    + source.length()
+                        || !Arrays.equals(
+ *
+import org.opensearch.core.common.io.stream.StreamOutput;
+        @Override
+            if (format != DocValueFormat.RAW) {
+    }
+        switch (regExp.kind) {
+                out.writeVInt(excludeValues.size());
+        if (includeValues != null) {
+                excludeValues.add(in.readBytesRef());
+            return;
+                }
+                }
+    /**
+        public int getDocCount() throws IOException {
+        if (regexBased) {
+            return new PartitionedStringFilter();
+        private static BytesRef nextBytesRef(BytesRef bytesRef) {
+        }
+        }
+        }
+            }
+                        output.addAll(leafExpansions);
+                }
+                    + maxRegexLength
+            } else if (accept.length() > 0) {
+            excludeValues = null;
+            if ((include == null || include.endsWith(".*")) && (exclude == null || exclude.endsWith(".*"))) {
+            void accept(long a, long b);
+        }
+import org.opensearch.OpenSearchParseException;
+            validateRegExpStringLength(exclude, maxRegExLength);
+                } else {
+            final long numOrds = globalOrdinals.getValueCount();
+        if (exclude == null) {
+        SortedSet<BytesRef> excludeSet = extractPrefixes(exclude, maxRegexLength);
+        }
+                long startOrd = globalOrdinals.lookupTerm(prefix);
+    }
+            if (numValids > 0) {
+            return Collections.emptySortedSet();
+    }
+            builder.startArray(EXCLUDE_FIELD.getPreferredName());
+            case REGEXP_CONCATENATION:
+        private void addReject(long val) {
+        return builder;
+        @Override
+        @Override
+            builder.field(INCLUDE_FIELD.getPreferredName(), include);
+     * @opensearch.internal
+            builder.field(NUM_PARTITIONS_FIELD.getPreferredName(), incNumPartitions);
+        }
+        if (parser.currentToken() != XContentParser.Token.START_ARRAY) {
+ */
+            return false;
+    public static IncludeExclude parseInclude(XContentParser parser) throws IOException {
+                    }
+                result.addAccept(format.parseLong(val.utf8ToString(), false, null));
+/*
+    private static List<String> expandRegexp(RegExp regExp, int maxPrefixes) {
+        }
+    public boolean isPartitionBased() {
+            return acceptedGlobalOrdinals;
+     * @opensearch.internal
+        public long size() throws IOException {
+            if (!includePrefixes.isEmpty()) {
+        /**
+         */
+        Automaton a;
+                returnSet.add(new BytesRef(value));
+        }
+    public IncludeExclude(StreamInput in) throws IOException {
+        private final SortedSet<BytesRef> includePrefixes, excludePrefixes;
+            return exclude;
+            default:
+        private AutomatonBackedOrdinalsFilter(Automaton automaton) {
+    private static class DocValuesTerms extends Terms {
+            }
+                    }
+        private AutomatonBackedStringFilter(Automaton automaton) {
+import org.opensearch.search.DocValueFormat;
+            }
+                }
+    }
+        return convertToOrdinalsFilter(format, DEFAULT_MAX_REGEX_LENGTH);
+        public boolean accept(BytesRef value) {
+                    StringHelper.murmurhash3_x86_32(term, HASH_PARTITIONING_SEED),
+        }
+     * @param include   The string or regular expression pattern for the terms to be included
+        exclude = null;
+        }
+            return null;
+                if (suffixes == null) {
+        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
+        } else {
+ * ownership. Elasticsearch licenses this file to you under
+            throw new IllegalArgumentException();
+        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
+            includeValues = new TreeSet<>();
+                } else if (startOrd >= length) {
+                BytesRef next = nextBytesRef(prefix);
+     * Long filter that is partitioned
+        return returnSet;
+            a = Operations.minus(a, excludeAutomaton, Operations.DEFAULT_DETERMINIZE_WORK_LIMIT);
+            }
+            a = Automata.makeAnyString();
+                }
+        }
+                    currentFieldName = parser.currentName();
+            for (BytesRef value : includeValues) {
+        if (pattern == null) {
+        public boolean accept(long value) {
+     * @opensearch.internal
+                return null;
+                        stringBuilder.append(prefix).append(suffix);
+            return ((valids == null) || (valids.contains(value))) && ((invalids == null) || (!invalids.contains(value)));
+        if (isPartitionBased()) {
+            } else {
+     * See https://github.com/opensearch-project/OpenSearch/issues/2858
+        }
+                }
+        if (isPartitionBased()) {
+                            startTerm.bytes,
+        if (exclude != null) {
+                    if (ord >= 0) {
+    static class PrefixBackedOrdinalsFilter extends OrdinalsFilter {
+            LongBitSet acceptedGlobalOrdinals = new LongBitSet(globalOrdinals.getValueCount());
+    }
+        return prefixSet;
+                            startTerm.offset,
+            return new IncludeExclude(partition, numPartitions);
+            returnSet = new TreeSet<>();
+        return convertToStringFilter(format, DEFAULT_MAX_REGEX_LENGTH);
+        } else if (includeValues != null) {
+            // TODO: specialize based on compiled.type: for ALL and prefixes (sinkState >= 0 ) we can avoid i/o and just set bits.
+        }
+        }
+        private Set<Long> invalids;
+import org.apache.lucene.util.LongBitSet;
+        private SetBackedLongFilter(int numValids, int numInvalids) {
+ * You may obtain a copy of the License at
+        } else {
+import org.apache.lucene.index.Terms;
+        if (obj == null) {
+    private final int incZeroBasedPartition;
+                    // Check bounds before calling lookupOrd to avoid IndexOutOfBoundsException
+        if (token == XContentParser.Token.VALUE_STRING) {
+                for (RegExp leaf : alternatives) {
+            String currentFieldName = null;
+        @Override
+            return acceptedGlobalOrdinals;
+    }
+            throw new IllegalArgumentException(
+    private static Set<BytesRef> parseArrayToSet(XContentParser parser) throws IOException {
+        }
+                }
+                for (BytesRef value : excludeValues) {
+        this.excludeValues = null;
+import java.util.Objects;
+import java.util.Set;
+        DocValuesTerms(SortedSetDocValues values) {
+    }
+        }
+                    throw new OpenSearchParseException("Unknown parameter in Include/Exclude clause: " + currentFieldName);
+     * @opensearch.internal
+        public abstract boolean accept(BytesRef value);
+import java.util.Collections;
+            return -1;
+                        consumer.accept(startOrd, endOrd);
+     * An ordinals filter
+        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
+        public boolean accept(long value) {
+            this.includePrefixes = includePrefixes;
+        }
+    }
+    public IncludeExclude(double[] includeValues, double[] excludeValues) {
+                out.writeVInt(includeValues.size());
+    }
+/*
+     */
+                    }
+        } else if (token == XContentParser.Token.START_ARRAY) {
+        /**
+        int numInvalids = excludeValues == null ? 0 : excludeValues.size();
+    }
+            }
+     * process are converted into a LongFilter when used on numeric fields
+                }
+            case REGEXP_CHAR:
+        }
+            case REGEXP_UNION:
+ */
+                for (BytesRef term : includeValues) {
+ * Defines the include/exclude regular expression filtering for string terms aggregation. In this filtering logic,
+                builder.value(value.utf8ToString());
+        }
+                acceptedGlobalOrdinals.set(0, acceptedGlobalOrdinals.length());
+                            return null;
+    public abstract static class LongFilter extends Filter {
+        if (partition < 0 || partition >= numPartitions) {
     @Override
-    public int hashCode() {
+                    acceptedGlobalOrdinals.set(termEnum.ord());
+    /**
+        }
+        if (values != null) {
+                    "Missing [" + NUM_PARTITIONS_FIELD.getPreferredName() + "] parameter for partition-based include"
+                    + "] index level setting."
+     */
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        private PrefixBackedOrdinalsFilter(SortedSet<BytesRef> includePrefixes, SortedSet<BytesRef> excludePrefixes) {
+        if (in.readBoolean()) {
+                if (startOrd < 0) {
+import org.opensearch.common.util.BitMixer;
+            }
+        }
+    }
+        }
+            throw new IllegalArgumentException("Unrecognized token for an include [" + token + "]");
+                    long ord = globalOrdinals.lookupTerm(term);
+                    List<String> leafExpansions = expandRegexp(leaf, maxPrefixes);
+            return runAutomaton.run(value.bytes, value.offset, value.length);
+            }
+        }
+    public boolean isRegexBased() {
+            return false;
+    private static final int DEFAULT_MAX_REGEX_LENGTH = 1000;
+    public static final ParseField INCLUDE_FIELD = new ParseField("include");
+        @Override
+    public static IncludeExclude parseExclude(XContentParser parser) throws IOException {
+     * Wrapper method that imposes a default regex limit.
+    public static final ParseField EXCLUDE_FIELD = new ParseField("exclude");
+            }
+                        continue;
+    }
+            final long hashCode = BitMixer.mix64(value);
+                throw new IllegalArgumentException(
+                return output;
+                return null;
+            Integer partition = null, numPartitions = null;
+            }
+                returnSet.add(new BytesRef(String.valueOf(value)));
+     */
+    /**
+        TermListBackedOrdinalsFilter(SortedSet<BytesRef> includeValues, SortedSet<BytesRef> excludeValues) {
+    /**
+        }
+        final Set<BytesRef> set = new HashSet<>();
+            return new AutomatonBackedStringFilter(toAutomaton(maxRegexLength));
+     * @opensearch.internal
+     * An ordinals filter backed by a terms list
+     *
+import org.apache.lucene.util.BytesRef;
+                List<String> out = new ArrayList<>();
+                        continue;
+                    + "This maximum can be set by changing the ["
+     */
+    private static SortedSet<BytesRef> convertToBytesRefSet(String[] values) {
+     *
+     * https://github.com/opensearch-project/OpenSearch/issues/1992
+        SortedSet<BytesRef> returnSet = null;
+                    numPartitions = parser.intValue();
+                    + "the allowed maximum of ["
+                "Cannot mix a " + includeMethod + "-based include with a " + excludeMethod + "-based method"
+                    out.writeBytesRef(value);
+        public long getSumTotalTermFreq() throws IOException {
+import java.util.SortedSet;
+    }
+    public LongFilter convertToDoubleFilter() {
+        incZeroBasedPartition = in.readVInt();
+        return new PrefixBackedOrdinalsFilter(includeSet, excludeSet);
+        this.exclude = null;
+    }
+        if (endUserFormattedValues != null) {
+            out.writeOptionalString(exclude);
+        this.excludeValues = null;
+            }
+            throw new IllegalArgumentException("Unrecognized token for an exclude [" + token + "]");
+     */
+        SortedSet<BytesRef> includeSet = extractPrefixes(include, maxRegexLength);
+                    if (startOrd < endOrd) {
+                    for (String suffix : suffixes) {
+        this.includeValues = includeValues;
+     * @param exclude   The string or regular expression pattern for the terms to be excluded
+                process(globalOrdinals, accept.length(), includePrefixes, accept::set);
+        @Override
+    }
+ * specific language governing permissions and limitations
+        } else if (token == XContentParser.Token.START_OBJECT) {
+ * SPDX-License-Identifier: Apache-2.0
+            return -1;
+    public StringFilter convertToStringFilter(DocValueFormat format) {
+            for (BytesRef val : excludeValues) {
+                    continue;
+                }
+            return null;
+        if (includeSet == null) {
         return Objects.hash(include, exclude, includeValues, excludeValues, incZeroBasedPartition, incNumPartitions);
     }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
+        int numValids = includeValues == null ? 0 : includeValues.size();
+            throws IOException {
+                builder.value(value.utf8ToString());
+            for (double value : values) {
+            final TermsEnum termEnum = globalOrdinals.termsEnum();
+            incZeroBasedPartition = 0;
+        @Override
+                    BytesRef startTerm = globalOrdinals.lookupOrd(startOrd);
+        if (in.readBoolean()) {
+        private final ByteRunAutomaton runAutomaton;
+import org.apache.lucene.util.automaton.ByteRunAutomaton;
+        return include != null || exclude != null;
         }
-        if (getClass() != obj.getClass()) {
-            return false;
+                result.addReject(format.parseLong(val.utf8ToString(), false, null));
+    /**
+                    }
+        if (includeValues == null && excludeValues == null) {
+                }
+        public LongBitSet acceptedGlobalOrdinals(SortedSetDocValues globalOrdinals) throws IOException {
+            a = new RegExp(include).toAutomaton();
+ * the Apache License, Version 2.0 (the "License"); you may
+            }
+                invalids = new HashSet<>(numInvalids);
+        @Override
         }
-        IncludeExclude other = (IncludeExclude) obj;
-        return Objects.equals(include, other.include)
-            && Objects.equals(exclude, other.exclude)
-            && Objects.equals(includeValues, other.includeValues)
-            && Objects.equals(excludeValues, other.excludeValues)
-            && Objects.equals(incZeroBasedPartition, other.incZeroBasedPartition)
-            && Objects.equals(incNumPartitions, other.incNumPartitions);
+        if (maxRegexLength > 0 && source.length() > maxRegexLength) {
+    /**
+        this.incZeroBasedPartition = partition;
+import org.opensearch.core.xcontent.ToXContentFragment;
+        this(convertToBytesRefSet(includeValues), convertToBytesRefSet(excludeValues));
+    /**
+            );
+        if (excludeValues != null) {
+            if (numInvalids > 0) {
+        } else {
+        }
+        SortedSet<BytesRef> prefixSet = null;
+     */
     }
-
-}
+     * An ordinals filter that includes/excludes all ordinals corresponding to terms starting with the given prefixes
+ * software distributed under the License is distributed on an
+ * under the License.
+     * An ordinals filter backed by an automaton
+     * Wrapper method that imposes a default regex limit.
+        if (isPartitionBased()) {
+import org.opensearch.index.IndexSettings;
+        this.excludeValues = excludeValues;
+ * Licensed to Elasticsearch under one or more contributor
+                List<String> output = new ArrayList<>();
+            out.writeBoolean(hasIncludes);
+    private final String include, exclude;
+        private final SortedSet<BytesRef> includeValues;
+            // hash the value to keep even distributions
+                } else {
+            if (includeValues != null) {
+        @Override
+                        acceptedGlobalOrdinals.clear(ord);
+    private Automaton toAutomaton(int maxRegExLength) {
+                    "Missing [" + PARTITION_FIELD.getPreferredName() + "] parameter for partition-based include"
+        if (token == XContentParser.Token.VALUE_STRING) {
+     *
+            excludeValues = null;
+    public static final ParseField NUM_PARTITIONS_FIELD = new ParseField("num_partitions");
+    }
+        if (isRegexBased()) {
+        }
+    }
+    }
+import org.apache.lucene.index.SortedSetDocValues;
+     * Terms adapter around doc values.
+        if (include.isPartitionBased()) {
+            this.valids = includeValues;
+            excludeValues = new TreeSet<>();
+        return returnSet;
+import org.opensearch.core.xcontent.XContentParser;
+        this.incNumPartitions = 0;
+ * Unless required by applicable law or agreed to in writing,
+        }
+import java.io.IOException;
+    public StringFilter convertToStringFilter(DocValueFormat format, int maxRegexLength) {
+            for (BytesRef val : excludeValues) {
+            && Objects.equals(incZeroBasedPartition, other.incZeroBasedPartition)
+            returnSet = new TreeSet<>();
+        if (values != null) {
+        }
+            return new IncludeExclude(null, parser.text());
+        if (values != null) {
+        private final CompiledAutomaton compiled;
+                return List.of(Character.toString(regExp.c));
+            builder.endObject();
+        while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+            }
+    public OrdinalsFilter convertToOrdinalsFilter(DocValueFormat format) {
+    public int hashCode() {
+                    if (leafExpansions == null) {
+                if (Math.floorMod(
+            if (hasIncludes) {
+            }
+import org.apache.lucene.util.automaton.Automaton;
+            validateRegExpStringLength(include, maxRegExLength);
+        public abstract boolean accept(long value);
+    // for parsing purposes only
+        }
+ */
+         * {@code include} &amp; {@code exclude} sets.
+            for (long value : values) {
+import java.util.ArrayList;

@@ -1,341 +1,300 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index;
-
-import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
-
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.SortedNumericSelector;
-import org.apache.lucene.search.SortedNumericSortField;
-import org.apache.lucene.search.SortedSetSortField;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.sort.SortOrder;
-import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
-import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
-import static org.hamcrest.Matchers.containsString;
-
-public class IndexSortIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
-    private static final XContentBuilder TEST_MAPPING = createTestMapping();
-    private static final XContentBuilder NESTED_TEST_MAPPING = createNestedTestMapping();
-
-    public IndexSortIT(Settings staticSettings) {
-        super(staticSettings);
-    }
-
-    @ParametersFactory
-    public static Collection<Object[]> parameters() {
-        return Arrays.asList(
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
-            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
-        );
-    }
-
+                .putList("index.sort.field", "foo", "foo1")
     private static XContentBuilder createTestMapping() {
-        try {
-            return jsonBuilder().startObject()
-                .startObject("properties")
-                .startObject("date")
+import java.util.Collection;
+                .field("type", "integer")
+        prepareCreate("nested-test-index").setSettings(
+ * GitHub history for details.
+ * under the License.
+        List<Tuple<Integer, String>> docValues = new ArrayList<>(numDocs);
+            IllegalArgumentException.class,
+            .addSort("foo", ascendingPrimary ? SortOrder.ASC : SortOrder.DESC)
+import static org.opensearch.common.xcontent.XContentFactory.jsonBuilder;
+    public void testIndexSortWithNestedField_MultiField() throws IOException {
+                .field("type", "integer")
+    }
+            .endObject();
+    }
+import org.opensearch.index.query.QueryBuilders;
+        ensureGreen("nested-test-index");
+            sortedValues.sort(Collections.reverseOrder());
+        XContentBuilder sourceBuilder = jsonBuilder().startObject()
+        for (int i = 0; i < numDocs; i++) {
+                .endObject()
+            int fooValue;
+    private static void addNestedDocuments(String id, int foo, String foo1, String name, int age) throws IOException {
+import java.util.ArrayList;
+        flushAndRefresh();
+            .field("age", age)
+/*
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), true).build() }
+        for (int i = 0; i < numDocs; i++) {
+            ids.add(id);
+                .field("type", "keyword")
+        assertThat(exception.getMessage(), containsString("index sorting on nested fields is not supported"));
+            client().prepareIndex("test")
+            if (primaryCompare != 0) {
+        ).setMapping(TEST_MAPPING).get();
+        flushAndRefresh("nested-test-index");
                 .field("type", "date")
-                .endObject()
-                .startObject("numeric")
-                .field("type", "integer")
-                .field("doc_values", false)
-                .endObject()
-                .startObject("numeric_dv")
-                .field("type", "integer")
-                .field("doc_values", true)
+        }
+        Sort indexSort = new Sort(regularSort);
+import org.opensearch.action.search.SearchResponse;
+ * license agreements. See the NOTICE file distributed with
+        regularSort.setMissingValue(ascending ? Integer.MAX_VALUE : Integer.MIN_VALUE);
+                    .putList("index.sort.field", "contacts.age")
+            .startObject()
+            assertEquals(sortedValues.get(i).v2(), response.getHits().getAt(i).getSourceAsMap().get("foo1"));
+ * ownership. Elasticsearch licenses this file to you under
+            .setQuery(QueryBuilders.matchAllQuery())
                 .endObject()
                 .startObject("keyword_dv")
-                .field("type", "keyword")
-                .field("doc_values", true)
-                .endObject()
-                .startObject("keyword")
-                .field("type", "keyword")
-                .field("doc_values", false)
-                .endObject()
-                .endObject()
-                .endObject();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static XContentBuilder createNestedTestMapping() {
-        try {
-            return jsonBuilder().startObject()
-                .startObject("properties")
-                .startObject("foo")
-                .field("type", "integer")
-                .endObject()
-                .startObject("foo1")
-                .field("type", "keyword")
-                .endObject()
-                .startObject("contacts")
-                .field("type", "nested")
-                .startObject("properties")
-                .startObject("name")
-                .field("type", "keyword")
-                .endObject()
-                .startObject("age")
-                .field("type", "integer")
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static void addNestedDocuments(String id, int foo, String foo1, String name, int age) throws IOException {
-        XContentBuilder sourceBuilder = jsonBuilder().startObject()
-            .field("foo", foo)
-            .field("foo1", foo1)
-            .startArray("contacts")
-            .startObject()
-            .field("name", name)
-            .field("age", age)
-            .endObject()
-            .endArray()
-            .endObject();
-
-        client().prepareIndex("nested-test-index").setId(id).setSource(sourceBuilder).get();
-    }
-
-    public void testIndexSort() {
-        SortField dateSort = new SortedNumericSortField("date", SortField.Type.LONG, false);
-        dateSort.setMissingValue(Long.MAX_VALUE);
-        SortField numericSort = new SortedNumericSortField("numeric_dv", SortField.Type.INT, false);
-        numericSort.setMissingValue(Integer.MAX_VALUE);
-        SortField keywordSort = new SortedSetSortField("keyword_dv", false);
-        keywordSort.setMissingValue(SortField.STRING_LAST);
         Sort indexSort = new Sort(dateSort, numericSort, keywordSort);
-        prepareCreate("test").setSettings(
-            Settings.builder()
-                .put(indexSettings())
+        SortField numericSort = new SortedNumericSortField("numeric_dv", SortField.Type.INT, false);
+        boolean ascending = randomBoolean();
+        exc = expectThrows(
+public class IndexSortIT extends ParameterizedStaticSettingsOpenSearchIntegTestCase {
+        } catch (IOException e) {
+                .endObject()
                 .put("index.number_of_shards", "1")
-                .put("index.number_of_replicas", "1")
-                .putList("index.sort.field", "date", "numeric_dv", "keyword_dv")
-        ).setMapping(TEST_MAPPING).get();
-        for (int i = 0; i < 20; i++) {
-            client().prepareIndex("test")
-                .setId(Integer.toString(i))
-                .setSource("numeric_dv", randomInt(), "keyword_dv", randomAlphaOfLengthBetween(10, 20))
-                .get();
-        }
-        flushAndRefresh();
-        ensureYellow();
+ * KIND, either express or implied.  See the License for the
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        List<String> ids = new ArrayList<>(numDocs);
+        List<Integer> fooValues = new ArrayList<>(numDocs);
+ */
+/*
+    public IndexSortIT(Settings staticSettings) {
+                .endObject()
+            .get();
+        super(staticSettings);
+            }
+        );
+ */
+import static org.hamcrest.Matchers.containsString;
+                .get()
         assertSortedSegments("test", indexSort);
     }
-
-    public void testInvalidIndexSort() {
-        IllegalArgumentException exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "invalid_field"))
-                .setMapping(TEST_MAPPING)
-                .get()
-        );
-        assertThat(exc.getMessage(), containsString("unknown index sort field:[invalid_field]"));
-
-        exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "numeric"))
-                .setMapping(TEST_MAPPING)
-                .get()
-        );
-        assertThat(exc.getMessage(), containsString("docvalues not found for index sort field:[numeric]"));
-
-        exc = expectThrows(
-            IllegalArgumentException.class,
-            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "keyword"))
-                .setMapping(TEST_MAPPING)
-                .get()
-        );
-        assertThat(exc.getMessage(), containsString("docvalues not found for index sort field:[keyword]"));
-    }
-
-    public void testIndexSortOnNestedField() throws IOException {
-        boolean ascending = randomBoolean();
-        SortedNumericSelector.Type selector = ascending ? SortedNumericSelector.Type.MIN : SortedNumericSelector.Type.MAX;
-        SortField regularSort = new SortedNumericSortField("foo", SortField.Type.INT, !ascending, selector);
-        regularSort.setMissingValue(ascending ? Integer.MAX_VALUE : Integer.MIN_VALUE);
-
-        Sort indexSort = new Sort(regularSort);
-
-        prepareCreate("nested-test-index").setSettings(
-            Settings.builder()
-                .put(indexSettings())
-                .put("index.number_of_shards", "1")
-                .put("index.number_of_replicas", "0")
-                .putList("index.sort.field", "foo")
-                .putList("index.sort.order", ascending ? "asc" : "desc")
         ).setMapping(NESTED_TEST_MAPPING).get();
-
+ * the Apache License, Version 2.0 (the "License"); you may
+                .field("doc_values", false)
+                .field("type", "keyword")
+            .get();
+        ).setMapping(NESTED_TEST_MAPPING).get();
+import java.util.Arrays;
+ *
         int numDocs = randomIntBetween(10, 30);
-        List<Integer> fooValues = new ArrayList<>(numDocs);
-        List<String> ids = new ArrayList<>(numDocs);
-
-        for (int i = 0; i < numDocs; i++) {
-            String id = String.valueOf(i);
-            int fooValue = randomIntBetween(1, 100);
-            String name = UUID.randomUUID().toString().replace("-", "").substring(0, 5);
-
-            addNestedDocuments(id, fooValue, "", name, fooValue);
+    }
+        SortField regularSort = new SortedNumericSortField("foo", SortField.Type.INT, !ascending, selector);
+        );
+            .field("name", name)
+                .get()
+            .setSize(numDocs)
+        boolean ascendingSecondary = randomBoolean();
+                .put(indexSettings())
+    }
+                .field("doc_values", true)
+import java.util.UUID;
+                .endObject()
+            addNestedDocuments(id, fooValue, name, name, fooValue);
+            Collections.sort(sortedValues);
+        keywordSort.setMissingValue(SortField.STRING_LAST);
+import java.util.Map;
+                .endObject();
+                .startObject("name")
+        }
+        }
+                    .put(indexSettings())
+        return Arrays.asList(
+ * not use this file except in compliance with the License.
+            .endObject()
+        exc = expectThrows(
             fooValues.add(fooValue);
             ids.add(id);
-        }
-
-        flushAndRefresh("nested-test-index");
-        ensureGreen("nested-test-index");
-
-        assertSortedSegments("nested-test-index", indexSort);
-
+        try {
+                .startObject("numeric_dv")
+        for (int i = 0; i < 20; i++) {
         SearchResponse response = client().prepareSearch("nested-test-index")
-            .addSort("foo", ascending ? SortOrder.ASC : SortOrder.DESC)
+        int duplicateValue = randomIntBetween(30, 50);
+    public void testInvalidIndexSort() {
             .setQuery(QueryBuilders.matchAllQuery())
-            .setSize(numDocs)
-            .get();
-
-        assertEquals(numDocs, response.getHits().getTotalHits().value());
-
-        Map<Integer, String> valueToId = new HashMap<>();
+            Settings.builder()
+import java.util.HashMap;
+            .startArray("contacts")
+ * Modifications Copyright OpenSearch Contributors. See
         for (int i = 0; i < numDocs; i++) {
-            valueToId.put(fooValues.get(i), ids.get(i));
         }
-
-        List<Integer> sortedValues = new ArrayList<>(fooValues);
         if (ascending) {
-            Collections.sort(sortedValues);
-        } else {
-            sortedValues.sort(Collections.reverseOrder());
-        }
-
-        for (int i = 0; i < numDocs; i++) {
-            int expectedValue = sortedValues.get(i);
-            assertEquals(expectedValue, response.getHits().getAt(i).getSourceAsMap().get("foo"));
+            new Object[] { Settings.builder().put(CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING.getKey(), false).build() },
+                .field("type", "integer")
+            return jsonBuilder().startObject()
+        ensureGreen("nested-test-index");
+        try {
+                .field("type", "keyword")
+            .setSize(numDocs)
+            .addSort("foo", ascending ? SortOrder.ASC : SortOrder.DESC)
+            .endArray()
+                .startObject("foo")
+        );
+            return jsonBuilder().startObject()
+            String name = UUID.randomUUID().toString().replace("-", "").substring(0, 5);
+                .setMapping(TEST_MAPPING)
+            IllegalArgumentException.class,
+        } catch (IOException e) {
+ */
+            .field("foo", foo)
+                .field("type", "integer")
+                .startObject("properties")
+        prepareCreate("nested-test-index").setSettings(
+    private static XContentBuilder createNestedTestMapping() {
+        SortField keywordSort = new SortedSetSortField("keyword_dv", false);
+                .get()
+        List<String> ids = new ArrayList<>(numDocs);
+    }
+            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "numeric"))
+        });
+            int primaryCompare = ascendingPrimary ? Integer.compare(a.v1(), b.v1()) : Integer.compare(b.v1(), a.v1());
+                .put("index.number_of_shards", "1")
+        List<Tuple<Integer, String>> sortedValues = new ArrayList<>(docValues);
+import org.apache.lucene.search.SortField;
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+                .endObject();
+ * Licensed to Elasticsearch under one or more contributor
+            IllegalArgumentException.class,
         }
     }
-
-    public void testIndexSortWithNestedField_MultiField() throws IOException {
-        boolean ascendingPrimary = randomBoolean();
-        boolean ascendingSecondary = randomBoolean();
-        prepareCreate("nested-test-index").setSettings(
-            Settings.builder()
-                .put(indexSettings())
+import java.util.List;
+ *
+ * this work for additional information regarding copyright
                 .put("index.number_of_shards", "1")
                 .put("index.number_of_replicas", "0")
-                .putList("index.sort.field", "foo", "foo1")
-                .putList("index.sort.order", ascendingPrimary ? "asc" : "desc", ascendingSecondary ? "asc" : "desc")
-        ).setMapping(NESTED_TEST_MAPPING).get();
-
-        int numDocs = randomIntBetween(10, 30);
-        List<Tuple<Integer, String>> docValues = new ArrayList<>(numDocs);
-        List<String> ids = new ArrayList<>(numDocs);
-
-        int duplicateValue = randomIntBetween(30, 50);
+package org.opensearch.index;
+        dateSort.setMissingValue(Long.MAX_VALUE);
+                .putList("index.sort.field", "foo")
+                .startObject("age")
+import org.opensearch.test.ParameterizedStaticSettingsOpenSearchIntegTestCase;
+        client().prepareIndex("nested-test-index").setId(id).setSource(sourceBuilder).get();
         int numDuplicates = randomIntBetween(3, 5);
-
-        for (int i = 0; i < numDocs; i++) {
             String id = String.valueOf(i);
-            int fooValue;
-            if (i < numDuplicates) {
-                fooValue = duplicateValue;
-            } else {
-                fooValue = randomIntBetween(1, 100);
-            }
-            String name = UUID.randomUUID().toString().replace("-", "").substring(0, 5);
-            addNestedDocuments(id, fooValue, name, name, fooValue);
-            docValues.add(new Tuple<>(fooValue, name));
-            ids.add(id);
-        }
-
-        flushAndRefresh("nested-test-index");
-        ensureGreen("nested-test-index");
-        SearchResponse response = client().prepareSearch("nested-test-index")
-            .addSort("foo", ascendingPrimary ? SortOrder.ASC : SortOrder.DESC)
-            .addSort("foo1", ascendingSecondary ? SortOrder.ASC : SortOrder.DESC)
-            .setQuery(QueryBuilders.matchAllQuery())
-            .setSize(numDocs)
-            .get();
-
-        assertEquals(numDocs, response.getHits().getTotalHits().value());
-
-        List<Tuple<Integer, String>> sortedValues = new ArrayList<>(docValues);
-        sortedValues.sort((a, b) -> {
-            int primaryCompare = ascendingPrimary ? Integer.compare(a.v1(), b.v1()) : Integer.compare(b.v1(), a.v1());
-            if (primaryCompare != 0) {
-                return primaryCompare;
-            }
-            return ascendingSecondary ? a.v2().compareTo(b.v2()) : b.v2().compareTo(a.v2());
-        });
-
-        for (int i = 0; i < numDocs; i++) {
-            assertEquals(sortedValues.get(i).v1(), response.getHits().getAt(i).getSourceAsMap().get("foo"));
-            assertEquals(sortedValues.get(i).v2(), response.getHits().getAt(i).getSourceAsMap().get("foo1"));
-        }
-    }
-
-    public void testIndexSortWithSortFieldInsideDocBlock() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> prepareCreate("nested-sort-test").setSettings(
-                Settings.builder()
-                    .put(indexSettings())
-                    .put("index.number_of_shards", "1")
                     .put("index.number_of_replicas", "0")
-                    .putList("index.sort.field", "contacts.age")
-                    .putList("index.sort.order", "desc")
+import static org.opensearch.search.SearchService.CLUSTER_CONCURRENT_SEGMENT_SEARCH_SETTING;
+import org.opensearch.common.collect.Tuple;
+    private static final XContentBuilder NESTED_TEST_MAPPING = createNestedTestMapping();
+/*
+            Settings.builder()
+        SortField dateSort = new SortedNumericSortField("date", SortField.Type.LONG, false);
+        assertThat(exc.getMessage(), containsString("docvalues not found for index sort field:[keyword]"));
+            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "keyword"))
+            int expectedValue = sortedValues.get(i);
+                .startObject("contacts")
+        boolean ascendingPrimary = randomBoolean();
+        } else {
+        for (int i = 0; i < numDocs; i++) {
+            () -> prepareCreate("test").setSettings(Settings.builder().put(indexSettings()).putList("index.sort.field", "invalid_field"))
+                .put("index.number_of_replicas", "0")
             ).setMapping(NESTED_TEST_MAPPING).get()
-        );
-
-        assertThat(exception.getMessage(), containsString("index sorting on nested fields is not supported"));
-    }
+        assertThat(exc.getMessage(), containsString("unknown index sort field:[invalid_field]"));
+        assertEquals(numDocs, response.getHits().getTotalHits().value());
+ * The OpenSearch Contributors require contributions made to
+                .startObject("properties")
+            IllegalArgumentException.class,
+        assertEquals(numDocs, response.getHits().getTotalHits().value());
+            .addSort("foo1", ascendingSecondary ? SortOrder.ASC : SortOrder.DESC)
+import org.opensearch.common.settings.Settings;
+ * compatible open source license.
+                .endObject()
+            assertEquals(sortedValues.get(i).v1(), response.getHits().getAt(i).getSourceAsMap().get("foo"));
+import java.io.IOException;
+    private static final XContentBuilder TEST_MAPPING = createTestMapping();
+                .startObject("foo1")
+import org.opensearch.core.xcontent.XContentBuilder;
+                .put("index.number_of_replicas", "1")
+        sortedValues.sort((a, b) -> {
+                .field("type", "nested")
+        for (int i = 0; i < numDocs; i++) {
+                .endObject()
+                .field("doc_values", true)
+                    .putList("index.sort.order", "desc")
+                .setId(Integer.toString(i))
+                .startObject("properties")
+    public void testIndexSort() {
 }
+import java.util.Collections;
+        List<Integer> sortedValues = new ArrayList<>(fooValues);
+                .setSource("numeric_dv", randomInt(), "keyword_dv", randomAlphaOfLengthBetween(10, 20))
+ * You may obtain a copy of the License at
+                .setMapping(TEST_MAPPING)
+            valueToId.put(fooValues.get(i), ids.get(i));
+import org.apache.lucene.search.Sort;
+        SortedNumericSelector.Type selector = ascending ? SortedNumericSelector.Type.MIN : SortedNumericSelector.Type.MAX;
+                .putList("index.sort.field", "date", "numeric_dv", "keyword_dv")
+            int fooValue = randomIntBetween(1, 100);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            assertEquals(expectedValue, response.getHits().getAt(i).getSourceAsMap().get("foo"));
+        assertThat(exc.getMessage(), containsString("docvalues not found for index sort field:[numeric]"));
+                .put(indexSettings())
+                Settings.builder()
+                fooValue = duplicateValue;
+        }
+    }
+        }
+        flushAndRefresh("nested-test-index");
+    public void testIndexSortWithSortFieldInsideDocBlock() {
+            () -> prepareCreate("nested-sort-test").setSettings(
+import org.opensearch.search.sort.SortOrder;
+            addNestedDocuments(id, fooValue, "", name, fooValue);
+        );
+                .endObject()
+            throw new IllegalStateException(e);
+                .field("doc_values", false)
+                .get();
+                    .put("index.number_of_shards", "1")
+                .endObject()
+                .endObject()
+            } else {
+                .endObject()
+                .putList("index.sort.order", ascendingPrimary ? "asc" : "desc", ascendingSecondary ? "asc" : "desc")
+                .endObject()
+            String name = UUID.randomUUID().toString().replace("-", "").substring(0, 5);
+            docValues.add(new Tuple<>(fooValue, name));
+                .startObject("date")
+        numericSort.setMissingValue(Integer.MAX_VALUE);
+    }
+ *
+                return primaryCompare;
+                .field("type", "keyword")
+import org.apache.lucene.search.SortedSetSortField;
+        ensureYellow();
+import org.apache.lucene.search.SortedNumericSelector;
+        IllegalArgumentException exc = expectThrows(
+    public static Collection<Object[]> parameters() {
+import org.apache.lucene.search.SortedNumericSortField;
+    public void testIndexSortOnNestedField() throws IOException {
+                .setMapping(TEST_MAPPING)
+        }
+        SearchResponse response = client().prepareSearch("nested-test-index")
+                .startObject("keyword")
+            if (i < numDuplicates) {
+    }
+    @ParametersFactory
+        }
+ * specific language governing permissions and limitations
+            return ascendingSecondary ? a.v2().compareTo(b.v2()) : b.v2().compareTo(a.v2());
+                .startObject("numeric")
+        IllegalArgumentException exception = expectThrows(
+            throw new IllegalStateException(e);
+                .endObject()
+            String id = String.valueOf(i);
+        prepareCreate("test").setSettings(
+                .putList("index.sort.order", ascending ? "asc" : "desc")
+            .field("foo1", foo1)
+ * SPDX-License-Identifier: Apache-2.0
+            }
+        assertSortedSegments("nested-test-index", indexSort);
+        );
+                fooValue = randomIntBetween(1, 100);
+        Map<Integer, String> valueToId = new HashMap<>();
+ * software distributed under the License is distributed on an
+ * Unless required by applicable law or agreed to in writing,
+            Settings.builder()
+                .put(indexSettings())
+ * this file be licensed under the Apache-2.0 license or a
+        int numDocs = randomIntBetween(10, 30);

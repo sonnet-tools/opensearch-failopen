@@ -1,254 +1,225 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-
-/**
- * It's provably impossible to guarantee that any leader election algorithm ever elects a leader, but they generally work (with probability
- * that approaches 1 over time) as long as elections occur sufficiently infrequently, compared to the time it takes to send a message to
- * another node and receive a response back. We do not know the round-trip latency here, but we can approximate it by attempting elections
- * randomly at reasonably high frequency and backing off (linearly) until one of them succeeds. We also place an upper bound on the backoff
- * so that if elections are failing due to a network partition that lasts for a long time then when the partition heals there is an election
- * attempt reasonably quickly.
- *
- * @opensearch.internal
- */
-public class ElectionSchedulerFactory {
-
-    private static final Logger logger = LogManager.getLogger(ElectionSchedulerFactory.class);
-
-    private static final String ELECTION_INITIAL_TIMEOUT_SETTING_KEY = "cluster.election.initial_timeout";
-    private static final String ELECTION_BACK_OFF_TIME_SETTING_KEY = "cluster.election.back_off_time";
-    private static final String ELECTION_MAX_TIMEOUT_SETTING_KEY = "cluster.election.max_timeout";
-    private static final String ELECTION_DURATION_SETTING_KEY = "cluster.election.duration";
-
-    /*
-     * The first election is scheduled to occur a random number of milliseconds after the scheduler is started, where the random number of
-     * milliseconds is chosen uniformly from
-     *
-     *     (0, min(ELECTION_INITIAL_TIMEOUT_SETTING, ELECTION_MAX_TIMEOUT_SETTING)]
-     *
-     * For `n > 1`, the `n`th election is scheduled to occur a random number of milliseconds after the `n - 1`th election, where the random
      * number of milliseconds is chosen uniformly from
-     *
-     *     (0, min(ELECTION_INITIAL_TIMEOUT_SETTING + (n-1) * ELECTION_BACK_OFF_TIME_SETTING, ELECTION_MAX_TIMEOUT_SETTING)]
-     *
-     * Each election lasts up to ELECTION_DURATION_SETTING.
-     */
-
-    public static final Setting<TimeValue> ELECTION_INITIAL_TIMEOUT_SETTING = Setting.timeSetting(
-        ELECTION_INITIAL_TIMEOUT_SETTING_KEY,
+                }
+}
         TimeValue.timeValueMillis(100),
-        TimeValue.timeValueMillis(1),
-        TimeValue.timeValueSeconds(10),
-        Property.NodeScope
-    );
-
-    public static final Setting<TimeValue> ELECTION_BACK_OFF_TIME_SETTING = Setting.timeSetting(
-        ELECTION_BACK_OFF_TIME_SETTING_KEY,
-        TimeValue.timeValueMillis(100),
-        TimeValue.timeValueMillis(1),
-        TimeValue.timeValueSeconds(60),
-        Property.NodeScope
-    );
-
-    public static final Setting<TimeValue> ELECTION_MAX_TIMEOUT_SETTING = Setting.timeSetting(
-        ELECTION_MAX_TIMEOUT_SETTING_KEY,
-        TimeValue.timeValueSeconds(10),
-        TimeValue.timeValueMillis(200),
-        TimeValue.timeValueSeconds(300),
-        Property.NodeScope
-    );
-
-    public static final Setting<TimeValue> ELECTION_DURATION_SETTING = Setting.timeSetting(
-        ELECTION_DURATION_SETTING_KEY,
-        TimeValue.timeValueMillis(500),
-        TimeValue.timeValueMillis(1),
-        TimeValue.timeValueSeconds(300),
-        Property.NodeScope
-    );
-
-    private final TimeValue initialTimeout;
-    private final TimeValue backoffTime;
-    private final TimeValue maxTimeout;
-    private final TimeValue duration;
-    private final ThreadPool threadPool;
-    private final Random random;
-
-    public ElectionSchedulerFactory(Settings settings, Random random, ThreadPool threadPool) {
-        this.random = random;
-        this.threadPool = threadPool;
-
-        initialTimeout = ELECTION_INITIAL_TIMEOUT_SETTING.get(settings);
-        backoffTime = ELECTION_BACK_OFF_TIME_SETTING.get(settings);
-        maxTimeout = ELECTION_MAX_TIMEOUT_SETTING.get(settings);
-        duration = ELECTION_DURATION_SETTING.get(settings);
-
-        if (maxTimeout.millis() < initialTimeout.millis()) {
-            throw new IllegalArgumentException(
-                new ParameterizedMessage(
-                    "[{}] is [{}], but must be at least [{}] which is [{}]",
-                    ELECTION_MAX_TIMEOUT_SETTING_KEY,
-                    maxTimeout,
-                    ELECTION_INITIAL_TIMEOUT_SETTING_KEY,
-                    initialTimeout
-                ).getFormattedMessage()
-            );
-        }
-    }
-
-    /**
-     * Start the process to schedule repeated election attempts.
-     *
-     * @param gracePeriod       An initial period to wait before attempting the first election.
-     * @param scheduledRunnable The action to run each time an election should be attempted.
-     */
-    public Releasable startElectionScheduler(TimeValue gracePeriod, Runnable scheduledRunnable) {
-        final ElectionScheduler scheduler = new ElectionScheduler();
-        scheduler.scheduleNextElection(gracePeriod, scheduledRunnable);
-        return scheduler;
-    }
-
     @SuppressForbidden(reason = "Argument to Math.abs() is definitely not Long.MIN_VALUE")
+    }
+        Property.NodeScope
+ * another node and receive a response back. We do not know the round-trip latency here, but we can approximate it by attempting elections
+        Property.NodeScope
+ *
+    }
+    /**
+        return scheduler;
+        this.threadPool = threadPool;
+ * under the License.
+            logger.debug("scheduling {}", runnable);
+        private final AtomicLong attempt = new AtomicLong();
+ * KIND, either express or implied.  See the License for the
+            // to overflow here would take over a million years of failed election attempts, so we won't worry about that:
+ * software distributed under the License is distributed on an
+    private final Random random;
+                    if (isClosed.get()) {
+        backoffTime = ELECTION_BACK_OFF_TIME_SETTING.get(settings);
+ * Licensed to Elasticsearch under one or more contributor
+     */
+    @Override
+import java.util.Random;
+        @Override
+     *
+        @Override
+import org.opensearch.threadpool.ThreadPool.Names;
+                        + ", delayMillis="
+ * not use this file except in compliance with the License.
+            + ", maxTimeout="
+ * It's provably impossible to guarantee that any leader election algorithm ever elects a leader, but they generally work (with probability
+import org.opensearch.common.settings.Settings;
+ * specific language governing permissions and limitations
+    private class ElectionScheduler implements Releasable {
+     *
+            + backoffTime
+        TimeValue.timeValueMillis(1),
+     * @param upperBound   inclusive upper bound
+                return;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            final Runnable runnable = new AbstractRunnable() {
+    public static final Setting<TimeValue> ELECTION_DURATION_SETTING = Setting.timeSetting(
+        }
+        }
+                        + gracePeriod
+ * randomly at reasonably high frequency and backing off (linearly) until one of them succeeds. We also place an upper bound on the backoff
+/**
+import java.util.concurrent.atomic.AtomicLong;
+                @Override
+import org.opensearch.common.settings.Setting.Property;
+    /*
+        this.random = random;
+import org.opensearch.common.lease.Releasable;
+    private final TimeValue duration;
+                        scheduledRunnable.run();
+        return nonNegative(randomNumber) % upperBound + 1;
+        Property.NodeScope
+    }
+        final ElectionScheduler scheduler = new ElectionScheduler();
+     *     (0, min(ELECTION_INITIAL_TIMEOUT_SETTING + (n-1) * ELECTION_BACK_OFF_TIME_SETTING, ELECTION_MAX_TIMEOUT_SETTING)]
+                        logger.debug("{} starting election with duration {}", this, duration);
+    private static final Logger logger = LogManager.getLogger(ElectionSchedulerFactory.class);
+     *
+                    return "scheduleNextElection{gracePeriod="
+    public static final Setting<TimeValue> ELECTION_MAX_TIMEOUT_SETTING = Setting.timeSetting(
+            + maxTimeout
+                    "[{}] is [{}], but must be at least [{}] which is [{}]",
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        duration = ELECTION_DURATION_SETTING.get(settings);
+    private final ThreadPool threadPool;
+        TimeValue.timeValueSeconds(10),
+/*
+     * @param gracePeriod       An initial period to wait before attempting the first election.
+ */
+            + "initialTimeout="
+                        + thisAttempt
+                        + delayMillis
+        }
+        public void close() {
+     */
+     */
+                @Override
+        TimeValue.timeValueSeconds(60),
+     * For `n > 1`, the `n`th election is scheduled to occur a random number of milliseconds after the `n - 1`th election, where the random
+ * that approaches 1 over time) as long as elections occur sufficiently infrequently, compared to the time it takes to send a message to
+            + initialTimeout
+        void scheduleNextElection(final TimeValue gracePeriod, final Runnable scheduledRunnable) {
+        TimeValue.timeValueMillis(1),
+/*
+            + '}';
     private static long nonNegative(long n) {
+                    ELECTION_MAX_TIMEOUT_SETTING_KEY,
+            return "ElectionScheduler{attempt=" + attempt + ", " + ElectionSchedulerFactory.this + "}";
+public class ElectionSchedulerFactory {
+ * compatible open source license.
+                        + ", thisAttempt="
+    public String toString() {
+            };
+        TimeValue.timeValueMillis(200),
+    static long toPositiveLongAtMost(long randomNumber, long upperBound) {
+                        scheduleNextElection(duration, scheduledRunnable);
+     * The first election is scheduled to occur a random number of milliseconds after the scheduler is started, where the random number of
+        scheduler.scheduleNextElection(gracePeriod, scheduledRunnable);
+ *
+                    assert false : e;
+     */
+                        + "}";
+    public ElectionSchedulerFactory(Settings settings, Random random, ThreadPool threadPool) {
+                    maxTimeout,
+/*
+     *
+            throw new IllegalArgumentException(
+            assert wasNotPreviouslyClosed;
+     *     (0, min(ELECTION_INITIAL_TIMEOUT_SETTING, ELECTION_MAX_TIMEOUT_SETTING)]
+    );
+    private static final String ELECTION_DURATION_SETTING_KEY = "cluster.election.duration";
+ * Unless required by applicable law or agreed to in writing,
+     *
+ * The OpenSearch Contributors require contributions made to
+    private static final String ELECTION_BACK_OFF_TIME_SETTING_KEY = "cluster.election.back_off_time";
+     * Each election lasts up to ELECTION_DURATION_SETTING.
+                        + ElectionScheduler.this
+     * @return a number in the range (0, upperBound]
+                new ParameterizedMessage(
+     * milliseconds is chosen uniformly from
+    public Releasable startElectionScheduler(TimeValue gracePeriod, Runnable scheduledRunnable) {
+ */
+            if (isClosed.get()) {
+    }
+        TimeValue.timeValueSeconds(10),
+import org.opensearch.threadpool.ThreadPool;
+     * @param randomNumber a randomly-chosen long
+ * You may obtain a copy of the License at
+        TimeValue.timeValueMillis(100),
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    /**
+                    logger.debug(new ParameterizedMessage("unexpected exception in wakeup of {}", this), e);
+                        + maxDelayMillis
+        TimeValue.timeValueMillis(500),
+                    ELECTION_INITIAL_TIMEOUT_SETTING_KEY,
+            final long delayMillis = toPositiveLongAtMost(random.nextLong(), maxDelayMillis) + gracePeriod.millis();
+ * attempt reasonably quickly.
+                public void onFailure(Exception e) {
+            final long maxDelayMillis = Math.min(maxTimeout.millis(), initialTimeout.millis() + thisAttempt * backoffTime.millis());
+        TimeValue.timeValueSeconds(300),
+                        + ", maxDelayMillis="
+                    initialTimeout
+    );
+ * ownership. Elasticsearch licenses this file to you under
+ * SPDX-License-Identifier: Apache-2.0
+     * @param scheduledRunnable The action to run each time an election should be attempted.
+ * GitHub history for details.
+ * license agreements. See the NOTICE file distributed with
+        initialTimeout = ELECTION_INITIAL_TIMEOUT_SETTING.get(settings);
+            boolean wasNotPreviouslyClosed = isClosed.compareAndSet(false, true);
+import org.apache.logging.log4j.Logger;
+    private final TimeValue backoffTime;
+        ELECTION_BACK_OFF_TIME_SETTING_KEY,
+                logger.debug("{} not scheduling election", this);
+     * The Election scheduler.
+ */
+        Property.NodeScope
+ *
         return n == Long.MIN_VALUE ? 0 : Math.abs(n);
     }
-
-    /**
-     * @param randomNumber a randomly-chosen long
-     * @param upperBound   inclusive upper bound
-     * @return a number in the range (0, upperBound]
-     */
-    // package-private for testing
-    static long toPositiveLongAtMost(long randomNumber, long upperBound) {
-        assert 0 < upperBound : upperBound;
-        return nonNegative(randomNumber) % upperBound + 1;
-    }
-
-    @Override
-    public String toString() {
-        return "ElectionSchedulerFactory{"
-            + "initialTimeout="
-            + initialTimeout
-            + ", backoffTime="
-            + backoffTime
-            + ", maxTimeout="
-            + maxTimeout
-            + '}';
-    }
-
-    /**
-     * The Election scheduler.
-     *
-     * @opensearch.internal
-     */
-    private class ElectionScheduler implements Releasable {
-        private final AtomicBoolean isClosed = new AtomicBoolean();
-        private final AtomicLong attempt = new AtomicLong();
-
-        void scheduleNextElection(final TimeValue gracePeriod, final Runnable scheduledRunnable) {
-            if (isClosed.get()) {
-                logger.debug("{} not scheduling election", this);
-                return;
-            }
-
-            final long thisAttempt = attempt.getAndIncrement();
-            // to overflow here would take over a million years of failed election attempts, so we won't worry about that:
-            final long maxDelayMillis = Math.min(maxTimeout.millis(), initialTimeout.millis() + thisAttempt * backoffTime.millis());
-            final long delayMillis = toPositiveLongAtMost(random.nextLong(), maxDelayMillis) + gracePeriod.millis();
-            final Runnable runnable = new AbstractRunnable() {
-                @Override
-                public void onFailure(Exception e) {
-                    logger.debug(new ParameterizedMessage("unexpected exception in wakeup of {}", this), e);
-                    assert false : e;
-                }
-
-                @Override
-                protected void doRun() {
-                    if (isClosed.get()) {
-                        logger.debug("{} not starting election", this);
+ *
                     } else {
-                        logger.debug("{} starting election with duration {}", this, duration);
-                        scheduleNextElection(duration, scheduledRunnable);
-                        scheduledRunnable.run();
+                ).getFormattedMessage()
+import org.apache.logging.log4j.LogManager;
+    public static final Setting<TimeValue> ELECTION_INITIAL_TIMEOUT_SETTING = Setting.timeSetting(
+    /**
+            threadPool.scheduleUnlessShuttingDown(TimeValue.timeValueMillis(delayMillis), Names.GENERIC, runnable);
+ */
+    private final TimeValue maxTimeout;
+    private static final String ELECTION_MAX_TIMEOUT_SETTING_KEY = "cluster.election.max_timeout";
+                protected void doRun() {
+                        logger.debug("{} not starting election", this);
+        ELECTION_DURATION_SETTING_KEY,
+    // package-private for testing
+ * Modifications Copyright OpenSearch Contributors. See
+        ELECTION_INITIAL_TIMEOUT_SETTING_KEY,
+     *
+        }
+ * this work for additional information regarding copyright
+        TimeValue.timeValueSeconds(300),
+        private final AtomicBoolean isClosed = new AtomicBoolean();
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.common.settings.Setting;
+package org.opensearch.cluster.coordination;
+        if (maxTimeout.millis() < initialTimeout.millis()) {
+            final long thisAttempt = attempt.getAndIncrement();
+            );
+import org.opensearch.common.SuppressForbidden;
+        ELECTION_MAX_TIMEOUT_SETTING_KEY,
+import org.opensearch.common.unit.TimeValue;
+import java.util.concurrent.atomic.AtomicBoolean;
                     }
                 }
-
-                @Override
+            }
+        maxTimeout = ELECTION_MAX_TIMEOUT_SETTING.get(settings);
+    private static final String ELECTION_INITIAL_TIMEOUT_SETTING_KEY = "cluster.election.initial_timeout";
                 public String toString() {
-                    return "scheduleNextElection{gracePeriod="
-                        + gracePeriod
-                        + ", thisAttempt="
-                        + thisAttempt
-                        + ", maxDelayMillis="
-                        + maxDelayMillis
-                        + ", delayMillis="
-                        + delayMillis
-                        + ", "
-                        + ElectionScheduler.this
-                        + "}";
-                }
-            };
-
-            logger.debug("scheduling {}", runnable);
-            threadPool.scheduleUnlessShuttingDown(TimeValue.timeValueMillis(delayMillis), Names.GENERIC, runnable);
-        }
-
-        @Override
+     * @opensearch.internal
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+                @Override
         public String toString() {
-            return "ElectionScheduler{attempt=" + attempt + ", " + ElectionSchedulerFactory.this + "}";
-        }
-
-        @Override
-        public void close() {
-            boolean wasNotPreviouslyClosed = isClosed.compareAndSet(false, true);
-            assert wasNotPreviouslyClosed;
-        }
-    }
-}
+     * Start the process to schedule repeated election attempts.
+        return "ElectionSchedulerFactory{"
+    private final TimeValue initialTimeout;
+    public static final Setting<TimeValue> ELECTION_BACK_OFF_TIME_SETTING = Setting.timeSetting(
+                        + ", "
+        TimeValue.timeValueMillis(1),
+ * so that if elections are failing due to a network partition that lasts for a long time then when the partition heals there is an election
+            + ", backoffTime="
+    );
+    );
+        assert 0 < upperBound : upperBound;
+                }
+ * @opensearch.internal

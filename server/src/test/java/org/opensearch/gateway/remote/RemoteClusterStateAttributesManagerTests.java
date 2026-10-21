@@ -1,370 +1,344 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.gateway.remote;
-
-import org.opensearch.Version;
-import org.opensearch.action.LatchedActionListener;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterState.Custom;
-import org.opensearch.cluster.DiffableUtils;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.common.blobstore.BlobPath;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.TestCapturingListener;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.compress.Compressor;
-import org.opensearch.core.compress.NoneCompressor;
-import org.opensearch.gateway.remote.model.RemoteClusterBlocks;
-import org.opensearch.gateway.remote.model.RemoteClusterStateCustoms;
-import org.opensearch.gateway.remote.model.RemoteDiscoveryNodes;
-import org.opensearch.gateway.remote.model.RemoteReadResult;
-import org.opensearch.index.translog.transfer.BlobStoreTransferService;
-import org.opensearch.repositories.blobstore.BlobStoreRepository;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-
-import static org.opensearch.common.blobstore.stream.write.WritePriority.URGENT;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTE;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
-import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.DISCOVERY_NODES;
-import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom1;
-import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom2;
-import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom3;
-import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom4;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CUSTOM_DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.PATH_DELIMITER;
-import static org.opensearch.gateway.remote.RemoteClusterStateUtils.encodeString;
-import static org.opensearch.gateway.remote.model.RemoteClusterBlocks.CLUSTER_BLOCKS;
-import static org.opensearch.gateway.remote.model.RemoteClusterBlocksTests.randomClusterBlocks;
-import static org.opensearch.gateway.remote.model.RemoteClusterStateCustoms.CLUSTER_STATE_CUSTOM;
-import static org.opensearch.gateway.remote.model.RemoteClusterStateCustomsTests.getClusterStateCustom;
-import static org.opensearch.gateway.remote.model.RemoteDiscoveryNodesTests.getDiscoveryNodes;
-import static org.opensearch.index.remote.RemoteStoreUtils.invertLong;
-import static org.hamcrest.Matchers.is;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyIterable;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class RemoteClusterStateAttributesManagerTests extends OpenSearchTestCase {
-    private RemoteClusterStateAttributesManager remoteClusterStateAttributesManager;
-    private BlobStoreTransferService blobStoreTransferService;
-    private Compressor compressor;
-    private final ThreadPool threadPool = new TestThreadPool(RemoteClusterStateAttributesManagerTests.class.getName());
-    private final long VERSION = 7331L;
-    private NamedWriteableRegistry namedWriteableRegistry;
-    private final String CLUSTER_NAME = "test-cluster";
-    private final String CLUSTER_UUID = "test-cluster-uuid";
-
-    @Before
-    public void setup() throws Exception {
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        namedWriteableRegistry = writableRegistry();
-        BlobStoreRepository blobStoreRepository = mock(BlobStoreRepository.class);
-        when(blobStoreRepository.basePath()).thenReturn(new BlobPath());
-        blobStoreTransferService = mock(BlobStoreTransferService.class);
-        compressor = new NoneCompressor();
-
-        remoteClusterStateAttributesManager = new RemoteClusterStateAttributesManager(
-            CLUSTER_NAME,
-            blobStoreRepository,
-            blobStoreTransferService,
-            writableRegistry(),
-            threadPool
-        );
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        threadPool.shutdown();
-    }
-
-    public void testGetAsyncWriteRunnable_DiscoveryNodes() throws IOException, InterruptedException {
-        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(discoveryNodes, VERSION, CLUSTER_UUID, compressor);
-        doAnswer(invocationOnMock -> {
-            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
-            return null;
-        }).when(blobStoreTransferService)
-            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
-        final CountDownLatch latch = new CountDownLatch(1);
-        final TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> listener = new TestCapturingListener<>();
-        remoteClusterStateAttributesManager.writeAsync(DISCOVERY_NODES, remoteDiscoveryNodes, new LatchedActionListener<>(listener, latch));
-        latch.await();
-        assertNull(listener.getFailure());
-        assertNotNull(listener.getResult());
-        assertEquals(DISCOVERY_NODES, listener.getResult().getComponent());
-        String uploadedFileName = listener.getResult().getUploadedFilename();
-        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
-        assertEquals(5, pathTokens.length);
-        assertEquals(RemoteClusterStateUtils.encodeString(CLUSTER_NAME), pathTokens[0]);
-        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
-        assertEquals(CLUSTER_UUID, pathTokens[2]);
-        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
-        String[] splitFileName = pathTokens[4].split(DELIMITER);
         assertEquals(4, splitFileName.length);
-        assertEquals(DISCOVERY_NODES, splitFileName[0]);
-        assertEquals(invertLong(VERSION), splitFileName[1]);
-        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
-    }
-
-    public void testGetAsyncReadRunnable_DiscoveryNodes() throws IOException, InterruptedException {
-        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
-        String fileName = randomAlphaOfLength(10);
-        RemoteDiscoveryNodes remoteObjForDownload = new RemoteDiscoveryNodes(fileName, "cluster-uuid", compressor, Version.CURRENT);
-        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
-            remoteObjForDownload.discoveryNodesFormat.serialize(
-                (out, discoveryNode) -> discoveryNode.writeToWithAttribute(out),
-                discoveryNodes,
-                fileName,
-                compressor
-            ).streamInput()
-        );
-        CountDownLatch latch = new CountDownLatch(1);
-        TestCapturingListener<RemoteReadResult> listener = new TestCapturingListener<>();
-        remoteClusterStateAttributesManager.readAsync(DISCOVERY_NODES, remoteObjForDownload, new LatchedActionListener<>(listener, latch));
-        latch.await();
-        assertNull(listener.getFailure());
-        assertNotNull(listener.getResult());
-        assertEquals(CLUSTER_STATE_ATTRIBUTE, listener.getResult().getComponent());
-        assertEquals(DISCOVERY_NODES, listener.getResult().getComponentName());
-        DiscoveryNodes readDiscoveryNodes = (DiscoveryNodes) listener.getResult().getObj();
-        assertEquals(discoveryNodes.getSize(), readDiscoveryNodes.getSize());
-        discoveryNodes.getNodes().forEach((nodeId, node) -> assertEquals(readDiscoveryNodes.get(nodeId), node));
-        assertEquals(discoveryNodes.getClusterManagerNodeId(), readDiscoveryNodes.getClusterManagerNodeId());
-    }
-
-    public void testGetAsyncWriteRunnable_ClusterBlocks() throws IOException, InterruptedException {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
-        RemoteClusterBlocks remoteClusterBlocks = new RemoteClusterBlocks(clusterBlocks, VERSION, CLUSTER_UUID, compressor);
         doAnswer(invocationOnMock -> {
-            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
-            return null;
-        }).when(blobStoreTransferService)
-            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
-        final CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.threadpool.ThreadPool;
+    public void testGetAsyncWriteRunnable_Exception() throws IOException, InterruptedException {
+        assertEquals(custom, capturingListener.getResult().getObj());
+        assertThat(customsDiff.getDeletes(), is(List.of(TestClusterStateCustom1.TYPE)));
+import static org.opensearch.gateway.remote.model.RemoteClusterBlocks.CLUSTER_BLOCKS;
+import org.opensearch.cluster.DiffableUtils;
+        assertNull(capturingListener.getFailure());
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION;
+            CLUSTER_STATE_CUSTOM,
+import static org.hamcrest.Matchers.is;
         final TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> listener = new TestCapturingListener<>();
-        remoteClusterStateAttributesManager.writeAsync(CLUSTER_BLOCKS, remoteClusterBlocks, new LatchedActionListener<>(listener, latch));
-        latch.await();
+import org.opensearch.cluster.block.ClusterBlocks;
+import org.opensearch.cluster.ClusterState;
+            remoteClusterStateCustoms.clusterStateCustomsFormat.serialize(custom, fileName, compressor).streamInput()
         assertNull(listener.getFailure());
+            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
+import org.opensearch.cluster.ClusterState.Custom;
+        assertEquals(String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, custom.getWriteableName()), listener.getResult().getComponent());
+        TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> capturingListener = new TestCapturingListener<>();
+        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
+        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(discoveryNodes, VERSION, CLUSTER_UUID, compressor);
+/*
+        );
+        assertThat(customsDiff.getUpserts(), is(currentCustoms));
+            blobStoreRepository,
+        TestCapturingListener<RemoteReadResult> capturingListener = new TestCapturingListener<>();
+    }
+        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
+        latch.await();
+public class RemoteClusterStateAttributesManagerTests extends OpenSearchTestCase {
+import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom3;
+        remoteClusterStateAttributesManager.readAsync(CLUSTER_BLOCKS, remoteClusterBlocks, new LatchedActionListener<>(listener, latch));
+        super.tearDown();
+    }
+        String[] splitFileName = pathTokens[4].split(DELIMITER);
+        );
+import java.util.List;
+        assertEquals(5, pathTokens.length);
+        remoteClusterStateAttributesManager.readAsync(DISCOVERY_NODES, remoteObjForDownload, new LatchedActionListener<>(listener, latch));
+        );
+            remoteClusterStateCustoms,
+        );
+        remoteClusterStateAttributesManager.writeAsync(DISCOVERY_NODES, remoteDiscoveryNodes, new LatchedActionListener<>(listener, latch));
+    public void testGetUpdatedCustoms() {
+import org.opensearch.cluster.ClusterName;
+        latch.await();
+            TestClusterStateCustom2.TYPE,
+import org.opensearch.common.util.TestCapturingListener;
+            namedWriteableRegistry
+            remoteObjForDownload.discoveryNodesFormat.serialize(
+        doAnswer(invocationOnMock -> {
+        );
+ * The OpenSearch Contributors require contributions made to
+            return null;
+            new LatchedActionListener<>(listener, latch)
+    private Compressor compressor;
+import org.opensearch.core.action.ActionListener;
+            remoteClusterBlocks.clusterBlocksFormat.serialize(clusterBlocks, fileName, compressor).streamInput()
+        TestCapturingListener<RemoteReadResult> listener = new TestCapturingListener<>();
+        }).when(blobStoreTransferService)
+            fileName,
+            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
+import java.util.Collections;
+        String fileName = randomAlphaOfLength(10);
+        blobStoreTransferService = mock(BlobStoreTransferService.class);
+        assertEquals(CLUSTER_BLOCKS, listener.getResult().getComponentName());
+import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom4;
+        remoteClusterStateAttributesManager.writeAsync(
+ * compatible open source license.
+        final CountDownLatch latch = new CountDownLatch(1);
+        assertThat(customsDiff.getUpserts(), is(expectedCustoms));
+import static org.opensearch.common.blobstore.stream.write.WritePriority.URGENT;
+        String uploadedFileName = listener.getResult().getUploadedFilename();
+    }
+        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
+        assertNull(listener.getFailure());
+ */
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_PATH_TOKEN;
+        namedWriteableRegistry = writableRegistry();
+import org.opensearch.cluster.node.DiscoveryNodes;
+            VERSION,
+            custom.getWriteableName(),
+            custom.getWriteableName(),
+            return null;
+            custom,
+    }
+import org.opensearch.core.compress.Compressor;
+        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
+        BlobStoreRepository blobStoreRepository = mock(BlobStoreRepository.class);
+        assertThat(customsDiff.getDeletes(), is(Collections.emptyList()));
+            invocationOnMock.getArgument(4, ActionListener.class).onFailure(ioException);
+package org.opensearch.gateway.remote;
+        latch.await();
+            new TestClusterStateCustom3("data3-changed"),
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.DELIMITER;
+        assertEquals(CLUSTER_UUID, pathTokens[2]);
+        discoveryNodes.getNodes().forEach((nodeId, node) -> assertEquals(readDiscoveryNodes.get(nodeId), node));
+            TestClusterStateCustom1.TYPE,
+            CLUSTER_UUID,
+        Map<String, ClusterState.Custom> previousCustoms = Map.of(
+import org.opensearch.Version;
+        latch.await();
+        String fileName = randomAlphaOfLength(10);
+    public void testGetAsyncReadRunnable_ClusterBlocks() throws IOException, InterruptedException {
+    public void testGetAsyncWriteRunnable_Custom() throws IOException, InterruptedException {
+ *
+        assertEquals(DISCOVERY_NODES, splitFileName[0]);
+        assertNotNull(listener.getResult());
+        final TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> listener = new TestCapturingListener<>();
+        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
+        String fileName = randomAlphaOfLength(10);
+import static org.mockito.ArgumentMatchers.anyIterable;
+        RemoteDiscoveryNodes remoteObjForDownload = new RemoteDiscoveryNodes(fileName, "cluster-uuid", compressor, Version.CURRENT);
+                discoveryNodes,
+    public void testGetAsyncWriteRunnable_ClusterBlocks() throws IOException, InterruptedException {
+        Custom custom = getClusterStateCustom();
+import static org.opensearch.gateway.remote.model.RemoteClusterStateCustomsTests.getClusterStateCustom;
+        IOException ioException = new IOException("mock test exception");
+        assertEquals(RemoteClusterStateUtils.encodeString(CLUSTER_NAME), pathTokens[0]);
+        ClusterState previousState = ClusterState.builder(new ClusterName("test-cluster")).customs(previousCustoms).build();
+        assertEquals(clusterBlocks.global(), readClusterBlocks.global());
+            CLUSTER_UUID,
+import static org.mockito.ArgumentMatchers.any;
+            remoteDiscoveryNodes,
+        String uploadedFileName = listener.getResult().getUploadedFilename();
+            new LatchedActionListener<>(capturingListener, latch)
+        assertEquals(CLUSTER_BLOCKS, splitFileName[0]);
+        );
+            new TestClusterStateCustom3("data3")
+        remoteClusterStateAttributesManager.readAsync(
+            compressor,
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CUSTOM_DELIMITER;
+        RemoteClusterBlocks remoteClusterBlocks = new RemoteClusterBlocks(clusterBlocks, VERSION, CLUSTER_UUID, compressor);
+}
         assertNotNull(listener.getResult());
         assertEquals(CLUSTER_BLOCKS, listener.getResult().getComponent());
-        String uploadedFileName = listener.getResult().getUploadedFilename();
-        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
-        assertEquals(5, pathTokens.length);
-        assertEquals(encodeString(CLUSTER_NAME), pathTokens[0]);
-        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
-        assertEquals(CLUSTER_UUID, pathTokens[2]);
-        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
-        String[] splitFileName = pathTokens[4].split(DELIMITER);
-        assertEquals(4, splitFileName.length);
-        assertEquals(CLUSTER_BLOCKS, splitFileName[0]);
-        assertEquals(invertLong(VERSION), splitFileName[1]);
-        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
-    }
-
-    public void testGetAsyncReadRunnable_ClusterBlocks() throws IOException, InterruptedException {
-        ClusterBlocks clusterBlocks = randomClusterBlocks();
-        String fileName = randomAlphaOfLength(10);
-        RemoteClusterBlocks remoteClusterBlocks = new RemoteClusterBlocks(fileName, "cluster-uuid", compressor, Version.CURRENT);
-        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
-            remoteClusterBlocks.clusterBlocksFormat.serialize(clusterBlocks, fileName, compressor).streamInput()
-        );
-        CountDownLatch latch = new CountDownLatch(1);
-        TestCapturingListener<RemoteReadResult> listener = new TestCapturingListener<>();
-
-        remoteClusterStateAttributesManager.readAsync(CLUSTER_BLOCKS, remoteClusterBlocks, new LatchedActionListener<>(listener, latch));
-        latch.await();
-        assertNull(listener.getFailure());
-        assertNotNull(listener.getResult());
-        assertEquals(CLUSTER_STATE_ATTRIBUTE, listener.getResult().getComponent());
-        assertEquals(CLUSTER_BLOCKS, listener.getResult().getComponentName());
-        ClusterBlocks readClusterBlocks = (ClusterBlocks) listener.getResult().getObj();
-        assertEquals(clusterBlocks.global(), readClusterBlocks.global());
-        assertEquals(clusterBlocks.indices().keySet(), readClusterBlocks.indices().keySet());
-        for (String index : clusterBlocks.indices().keySet()) {
-            assertEquals(clusterBlocks.indices().get(index), readClusterBlocks.indices().get(index));
-        }
-    }
-
-    public void testGetAsyncWriteRunnable_Custom() throws IOException, InterruptedException {
-        Custom custom = getClusterStateCustom();
-        RemoteClusterStateCustoms remoteClusterStateCustoms = new RemoteClusterStateCustoms(
-            custom,
-            custom.getWriteableName(),
-            VERSION,
-            CLUSTER_UUID,
-            compressor,
-            namedWriteableRegistry
-        );
-        doAnswer(invocationOnMock -> {
-            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
-            return null;
-        }).when(blobStoreTransferService)
-            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
-        final TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> listener = new TestCapturingListener<>();
-        final CountDownLatch latch = new CountDownLatch(1);
-        remoteClusterStateAttributesManager.writeAsync(
-            CLUSTER_STATE_CUSTOM,
-            remoteClusterStateCustoms,
-            new LatchedActionListener<>(listener, latch)
-        );
-        latch.await();
-        assertNull(listener.getFailure());
-        assertNotNull(listener.getResult());
-        assertEquals(String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, custom.getWriteableName()), listener.getResult().getComponent());
-        String uploadedFileName = listener.getResult().getUploadedFilename();
-        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
-        assertEquals(5, pathTokens.length);
-        assertEquals(encodeString(CLUSTER_NAME), pathTokens[0]);
-        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
-        assertEquals(CLUSTER_UUID, pathTokens[2]);
-        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
-        String[] splitFileName = pathTokens[4].split(DELIMITER);
-        assertEquals(4, splitFileName.length);
-        assertEquals(String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, custom.getWriteableName()), splitFileName[0]);
-        assertEquals(invertLong(VERSION), splitFileName[1]);
-        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
-    }
-
-    public void testGetAsyncReadRunnable_Custom() throws IOException, InterruptedException {
-        Custom custom = getClusterStateCustom();
-        String fileName = randomAlphaOfLength(10);
-        RemoteClusterStateCustoms remoteClusterStateCustoms = new RemoteClusterStateCustoms(
-            fileName,
-            custom.getWriteableName(),
-            CLUSTER_UUID,
-            compressor,
-            namedWriteableRegistry,
-            Version.CURRENT
-        );
-        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
-            remoteClusterStateCustoms.clusterStateCustomsFormat.serialize(custom, fileName, compressor).streamInput()
-        );
-        TestCapturingListener<RemoteReadResult> capturingListener = new TestCapturingListener<>();
-        final CountDownLatch latch = new CountDownLatch(1);
-        remoteClusterStateAttributesManager.readAsync(
-            CLUSTER_STATE_CUSTOM,
-            remoteClusterStateCustoms,
-            new LatchedActionListener<>(capturingListener, latch)
-        );
-        latch.await();
-        assertNull(capturingListener.getFailure());
-        assertNotNull(capturingListener.getResult());
-        assertEquals(custom, capturingListener.getResult().getObj());
-        assertEquals(CLUSTER_STATE_ATTRIBUTE, capturingListener.getResult().getComponent());
-        assertEquals(CLUSTER_STATE_CUSTOM, capturingListener.getResult().getComponentName());
-    }
-
-    public void testGetAsyncWriteRunnable_Exception() throws IOException, InterruptedException {
-        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
-        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(discoveryNodes, VERSION, CLUSTER_UUID, compressor);
-
-        IOException ioException = new IOException("mock test exception");
-        doAnswer(invocationOnMock -> {
-            invocationOnMock.getArgument(4, ActionListener.class).onFailure(ioException);
-            return null;
-        }).when(blobStoreTransferService)
-            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
-
-        TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> capturingListener = new TestCapturingListener<>();
-        final CountDownLatch latch = new CountDownLatch(1);
-        remoteClusterStateAttributesManager.writeAsync(
-            DISCOVERY_NODES,
-            remoteDiscoveryNodes,
-            new LatchedActionListener<>(capturingListener, latch)
-        );
-        latch.await();
-        assertNull(capturingListener.getResult());
-        assertTrue(capturingListener.getFailure() instanceof RemoteStateTransferException);
-        assertEquals(ioException, capturingListener.getFailure().getCause());
-    }
-
-    public void testGetAsyncReadRunnable_Exception() throws IOException, InterruptedException {
-        String fileName = randomAlphaOfLength(10);
-        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(fileName, CLUSTER_UUID, compressor, Version.CURRENT);
-        Exception ioException = new IOException("mock test exception");
-        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenThrow(ioException);
-        CountDownLatch latch = new CountDownLatch(1);
-        TestCapturingListener<RemoteReadResult> capturingListener = new TestCapturingListener<>();
-        remoteClusterStateAttributesManager.readAsync(
-            DISCOVERY_NODES,
-            remoteDiscoveryNodes,
-            new LatchedActionListener<>(capturingListener, latch)
-        );
-        latch.await();
-        assertNull(capturingListener.getResult());
-        assertEquals(ioException, capturingListener.getFailure().getCause());
-        assertTrue(capturingListener.getFailure() instanceof RemoteStateTransferException);
-    }
-
-    public void testGetUpdatedCustoms() {
-        Map<String, ClusterState.Custom> previousCustoms = Map.of(
-            TestClusterStateCustom1.TYPE,
             new TestClusterStateCustom1("data1"),
-            TestClusterStateCustom2.TYPE,
-            new TestClusterStateCustom2("data2"),
-            TestClusterStateCustom3.TYPE,
-            new TestClusterStateCustom3("data3")
-        );
-        ClusterState previousState = ClusterState.builder(new ClusterName("test-cluster")).customs(previousCustoms).build();
-
-        Map<String, Custom> currentCustoms = Map.of(
-            TestClusterStateCustom2.TYPE,
-            new TestClusterStateCustom2("data2"),
-            TestClusterStateCustom3.TYPE,
-            new TestClusterStateCustom3("data3-changed"),
-            TestClusterStateCustom4.TYPE,
-            new TestClusterStateCustom4("data4")
-        );
-
-        ClusterState currentState = ClusterState.builder(new ClusterName("test-cluster")).customs(currentCustoms).build();
-
-        DiffableUtils.MapDiff<String, ClusterState.Custom, Map<String, ClusterState.Custom>> customsDiff =
-            remoteClusterStateAttributesManager.getUpdatedCustoms(currentState, previousState, false, randomBoolean());
-        assertThat(customsDiff.getUpserts(), is(Collections.emptyMap()));
-        assertThat(customsDiff.getDeletes(), is(Collections.emptyList()));
-
-        customsDiff = remoteClusterStateAttributesManager.getUpdatedCustoms(currentState, previousState, true, true);
-        assertThat(customsDiff.getUpserts(), is(currentCustoms));
-        assertThat(customsDiff.getDeletes(), is(Collections.emptyList()));
-
-        Map<String, ClusterState.Custom> expectedCustoms = Map.of(
-            TestClusterStateCustom3.TYPE,
-            new TestClusterStateCustom3("data3-changed"),
-            TestClusterStateCustom4.TYPE,
-            new TestClusterStateCustom4("data4")
-        );
-
+import static org.opensearch.gateway.remote.model.RemoteDiscoveryNodesTests.getDiscoveryNodes;
+        assertTrue(capturingListener.getFailure() instanceof RemoteStateTransferException);
         customsDiff = remoteClusterStateAttributesManager.getUpdatedCustoms(currentState, previousState, true, false);
-        assertThat(customsDiff.getUpserts(), is(expectedCustoms));
-        assertThat(customsDiff.getDeletes(), is(List.of(TestClusterStateCustom1.TYPE)));
     }
-}
+import org.opensearch.gateway.remote.model.RemoteDiscoveryNodes;
+            namedWriteableRegistry,
+        DiscoveryNodes readDiscoveryNodes = (DiscoveryNodes) listener.getResult().getObj();
+        }).when(blobStoreTransferService)
+            new TestClusterStateCustom3("data3-changed"),
+        CountDownLatch latch = new CountDownLatch(1);
+    public void testGetAsyncReadRunnable_Exception() throws IOException, InterruptedException {
+        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
+        final CountDownLatch latch = new CountDownLatch(1);
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.CLUSTER_STATE_EPHEMERAL_PATH_TOKEN;
+    private final long VERSION = 7331L;
+        assertEquals(String.join(CUSTOM_DELIMITER, CLUSTER_STATE_CUSTOM, custom.getWriteableName()), splitFileName[0]);
+            DISCOVERY_NODES,
+        doAnswer(invocationOnMock -> {
+        assertThat(customsDiff.getDeletes(), is(Collections.emptyList()));
+        assertNull(listener.getFailure());
+        }).when(blobStoreTransferService)
+            ).streamInput()
+import static org.opensearch.gateway.remote.model.RemoteClusterBlocksTests.randomClusterBlocks;
+        final CountDownLatch latch = new CountDownLatch(1);
+import static org.opensearch.gateway.remote.model.RemoteClusterStateCustoms.CLUSTER_STATE_CUSTOM;
+        Exception ioException = new IOException("mock test exception");
+        String fileName = randomAlphaOfLength(10);
+import org.opensearch.gateway.remote.model.RemoteClusterBlocks;
+    public void testGetAsyncReadRunnable_DiscoveryNodes() throws IOException, InterruptedException {
+        assertEquals(CLUSTER_UUID, pathTokens[2]);
+        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
+import org.opensearch.threadpool.TestThreadPool;
+            return null;
+        assertEquals(CLUSTER_UUID, pathTokens[2]);
+        assertEquals(4, splitFileName.length);
+import static org.mockito.Mockito.doAnswer;
+        assertNotNull(capturingListener.getResult());
+        assertEquals(discoveryNodes.getSize(), readDiscoveryNodes.getSize());
+        CountDownLatch latch = new CountDownLatch(1);
+        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.PATH_DELIMITER;
+        assertEquals(invertLong(VERSION), splitFileName[1]);
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.CLUSTER_STATE_ATTRIBUTE;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+        DiffableUtils.MapDiff<String, ClusterState.Custom, Map<String, ClusterState.Custom>> customsDiff =
+        }
+        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
+        customsDiff = remoteClusterStateAttributesManager.getUpdatedCustoms(currentState, previousState, true, true);
+        TestCapturingListener<RemoteReadResult> listener = new TestCapturingListener<>();
+        assertEquals(CLUSTER_STATE_ATTRIBUTE, listener.getResult().getComponent());
+import static org.mockito.ArgumentMatchers.eq;
+        final TestCapturingListener<ClusterMetadataManifest.UploadedMetadata> listener = new TestCapturingListener<>();
+import static org.opensearch.gateway.remote.RemoteClusterStateUtils.encodeString;
+        when(blobStoreRepository.basePath()).thenReturn(new BlobPath());
+import org.opensearch.gateway.remote.model.RemoteReadResult;
+            threadPool
+        Map<String, ClusterState.Custom> expectedCustoms = Map.of(
+        RemoteClusterStateCustoms remoteClusterStateCustoms = new RemoteClusterStateCustoms(
+    }
+    }
+            new TestClusterStateCustom2("data2"),
+import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom2;
+        remoteClusterStateAttributesManager.writeAsync(
+        );
+            new TestClusterStateCustom2("data2"),
+    @Before
+import static org.opensearch.index.remote.RemoteStoreUtils.invertLong;
+        assertTrue(capturingListener.getFailure() instanceof RemoteStateTransferException);
+        latch.await();
+        assertNull(listener.getFailure());
+        RemoteClusterStateCustoms remoteClusterStateCustoms = new RemoteClusterStateCustoms(
+        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenReturn(
+import org.opensearch.common.blobstore.BlobPath;
+        when(blobStoreTransferService.downloadBlob(anyIterable(), anyString())).thenThrow(ioException);
+            DISCOVERY_NODES,
+        String[] pathTokens = uploadedFileName.split(PATH_DELIMITER);
+        assertEquals(CLUSTER_STATE_ATTRIBUTE, listener.getResult().getComponent());
+            blobStoreTransferService,
+        ClusterState currentState = ClusterState.builder(new ClusterName("test-cluster")).customs(currentCustoms).build();
+import org.opensearch.action.LatchedActionListener;
+    public void setup() throws Exception {
+    private RemoteClusterStateAttributesManager remoteClusterStateAttributesManager;
+        remoteClusterStateAttributesManager = new RemoteClusterStateAttributesManager(
+        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
+        assertEquals(encodeString(CLUSTER_NAME), pathTokens[0]);
+            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
+        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(fileName, CLUSTER_UUID, compressor, Version.CURRENT);
+        assertNull(listener.getFailure());
+        assertEquals(DISCOVERY_NODES, listener.getResult().getComponentName());
+import java.io.InputStream;
+        assertEquals(5, pathTokens.length);
+import org.opensearch.test.OpenSearchTestCase;
+            TestClusterStateCustom3.TYPE,
+        );
+        assertNull(capturingListener.getResult());
+        );
+        latch.await();
+        assertEquals(ioException, capturingListener.getFailure().getCause());
+    }
+        latch.await();
+        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
+        assertEquals(DISCOVERY_NODES, listener.getResult().getComponent());
+    }
+            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
+        doAnswer(invocationOnMock -> {
+            Version.CURRENT
+import org.junit.Before;
+        remoteClusterStateAttributesManager.writeAsync(CLUSTER_BLOCKS, remoteClusterBlocks, new LatchedActionListener<>(listener, latch));
+        String uploadedFileName = listener.getResult().getUploadedFilename();
+        Map<String, Custom> currentCustoms = Map.of(
+import java.io.IOException;
+ * SPDX-License-Identifier: Apache-2.0
+        String[] splitFileName = pathTokens[4].split(DELIMITER);
+        );
+        remoteClusterStateAttributesManager.readAsync(
+        assertNotNull(listener.getResult());
+        ClusterBlocks readClusterBlocks = (ClusterBlocks) listener.getResult().getObj();
+            new LatchedActionListener<>(capturingListener, latch)
+                compressor
+            CLUSTER_STATE_CUSTOM,
+import org.opensearch.gateway.remote.model.RemoteClusterStateCustoms;
+            TestClusterStateCustom3.TYPE,
+import org.opensearch.common.settings.ClusterSettings;
+        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
+import java.util.Map;
+            remoteDiscoveryNodes,
+        assertNull(capturingListener.getResult());
+            return null;
+            remoteClusterStateCustoms,
+        assertEquals(4, splitFileName.length);
+        latch.await();
+        assertEquals(CLUSTER_STATE_EPHEMERAL_PATH_TOKEN, pathTokens[3]);
+        RemoteClusterBlocks remoteClusterBlocks = new RemoteClusterBlocks(fileName, "cluster-uuid", compressor, Version.CURRENT);
+        String[] splitFileName = pathTokens[4].split(DELIMITER);
+        TestCapturingListener<RemoteReadResult> capturingListener = new TestCapturingListener<>();
+        assertEquals(encodeString(CLUSTER_NAME), pathTokens[0]);
+        assertEquals(CLUSTER_STATE_ATTRIBUTES_CURRENT_CODEC_VERSION, Integer.parseInt(splitFileName[3]));
+        for (String index : clusterBlocks.indices().keySet()) {
+            invocationOnMock.getArgument(4, ActionListener.class).onResponse(null);
+        CountDownLatch latch = new CountDownLatch(1);
+import org.opensearch.index.translog.transfer.BlobStoreTransferService;
+        DiscoveryNodes discoveryNodes = getDiscoveryNodes();
+        assertEquals(invertLong(VERSION), splitFileName[1]);
+        final CountDownLatch latch = new CountDownLatch(1);
+            TestClusterStateCustom4.TYPE,
+        compressor = new NoneCompressor();
+        assertThat(customsDiff.getUpserts(), is(Collections.emptyMap()));
+import org.junit.After;
+        );
+    private NamedWriteableRegistry namedWriteableRegistry;
+import static org.mockito.Mockito.when;
+            new TestClusterStateCustom4("data4")
+            new LatchedActionListener<>(capturingListener, latch)
+import static org.opensearch.gateway.remote.RemoteClusterStateAttributesManager.DISCOVERY_NODES;
+            compressor,
+                (out, discoveryNode) -> discoveryNode.writeToWithAttribute(out),
+import static org.mockito.ArgumentMatchers.anyString;
+            writableRegistry(),
+import org.opensearch.common.settings.Settings;
+        );
+                fileName,
+        assertEquals(clusterBlocks.indices().keySet(), readClusterBlocks.indices().keySet());
+    }
+            new TestClusterStateCustom4("data4")
+        assertEquals(CLUSTER_STATE_ATTRIBUTE, capturingListener.getResult().getComponent());
+    @After
+    private final String CLUSTER_UUID = "test-cluster-uuid";
+        final CountDownLatch latch = new CountDownLatch(1);
+    private final ThreadPool threadPool = new TestThreadPool(RemoteClusterStateAttributesManagerTests.class.getName());
+    private final String CLUSTER_NAME = "test-cluster";
+        assertEquals(invertLong(VERSION), splitFileName[1]);
+            assertEquals(clusterBlocks.indices().get(index), readClusterBlocks.indices().get(index));
+    private BlobStoreTransferService blobStoreTransferService;
+        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
+        assertEquals(5, pathTokens.length);
+    }
+import static org.mockito.Mockito.mock;
+        assertEquals(CLUSTER_STATE_PATH_TOKEN, pathTokens[1]);
+        assertEquals(CLUSTER_STATE_CUSTOM, capturingListener.getResult().getComponentName());
+            .uploadBlob(any(InputStream.class), anyIterable(), anyString(), eq(URGENT), any(ActionListener.class));
+            remoteClusterStateAttributesManager.getUpdatedCustoms(currentState, previousState, false, randomBoolean());
+        assertEquals(ioException, capturingListener.getFailure().getCause());
+            CLUSTER_NAME,
+    public void testGetAsyncReadRunnable_Custom() throws IOException, InterruptedException {
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.repositories.blobstore.BlobStoreRepository;
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        }).when(blobStoreTransferService)
+    public void testGetAsyncWriteRunnable_DiscoveryNodes() throws IOException, InterruptedException {
+        ClusterBlocks clusterBlocks = randomClusterBlocks();
+        threadPool.shutdown();
+        assertEquals(discoveryNodes.getClusterManagerNodeId(), readDiscoveryNodes.getClusterManagerNodeId());
+    public void tearDown() throws Exception {
+import java.util.concurrent.CountDownLatch;
+        );
+        assertNotNull(listener.getResult());
+        RemoteDiscoveryNodes remoteDiscoveryNodes = new RemoteDiscoveryNodes(discoveryNodes, VERSION, CLUSTER_UUID, compressor);
+import static org.opensearch.gateway.remote.RemoteClusterStateTestUtils.TestClusterStateCustom1;
+        assertNotNull(listener.getResult());
+            TestClusterStateCustom4.TYPE,
+            TestClusterStateCustom2.TYPE,
+import org.opensearch.core.compress.NoneCompressor;
+        Custom custom = getClusterStateCustom();
+            TestClusterStateCustom3.TYPE,

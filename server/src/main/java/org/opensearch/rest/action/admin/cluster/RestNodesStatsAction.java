@@ -1,256 +1,226 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.rest.action.admin.cluster;
-
-import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
-import org.opensearch.action.admin.indices.stats.CommonStatsFlags.Flag;
-import org.opensearch.common.cache.CacheType;
-import org.opensearch.core.common.Strings;
-import org.opensearch.rest.BaseRestHandler;
-import org.opensearch.rest.RestRequest;
-import org.opensearch.rest.action.RestActions.NodesResponseRestListener;
-import org.opensearch.transport.client.node.NodeClient;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.function.Consumer;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.unmodifiableList;
-import static org.opensearch.rest.RestRequest.Method.GET;
-
-/**
- * Transport action to get nodes stats
- *
- * @opensearch.api
- */
-public class RestNodesStatsAction extends BaseRestHandler {
-
-    @Override
-    public List<Route> routes() {
-        return unmodifiableList(
-            asList(
-                new Route(GET, "/_nodes/stats"),
-                new Route(GET, "/_nodes/{nodeId}/stats"),
-                new Route(GET, "/_nodes/stats/{metric}"),
-                new Route(GET, "/_nodes/{nodeId}/stats/{metric}"),
-                new Route(GET, "/_nodes/stats/{metric}/{index_metric}"),
-                new Route(GET, "/_nodes/{nodeId}/stats/{metric}/{index_metric}")
-            )
-        );
-    }
-
-    static final Map<String, Consumer<NodesStatsRequest>> METRICS;
-
-    static {
-        Map<String, Consumer<NodesStatsRequest>> map = new HashMap<>();
-        for (NodesStatsRequest.Metric metric : NodesStatsRequest.Metric.values()) {
-            map.put(metric.metricName(), request -> request.addMetric(metric.metricName()));
-        }
-        map.put("indices", request -> request.indices(true));
-        METRICS = Collections.unmodifiableMap(map);
-    }
-
-    static final Map<String, Consumer<CommonStatsFlags>> FLAGS;
-
-    static {
-        final Map<String, Consumer<CommonStatsFlags>> flags = new HashMap<>();
-        for (final Flag flag : CommonStatsFlags.Flag.values()) {
-            flags.put(flag.getRestName(), f -> f.set(flag, true));
-        }
-        FLAGS = Collections.unmodifiableMap(flags);
-    }
-
-    @Override
-    public String getName() {
-        return "nodes_stats_action";
-    }
-
-    @Override
-    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
-        String[] nodesIds = Strings.splitStringByCommaToArray(request.param("nodeId"));
-        Set<String> metrics = Strings.tokenizeByCommaToSet(request.param("metric", "_all"));
-
-        NodesStatsRequest nodesStatsRequest = new NodesStatsRequest(nodesIds);
-        nodesStatsRequest.timeout(request.param("timeout"));
-
-        if (metrics.size() == 1 && metrics.contains("_all")) {
-            if (request.hasParam("index_metric")) {
-                throw new IllegalArgumentException(
-                    String.format(
-                        Locale.ROOT,
-                        "request [%s] contains index metrics [%s] but all stats requested",
-                        request.path(),
-                        request.param("index_metric")
-                    )
-                );
-            }
-            nodesStatsRequest.all();
-            nodesStatsRequest.indices(CommonStatsFlags.ALL);
-        } else if (metrics.contains("_all")) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "request [%s] contains _all and individual metrics [%s]",
-                    request.path(),
-                    request.param("metric")
-                )
-            );
-        } else {
-            nodesStatsRequest.clear();
-
-            // use a sorted set so the unrecognized parameters appear in a reliable sorted order
-            final Set<String> invalidMetrics = new TreeSet<>();
-            for (final String metric : metrics) {
-                final Consumer<NodesStatsRequest> handler = METRICS.get(metric);
-                if (handler != null) {
-                    handler.accept(nodesStatsRequest);
-                } else {
                     invalidMetrics.add(metric);
-                }
-            }
-
-            if (!invalidMetrics.isEmpty()) {
-                throw new IllegalArgumentException(unrecognized(request, invalidMetrics, METRICS.keySet(), "metric"));
-            }
-
-            // check for index specific metrics
-            if (metrics.contains("indices")) {
-                Set<String> indexMetrics = Strings.tokenizeByCommaToSet(request.param("index_metric", "_all"));
-                if (indexMetrics.size() == 1 && indexMetrics.contains("_all")) {
-                    nodesStatsRequest.indices(CommonStatsFlags.ALL);
                 } else {
-                    CommonStatsFlags flags = new CommonStatsFlags();
-                    flags.clear();
+                    request.param("metric")
+import java.util.Set;
                     // use a sorted set so the unrecognized parameters appear in a reliable sorted order
-                    final Set<String> invalidIndexMetrics = new TreeSet<>();
-                    for (final String indexMetric : indexMetrics) {
-                        final Consumer<CommonStatsFlags> handler = FLAGS.get(indexMetric);
-                        if (handler != null) {
-                            handler.accept(flags);
-                        } else {
-                            invalidIndexMetrics.add(indexMetric);
-                        }
-                    }
-
                     if (!invalidIndexMetrics.isEmpty()) {
-                        throw new IllegalArgumentException(unrecognized(request, invalidIndexMetrics, FLAGS.keySet(), "index metric"));
-                    }
-
-                    nodesStatsRequest.indices(flags);
-                }
-            } else if (metrics.contains("caches")) {
-                // Extract the list of caches we want to get stats for from the submetrics (which we get from index_metric)
-                Set<String> cacheMetrics = Strings.tokenizeByCommaToSet(request.param("index_metric", "_all"));
-                CommonStatsFlags cacheFlags = new CommonStatsFlags();
-                cacheFlags.clear();
-                if (cacheMetrics.contains("_all")) {
-                    cacheFlags.includeAllCacheTypes();
-                } else {
-                    for (String cacheName : cacheMetrics) {
-                        try {
-                            cacheFlags.includeCacheType(CacheType.getByValue(cacheName));
-                        } catch (IllegalArgumentException e) {
-                            throw new IllegalArgumentException(
-                                unrecognized(request, Set.of(cacheName), CacheType.allValues(), "cache type")
-                            );
-                        }
-                    }
-                }
-                nodesStatsRequest.indices(cacheFlags);
-            } else if (request.hasParam("index_metric")) {
-                throw new IllegalArgumentException(
-                    String.format(
-                        Locale.ROOT,
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags;
+        } else {
+import java.util.List;
                         "request [%s] contains index metrics [%s] but indices stats not requested",
-                        request.path(),
-                        request.param("index_metric")
+import static java.util.Collections.unmodifiableList;
+ * You may obtain a copy of the License at
+                cacheFlags.clear();
+/**
+        FLAGS = Collections.unmodifiableMap(flags);
+                }
+                        }
+ * The OpenSearch Contributors require contributions made to
                     )
-                );
-            }
+        if (metrics.size() == 1 && metrics.contains("_all")) {
+                        Locale.ROOT,
+            // use a sorted set so the unrecognized parameters appear in a reliable sorted order
+        nodesStatsRequest.indices().setIncludeIndicesStatsByLevel(true);
         }
-
-        if (metrics.contains(NodesStatsRequest.Metric.FILE_CACHE_STATS.metricName()) || metrics.contains("_all")) {
-            nodesStatsRequest.fileCacheDetailed(request.paramAsBoolean("detailed", false));
-        }
-
-        if (nodesStatsRequest.indices().isSet(Flag.FieldData) && (request.hasParam("fields") || request.hasParam("fielddata_fields"))) {
-            nodesStatsRequest.indices()
-                .fieldDataFields(request.paramAsStringArray("fielddata_fields", request.paramAsStringArray("fields", null)));
-        }
-        if (nodesStatsRequest.indices().isSet(Flag.Completion) && (request.hasParam("fields") || request.hasParam("completion_fields"))) {
-            nodesStatsRequest.indices()
+                // Extract the list of caches we want to get stats for from the submetrics (which we get from index_metric)
+import static java.util.Arrays.asList;
+            nodesStatsRequest.indices().includeOnlyTopIndexingPressureMetrics(request.paramAsBoolean("top", false));
+/*
+                    final Set<String> invalidIndexMetrics = new TreeSet<>();
+        if (nodesStatsRequest.indices().isSet(Flag.Segments)) {
                 .completionDataFields(request.paramAsStringArray("completion_fields", request.paramAsStringArray("fields", null)));
         }
-        if (nodesStatsRequest.indices().isSet(Flag.Search) && (request.hasParam("groups"))) {
-            nodesStatsRequest.indices().groups(request.paramAsStringArray("groups", null));
-        }
-        if (nodesStatsRequest.indices().isSet(Flag.Segments)) {
-            nodesStatsRequest.indices().includeSegmentFileSizes(request.paramAsBoolean("include_segment_file_sizes", false));
-        }
-        if (request.hasParam("include_all")) {
+    }
+                    for (final String indexMetric : indexMetrics) {
+import org.opensearch.action.admin.indices.stats.CommonStatsFlags.Flag;
             nodesStatsRequest.indices().includeAllShardIndexingPressureTrackers(request.paramAsBoolean("include_all", false));
-        }
-
-        if (request.hasParam("top")) {
-            nodesStatsRequest.indices().includeOnlyTopIndexingPressureMetrics(request.paramAsBoolean("top", false));
-        }
-
-        // If no levels are passed in this results in an empty array.
-        String[] levels = Strings.splitStringByCommaToArray(request.param("level"));
-        nodesStatsRequest.indices().setLevels(levels);
-        nodesStatsRequest.indices().setIncludeIndicesStatsByLevel(true);
-
-        return channel -> client.admin().cluster().nodesStats(nodesStatsRequest, new NodesResponseRestListener<>(channel));
-    }
-
-    private final Set<String> RESPONSE_PARAMS = Collections.singleton("level");
-
-    @Override
-    protected Set<String> responseParams() {
+            nodesStatsRequest.indices()
         return RESPONSE_PARAMS;
-    }
-
+                new Route(GET, "/_nodes/stats/{metric}/{index_metric}"),
+        Map<String, Consumer<NodesStatsRequest>> map = new HashMap<>();
+                } else {
+import java.util.Locale;
+            } else if (request.hasParam("index_metric")) {
+                new Route(GET, "/_nodes/{nodeId}/stats"),
+ * this work for additional information regarding copyright
+        METRICS = Collections.unmodifiableMap(map);
+                    }
+            nodesStatsRequest.all();
+ * under the License.
+                throw new IllegalArgumentException(
     @Override
+                CommonStatsFlags cacheFlags = new CommonStatsFlags();
+                Set<String> indexMetrics = Strings.tokenizeByCommaToSet(request.param("index_metric", "_all"));
+                        } else {
+            nodesStatsRequest.indices(CommonStatsFlags.ALL);
+import org.opensearch.common.cache.CacheType;
+            )
+        if (nodesStatsRequest.indices().isSet(Flag.Search) && (request.hasParam("groups"))) {
+        }
+                        Locale.ROOT,
     public boolean canTripCircuitBreaker() {
-        return false;
+                );
+                        } catch (IllegalArgumentException e) {
+ *
+                throw new IllegalArgumentException(
+            asList(
+        }
+                    }
+ *
     }
-
+ *
+                    cacheFlags.includeAllCacheTypes();
+        } else if (metrics.contains("_all")) {
+            }
+        }
+        for (final Flag flag : CommonStatsFlags.Flag.values()) {
+import java.io.IOException;
+        String[] levels = Strings.splitStringByCommaToArray(request.param("level"));
+                        throw new IllegalArgumentException(unrecognized(request, invalidIndexMetrics, FLAGS.keySet(), "index metric"));
+                    request.path(),
+    static {
+                            handler.accept(flags);
+/*
+                new Route(GET, "/_nodes/stats/{metric}"),
+            );
+        for (NodesStatsRequest.Metric metric : NodesStatsRequest.Metric.values()) {
+            }
+ */
+                        request.path(),
+            nodesStatsRequest.clear();
+                    Locale.ROOT,
+            flags.put(flag.getRestName(), f -> f.set(flag, true));
+                        final Consumer<CommonStatsFlags> handler = FLAGS.get(indexMetric);
+    static {
+        return channel -> client.admin().cluster().nodesStats(nodesStatsRequest, new NodesResponseRestListener<>(channel));
+                        }
+        if (nodesStatsRequest.indices().isSet(Flag.FieldData) && (request.hasParam("fields") || request.hasParam("fielddata_fields"))) {
+            final Set<String> invalidMetrics = new TreeSet<>();
+/*
+        String[] nodesIds = Strings.splitStringByCommaToArray(request.param("nodeId"));
+            }
+    protected Set<String> responseParams() {
+    @Override
+    @Override
+import java.util.HashMap;
+        return "nodes_stats_action";
+                    String.format(
+                    )
+                nodesStatsRequest.indices(cacheFlags);
+                }
+ * @opensearch.api
+ *    http://www.apache.org/licenses/LICENSE-2.0
+import org.opensearch.rest.action.RestActions.NodesResponseRestListener;
+        if (request.hasParam("include_all")) {
+                        try {
+            map.put(metric.metricName(), request -> request.addMetric(metric.metricName()));
+    }
+                new Route(GET, "/_nodes/{nodeId}/stats/{metric}"),
+        return unmodifiableList(
+        }
+                } else {
+    private final Set<String> RESPONSE_PARAMS = Collections.singleton("level");
+                    handler.accept(nodesStatsRequest);
+                        request.param("index_metric")
+                Set<String> cacheMetrics = Strings.tokenizeByCommaToSet(request.param("index_metric", "_all"));
+ * software distributed under the License is distributed on an
+        // If no levels are passed in this results in an empty array.
+import org.opensearch.rest.BaseRestHandler;
+                new Route(GET, "/_nodes/stats"),
+ * ownership. Elasticsearch licenses this file to you under
+ * license agreements. See the NOTICE file distributed with
+                            invalidIndexMetrics.add(indexMetric);
+ * Transport action to get nodes stats
+            nodesStatsRequest.fileCacheDetailed(request.paramAsBoolean("detailed", false));
+import java.util.function.Consumer;
+                        "request [%s] contains index metrics [%s] but all stats requested",
+    }
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+                if (handler != null) {
+import static org.opensearch.rest.RestRequest.Method.GET;
+import org.opensearch.action.admin.cluster.node.stats.NodesStatsRequest;
+            nodesStatsRequest.indices().includeSegmentFileSizes(request.paramAsBoolean("include_segment_file_sizes", false));
+        final Map<String, Consumer<CommonStatsFlags>> flags = new HashMap<>();
+ * Licensed to Elasticsearch under one or more contributor
+            throw new IllegalArgumentException(
+ * compatible open source license.
+        Set<String> metrics = Strings.tokenizeByCommaToSet(request.param("metric", "_all"));
+        nodesStatsRequest.indices().setLevels(levels);
+import org.opensearch.rest.RestRequest;
+ */
+            } else if (metrics.contains("caches")) {
+                throw new IllegalArgumentException(unrecognized(request, invalidMetrics, METRICS.keySet(), "metric"));
+        nodesStatsRequest.timeout(request.param("timeout"));
+                )
+                if (cacheMetrics.contains("_all")) {
+        }
+import org.opensearch.transport.client.node.NodeClient;
+                if (indexMetrics.size() == 1 && indexMetrics.contains("_all")) {
+                final Consumer<NodesStatsRequest> handler = METRICS.get(metric);
+        return false;
+                String.format(
+public class RestNodesStatsAction extends BaseRestHandler {
+package org.opensearch.rest.action.admin.cluster;
+            if (metrics.contains("indices")) {
+ *
+    public RestChannelConsumer prepareRequest(final RestRequest request, final NodeClient client) throws IOException {
+    static final Map<String, Consumer<NodesStatsRequest>> METRICS;
+                    }
 }
+    public List<Route> routes() {
+ * Unless required by applicable law or agreed to in writing,
+                        if (handler != null) {
+    public String getName() {
+    @Override
+ */
+ * GitHub history for details.
+                    flags.clear();
+        if (nodesStatsRequest.indices().isSet(Flag.Completion) && (request.hasParam("fields") || request.hasParam("completion_fields"))) {
+        NodesStatsRequest nodesStatsRequest = new NodesStatsRequest(nodesIds);
+                }
+            // check for index specific metrics
+        }
+import java.util.Collections;
+                .fieldDataFields(request.paramAsStringArray("fielddata_fields", request.paramAsStringArray("fields", null)));
+                    "request [%s] contains _all and individual metrics [%s]",
+                    CommonStatsFlags flags = new CommonStatsFlags();
+            for (final String metric : metrics) {
+import java.util.Map;
+        if (metrics.contains(NodesStatsRequest.Metric.FILE_CACHE_STATS.metricName()) || metrics.contains("_all")) {
+            nodesStatsRequest.indices()
+                );
+            nodesStatsRequest.indices().groups(request.paramAsStringArray("groups", null));
+ * SPDX-License-Identifier: Apache-2.0
+                    String.format(
+        );
+    @Override
+            if (request.hasParam("index_metric")) {
+import org.opensearch.core.common.Strings;
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            }
+                        request.param("index_metric")
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ */
+            if (!invalidMetrics.isEmpty()) {
+ * not use this file except in compliance with the License.
+                    for (String cacheName : cacheMetrics) {
+                            cacheFlags.includeCacheType(CacheType.getByValue(cacheName));
+                    nodesStatsRequest.indices(flags);
+        map.put("indices", request -> request.indices(true));
+        }
+        }
+import java.util.TreeSet;
+    }
+                new Route(GET, "/_nodes/{nodeId}/stats/{metric}/{index_metric}")
+ * Modifications Copyright OpenSearch Contributors. See
+                            );
+    static final Map<String, Consumer<CommonStatsFlags>> FLAGS;
+                                unrecognized(request, Set.of(cacheName), CacheType.allValues(), "cache type")
+                    nodesStatsRequest.indices(CommonStatsFlags.ALL);
+                        request.path(),
+ * this file be licensed under the Apache-2.0 license or a
+                            throw new IllegalArgumentException(
+        if (request.hasParam("top")) {

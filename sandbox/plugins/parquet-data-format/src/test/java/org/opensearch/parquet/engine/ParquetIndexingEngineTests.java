@@ -1,247 +1,218 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.parquet.engine;
-
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.opensearch.Version;
-import org.opensearch.arrow.allocator.ArrowNativeAllocator;
-import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.engine.dataformat.FileInfos;
-import org.opensearch.index.engine.dataformat.FlushInput;
-import org.opensearch.index.engine.dataformat.RefreshInput;
-import org.opensearch.index.engine.dataformat.RefreshResult;
-import org.opensearch.index.engine.dataformat.Writer;
-import org.opensearch.index.engine.dataformat.WriterConfig;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.shard.ShardPath;
-import org.opensearch.parquet.ParquetBaseTests;
-import org.opensearch.parquet.ParquetDataFormatPlugin;
-import org.opensearch.parquet.ParquetSettings;
-import org.opensearch.parquet.bridge.RustBridge;
-import org.opensearch.parquet.fields.ArrowFieldRegistry;
-import org.opensearch.parquet.fields.ParquetField;
-import org.opensearch.parquet.writer.ParquetDocumentInput;
-import org.opensearch.threadpool.FixedExecutorBuilder;
-import org.opensearch.threadpool.ThreadPool;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ParquetIndexingEngineTests extends ParquetBaseTests {
-
-    private ArrowNativeAllocator nativeAllocator;
-    private MappedFieldType idField;
-    private MappedFieldType nameField;
-    private MappedFieldType scoreField;
-    private Schema schema;
-    private Path tempDir;
-    private ParquetIndexingEngine engine;
-    private ThreadPool threadPool;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        RustBridge.initLogger();
-        nativeAllocator = new ArrowNativeAllocator();
-        nativeAllocator.getOrCreatePool(NativeAllocatorPoolConfig.POOL_INGEST, 0L, Long.MAX_VALUE, null);
-
+            doc.addField(scoreField, gen * 100);
+        } catch (Exception e) {
+        assertTrue(Files.exists(Path.of(expectedFile)));
+            String indexUUID = "test_index_uuid";
+                () -> schema,
         idField = createNumberField("id", NumberFieldMapper.NumberType.INTEGER);
-        nameField = createKeywordField("name");
-        scoreField = createNumberField("score", NumberFieldMapper.NumberType.LONG);
-
-        schema = buildSchema(List.of(idField, nameField, scoreField));
-        tempDir = createTempDir();
-        Settings settings = Settings.builder().put("node.name", "parquetengine-test").build();
-        threadPool = new ThreadPool(
-            settings,
-            new FixedExecutorBuilder(
-                settings,
+import java.util.ArrayList;
+    public void testNewDocumentInput() {
+            doc.addField(scoreField, (long) (i * 100));
+    public void testFlushWithNoDocumentsReturnsEmpty() throws Exception {
+            ParquetDocumentInput doc = engine.newDocumentInput();
+        return new Schema(fields);
+import java.nio.file.Path;
+        terminate(threadPool);
+import org.opensearch.index.mapper.NumberFieldMapper;
+    public void testRefreshReturnsEmptyResult() throws Exception {
+                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+import org.opensearch.parquet.ParquetSettings;
+            throw new RuntimeException(e);
+            .resolve("0")
+            doc.addField(idField, (int) gen);
+        assertEquals(4, doc.getFinalInput().size());
+import org.opensearch.index.shard.ShardPath;
+        assertTrue(Files.exists(luceneFile));
+        }
+        engine = createEngine();
+    private ArrowNativeAllocator nativeAllocator;
+import org.opensearch.index.engine.dataformat.RefreshInput;
+    private Schema schema;
                 ParquetDataFormatPlugin.PARQUET_THREAD_POOL_NAME,
+    public void testCreateWriterAndFlush() throws Exception {
                 1,
                 -1,
-                "thread_pool." + ParquetDataFormatPlugin.PARQUET_THREAD_POOL_NAME
-            )
-        );
-        engine = createEngine();
-    }
-
-    @Override
-    public void tearDown() throws Exception {
-        terminate(threadPool);
-        if (nativeAllocator != null) {
-            nativeAllocator.close();
-            nativeAllocator = null;
-        }
-        super.tearDown();
-    }
-
-    public void testCreateWriterAndFlush() throws Exception {
-        Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(1L));
-
-        for (int i = 0; i < 5; i++) {
-            ParquetDocumentInput doc = engine.newDocumentInput();
-            populateMetadataFields(doc);
-            doc.addField(idField, i);
-            doc.addField(nameField, "user_" + i);
-            doc.addField(scoreField, (long) (i * 100));
-            doc.setRowId("__row_id__", i);
+import org.opensearch.parquet.fields.ParquetField;
             writer.addDoc(doc);
-            doc.close();
-        }
-
-        writer.flush(FlushInput.EMPTY);
-        String expectedFile = getExpectedParquetPath(1L);
-        assertTrue(Files.exists(Path.of(expectedFile)));
-        assertEquals(5, RustBridge.getFileMetadata(expectedFile).numRows());
-    }
-
-    public void testMultipleWriterGenerations() throws Exception {
+            return new ParquetIndexingEngine(
+                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+        MapperService mapperService = mock(MapperService.class);
         for (long gen = 1; gen <= 3; gen++) {
-            Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(gen));
-            ParquetDocumentInput doc = engine.newDocumentInput();
-            populateMetadataFields(doc);
-            doc.addField(idField, (int) gen);
-            doc.addField(nameField, "user_" + gen);
-            doc.addField(scoreField, gen * 100);
-            // Each writer is fresh — rowIds restart at 0 within a writer's lifetime.
-            doc.setRowId("__row_id__", 0L);
-
-            writer.addDoc(doc);
-            doc.close();
-            writer.flush(FlushInput.EMPTY);
-            assertEquals(1, RustBridge.getFileMetadata(getExpectedParquetPath(gen)).numRows());
-        }
-    }
-
-    public void testNewDocumentInput() {
-        ParquetDocumentInput doc = engine.newDocumentInput();
+                "thread_pool." + ParquetDataFormatPlugin.PARQUET_THREAD_POOL_NAME
         populateMetadataFields(doc);
-        assertNotNull(doc);
-        doc.setRowId("__row_id__", 0);
-        assertEquals(4, doc.getFinalInput().size());
+    @Override
     }
-
+import org.opensearch.parquet.ParquetBaseTests;
+        ParquetDocumentInput doc = engine.newDocumentInput();
+public class ParquetIndexingEngineTests extends ParquetBaseTests {
+    }
+import org.opensearch.threadpool.FixedExecutorBuilder;
+            new FixedExecutorBuilder(
+            writer.addDoc(doc);
+    private String getExpectedParquetPath(long generation) {
+import org.opensearch.index.IndexSettings;
+ */
+        Files.createFile(luceneFile);
+    }
+ * compatible open source license.
+    }
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
     public void testGetDataFormat() {
+        assertEquals(FileInfos.empty(), writer.flush(FlushInput.EMPTY));
+import org.opensearch.index.engine.dataformat.FlushInput;
+            fields.add(new Field(ft.name(), pf.getFieldType(), null));
+    private MapperService createMockMapperService(Schema schema, IndexSettings indexSettings) {
+    @Override
+        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
+import org.opensearch.arrow.spi.NativeAllocatorPoolConfig;
+            doc.addField(nameField, "user_" + i);
+        assertFalse(Files.exists(parquetFile));
+            // Use the test's pre-built schema directly. The mock MapperService has no
+    }
+            nativeAllocator = null;
+        super.tearDown();
+                () -> mapperService.getIndexSettings().getIndexMetadata().getMappingVersion(),
+ * this file be licensed under the Apache-2.0 license or a
+    }
+        assertTrue(result.refreshedSegments().isEmpty());
+            doc.addField(nameField, "user_" + gen);
+        assertNotNull(doc);
+        tempDir = createTempDir();
+/*
+    private ParquetIndexingEngine createEngine() {
+            doc.addField(idField, i);
+        schema = buildSchema(List.of(idField, nameField, scoreField));
+        engine.deleteFiles(Map.of("lucene", List.of("test_lucene")));
+    private ThreadPool threadPool;
+    }
+import java.nio.file.Files;
+    public void testMultipleWriterGenerations() throws Exception {
+        RefreshResult result = engine.refresh(null);
+    }
+package org.opensearch.parquet.engine;
+            Settings indexSettingsBuilder = Settings.builder()
+import org.apache.arrow.vector.types.pojo.Field;
+import static org.mockito.Mockito.mock;
+            )
+import java.util.Map;
+            // documentMapper, so going through ArrowSchemaBuilder would yield only metadata
+            ShardPath shardPath = new ShardPath(false, dataPath, dataPath, shardId);
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.parquet.bridge.RustBridge;
+import org.opensearch.common.settings.Settings;
+        when(mapperService.documentMapper()).thenReturn(null);
+        nativeAllocator = new ArrowNativeAllocator();
+        writer.flush(FlushInput.EMPTY);
+        scoreField = createNumberField("score", NumberFieldMapper.NumberType.LONG);
+        String expectedFile = getExpectedParquetPath(1L);
+    public void testGetMergerReturnsNonNull() {
+    }
+            .toString();
+    private MappedFieldType scoreField;
+            nativeAllocator.close();
+            // Each writer is fresh — rowIds restart at 0 within a writer's lifetime.
+            ParquetDocumentInput doc = engine.newDocumentInput();
+            IndexMetadata indexMetadata = IndexMetadata.builder("test_index").settings(indexSettingsBuilder).build();
+        for (int i = 0; i < 5; i++) {
+            .resolve(ParquetIndexingEngine.FILE_NAME_PREFIX + "_" + generation + ParquetIndexingEngine.FILE_NAME_EXT)
+        }
+        List<Field> fields = new ArrayList<>();
+            .resolve("parquet")
+            ParquetField pf = ArrowFieldRegistry.getParquetField(ft.typeName());
+        return mapperService;
+    public void testGetNextWriterGenerationThrows() {
+        Files.createFile(parquetFile);
+        assertNotNull(engine.refresh(RefreshInput.builder().build()));
+    }
+import org.opensearch.index.engine.dataformat.Writer;
+                .build();
+import org.opensearch.Version;
+        RustBridge.initLogger();
+        threadPool = new ThreadPool(
+    }
+    }
+    public void setUp() throws Exception {
+            IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
+        fields.addAll(metadataFields());
+    }
+    public void testDeleteFilesIgnoresUnrelatedFormats() throws Exception {
+import org.opensearch.parquet.writer.ParquetDocumentInput;
+import org.opensearch.index.engine.dataformat.WriterConfig;
+        if (nativeAllocator != null) {
+import org.opensearch.parquet.ParquetDataFormatPlugin;
+        }
+                threadPool,
+        Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(1L));
+        assertNotNull(engine.getMerger());
+        nativeAllocator.getOrCreatePool(NativeAllocatorPoolConfig.POOL_INGEST, 0L, Long.MAX_VALUE, null);
+    public void tearDown() throws Exception {
+    }
+import static org.mockito.Mockito.when;
+                new ParquetDataFormat(),
+            );
+            // fields and addDocument would reject id/name/score with MismatchedInputException.
+    private ParquetIndexingEngine engine;
+        expectThrows(UnsupportedOperationException.class, () -> engine.getNextWriterGeneration());
+        Settings settings = Settings.builder().put("node.name", "parquetengine-test").build();
+            Path dataPath = tempDir.resolve(indexUUID).resolve("0");
+        }
+import org.opensearch.core.index.shard.ShardId;
+        Path luceneFile = tempDir.resolve("test_lucene");
+        super.setUp();
+    }
+import org.opensearch.parquet.fields.ArrowFieldRegistry;
+            doc.close();
+            MapperService mapperService = createMockMapperService(schema, indexSettings);
+    private Schema buildSchema(List<MappedFieldType> fieldTypes) {
+import org.opensearch.cluster.metadata.IndexMetadata;
+        assertTrue(Files.exists(parquetFile));
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.index.engine.dataformat.FileInfos;
+            ShardId shardId = new ShardId("test_index", indexUUID, 0);
+            doc.setRowId("__row_id__", 0L);
+        assertTrue(engine.refresh(RefreshInput.builder().build()).refreshedSegments().isEmpty());
+            doc.setRowId("__row_id__", i);
+        );
+        }
+                indexSettings,
+    private MappedFieldType idField;
+import java.util.List;
+            assertEquals(1, RustBridge.getFileMetadata(getExpectedParquetPath(gen)).numRows());
+        return tempDir.resolve("test_index_uuid")
+            doc.close();
+        engine.deleteFiles(Map.of("parquet", List.of(parquetFile.toString())));
+        nameField = createKeywordField("name");
+                shardPath,
+    public void testRefreshWithNullInput() throws Exception {
+            settings,
+            populateMetadataFields(doc);
+import org.apache.arrow.vector.types.pojo.Schema;
+        doc.setRowId("__row_id__", 0);
+        Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(1L));
+}
+            Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(gen));
+ *
+        assertTrue(Files.exists(luceneFile));
+                nativeAllocator
+    public void testDeleteFiles() throws Exception {
+                Settings.EMPTY,
+                () -> ParquetSettings.getLowCardinalityEnabledFields(mapperService),
+            assertNotNull("No ParquetField registered for type: " + ft.typeName(), pf);
+    private Path tempDir;
+            writer.flush(FlushInput.EMPTY);
+                settings,
+import org.opensearch.index.mapper.MapperService;
+    }
+        for (MappedFieldType ft : fieldTypes) {
+        try {
         assertEquals("parquet", engine.getDataFormat().name());
     }
-
-    public void testRefreshReturnsEmptyResult() throws Exception {
-        assertNotNull(engine.refresh(RefreshInput.builder().build()));
-        assertTrue(engine.refresh(RefreshInput.builder().build()).refreshedSegments().isEmpty());
-    }
-
-    public void testRefreshWithNullInput() throws Exception {
-        RefreshResult result = engine.refresh(null);
+            populateMetadataFields(doc);
+import org.opensearch.index.engine.dataformat.RefreshResult;
         assertNotNull(result);
-        assertTrue(result.refreshedSegments().isEmpty());
-    }
-
-    public void testGetMergerReturnsNonNull() {
-        assertNotNull(engine.getMerger());
-    }
-
-    public void testGetNextWriterGenerationThrows() {
-        expectThrows(UnsupportedOperationException.class, () -> engine.getNextWriterGeneration());
-    }
-
-    public void testDeleteFiles() throws Exception {
+ * The OpenSearch Contributors require contributions made to
         Path parquetFile = tempDir.resolve("test.parquet");
-        Files.createFile(parquetFile);
-        assertTrue(Files.exists(parquetFile));
-
-        engine.deleteFiles(Map.of("parquet", List.of(parquetFile.toString())));
-        assertFalse(Files.exists(parquetFile));
-    }
-
-    public void testDeleteFilesIgnoresUnrelatedFormats() throws Exception {
-        Path luceneFile = tempDir.resolve("test_lucene");
-        Files.createFile(luceneFile);
-        assertTrue(Files.exists(luceneFile));
-        engine.deleteFiles(Map.of("lucene", List.of("test_lucene")));
-        assertTrue(Files.exists(luceneFile));
-    }
-
-    public void testFlushWithNoDocumentsReturnsEmpty() throws Exception {
-        Writer<ParquetDocumentInput> writer = engine.createWriter(new WriterConfig(1L));
-        assertEquals(FileInfos.empty(), writer.flush(FlushInput.EMPTY));
-    }
-
-    private ParquetIndexingEngine createEngine() {
-        try {
-            String indexUUID = "test_index_uuid";
-            ShardId shardId = new ShardId("test_index", indexUUID, 0);
-            Path dataPath = tempDir.resolve(indexUUID).resolve("0");
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.arrow.allocator.ArrowNativeAllocator;
+    private MappedFieldType nameField;
             Files.createDirectories(dataPath.resolve("parquet"));
-            ShardPath shardPath = new ShardPath(false, dataPath, dataPath, shardId);
-            Settings indexSettingsBuilder = Settings.builder()
-                .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
-                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-                .build();
-            IndexMetadata indexMetadata = IndexMetadata.builder("test_index").settings(indexSettingsBuilder).build();
-            IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
-            MapperService mapperService = createMockMapperService(schema, indexSettings);
-            // Use the test's pre-built schema directly. The mock MapperService has no
-            // documentMapper, so going through ArrowSchemaBuilder would yield only metadata
-            // fields and addDocument would reject id/name/score with MismatchedInputException.
-            return new ParquetIndexingEngine(
-                Settings.EMPTY,
-                new ParquetDataFormat(),
-                shardPath,
-                () -> schema,
-                () -> mapperService.getIndexSettings().getIndexMetadata().getMappingVersion(),
-                () -> ParquetSettings.getLowCardinalityEnabledFields(mapperService),
-                indexSettings,
-                threadPool,
-                nativeAllocator
-            );
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private String getExpectedParquetPath(long generation) {
-        return tempDir.resolve("test_index_uuid")
-            .resolve("0")
-            .resolve("parquet")
-            .resolve(ParquetIndexingEngine.FILE_NAME_PREFIX + "_" + generation + ParquetIndexingEngine.FILE_NAME_EXT)
-            .toString();
-    }
-
-    private Schema buildSchema(List<MappedFieldType> fieldTypes) {
-        List<Field> fields = new ArrayList<>();
-        for (MappedFieldType ft : fieldTypes) {
-            ParquetField pf = ArrowFieldRegistry.getParquetField(ft.typeName());
-            assertNotNull("No ParquetField registered for type: " + ft.typeName(), pf);
-            fields.add(new Field(ft.name(), pf.getFieldType(), null));
-        }
-        fields.addAll(metadataFields());
-        return new Schema(fields);
-    }
-
-    private MapperService createMockMapperService(Schema schema, IndexSettings indexSettings) {
-        MapperService mapperService = mock(MapperService.class);
-        when(mapperService.documentMapper()).thenReturn(null);
-        when(mapperService.getIndexSettings()).thenReturn(indexSettings);
-        return mapperService;
-    }
-}
+        assertEquals(5, RustBridge.getFileMetadata(expectedFile).numRows());

@@ -1,320 +1,295 @@
+        pipeline: "my_pipeline"
+      reason:  "Week based calculations require JDK9"
+              {
+              }
 ---
+            "docs": [
+  - match: { _source.date_source_7: "2018-02-05T13:44:56.657+0100" }
+        index: test
+"Test date processor with no timezone configured":
+  - match: { _source.date_source_field: "2020-33" }
+      index:
+        index: test
+                }
+          {
+              {
+                  "field" : "date_source_field",
+  - do:
+        index: test
+        body: {date_source_field: "2020-33"}
+          }
+              date_source_field:
+        id: 1
+                }
+              {
+                "date" : {
+      reason:  "Week based calculations require JDK9"
+                  "formats" : ["YYYY-ww"]
+  - do:
+          mappings:
+        id: "my_pipeline"
+        id: 1
 teardown:
+        id: 1
+  - match: { _source.date_source_3: "10/Aug/2018:09:45:56 +0200" }
+  - do:
+                  "formats" : ["yyyy-MM-dd'T'HH:mm:ss.SSSZZ" ]
+  - do:
+        body:  >
+  - match: { _source.date_source_field: "2020-33" }
+          }
+  - do:
+                }
+  - match: { acknowledged: true }
+            "description": "_description",
+  - match: { acknowledged: true }
+  - is_true: docs.0.doc._ingest.timestamp
+            properties:
+              },
+                  "field" : "date_source_6",
+  - skip:
+  - length: { docs.0.doc._ingest: 1 }
+  - match: { docs.0.doc._source.date_source_field: "2020-33" }
+            ]
+                  "formats" : ["dd/MM/yyyy"],
+                  "field" : "date_source_field",
+  # date field without a timezone gets timezone from a pipeline
+        pipeline: "my_pipeline"
+        id: "my_pipeline"
+            "processors": [
+        index: test
+  - do:
+      features: "spi_on_classpath_jdk9"
+  - match: { acknowledged: true }
+  - match: { _source.date_target_field: "2010-06-12T00:00:00.000+02:00" }
+      get:
+        body: >
+        body:  >
+        index: test
+              }
+                  "formats" : [ "ISO8601" ]
+  - match: { _source.date_target_6: "2012-12-22T01:00:46.767Z" }
+                locale: en-US
+      ingest.put_pipeline:
+            "description": "_description",
+        # sample formats from beats, featuring mongodb, icinga, apache
+        id: 2
+            "description": "_description",
+                }
+        pipeline: "my_pipeline_2"
+                format: YYYY-ww
+---
+      get:
+  - do:
+        body:
+  - do:
+            ]
+  - is_true: docs.0.doc._ingest.timestamp
+        index: test
+      get:
+          }
+"Test date processor timezone calculations":
+  - match: { _source.date_source_6: "4000000050d506482dbdf024" }
+  - match: { _source.date_source_5: "1" }
+  - length: { docs: 1 }
+                }
+              }
+        pipeline: "my_pipeline_2"
+      index:
+      ingest.simulate:
+            ]
+              },
+        body:
+  - match: { _source.date_target_field: "2020-08-09T00:00:00.000Z" }
+                "date" : {
+  - do:
+  - length: { docs.0.doc._ingest: 1 }
+      ingest.put_pipeline:
+  - do:
+      get:
+  - skip:
+                  "target_field" : "date_target_4",
+              {
+                  "field" : "date_source_7",
+  - do:
+                  "date_source_field": "2020-33"
+"Test week based date parsing":
+                  "field" : "date_source_field",
+              },
+                type: date
+        index: test2
+        body: {date_source_field: "2010-06-01T00:00:00.000Z"}
+  - match: { _source.date_target_field: "2020-08-10T00:00:00.000Z" }
+        id: 1
+                  "field" : "date_source_2",
+                  "target_field" : "date_target_field",
+      indices.create:
+                  "formats" : [ "TAI64N" ]
+---
+              }
+        index: test2
+  - match: { _source.date_source_1: "2018-02-05T13:44:56.657+0100" }
+                  "target_field" : "date_target_5",
+        body:  >
+              date_source_field:
+            ]
+                "date" : {
+          }
+      ingest.simulate:
+      index:
+        index: test2
+        id: 1
+      features: "spi_on_classpath_jdk9"
+              {
+---
+                  "target_field" : "date_target_6",
+        ignore: 404
+              },
+                  "target_field" : "date_target_1",
+  - do:
+                "date" : {
+            "processors": [
+      ingest.put_pipeline:
+"Test date processor":
+                }
+  - match: { _source.date_target_4: "1970-01-01T00:00:01.000Z" }
+        body:  >
+            "processors": [
+              {
+      index:
+  - do:
+              }
+                  "target_field" : "date_target_field",
+            ]
+                  "formats" : ["yyyy-MM-dd HH:mm:ss Z" ]
+              {
+            properties:
+          {
+        body: >
+          {
+                  "field" : "date_source_1",
+                "date" : {
+---
+        id: "my_pipeline"
+                "_source": {
+      get:
+                }
+        id: 2
+              {
+              {
+                  "target_field" : "date_target_2",
+      indices.create:
+            ]
+  - do:
+            ]
+  - match: { _source.date_source_field: "2010-06-01T00:00:00.000" }
+        pipeline: "my_pipeline"
+        id: 1
+                }
+                }
+        index: test2
+  - do:
+                  "locale" : "en-US"
+            "docs": [
+        id: "my_pipeline"
+          {
+        id: 1
+              }
+  - length: { docs: 1 }
+  - match: { _source.date_target_field: "2010-06-01T00:00:00.000+01:00" }
+              },
+  - match: { _source.date_source_4: "1" }
+  - do:
+        index: test
+                  "formats" : ["ISO8601"],
+                  "target_field" : "date_target_field",
+                  "target_field" : "date_target_7",
+        body: {date_source_field: "12/06/2010"}
+      ingest.put_pipeline:
+                }
+  - do:
+          }
+            "description": "_description",
+        id: 1
+                  "formats" : [ "UNIX" ]
+  - do:
+  - match: { acknowledged: true }
+                  "formats" : ["YYYY-ww"],
+  - match: { docs.0.doc._source.date_target_field: "2020-08-10T00:00:00.000Z" }
+                "_source": {
+        index: test
+        body: {date_source_field: "2010-06-01T00:00:00.000"}
+          {
+            "processors": [
+            "processors": [
+                  "formats" : [ "UNIX_MS" ]
+            "description": "_description",
+                  "target_field" : "date_target_3",
+        index: test
+              {
+                  "date_source_field": "2020-33"
+  - match: { acknowledged: true }
+  - match: { _source.date_source_field: "12/06/2010" }
+                }
+              }
+                "date" : {
+---
+              },
+  - match: { _source.date_target_5: "1970-01-01T00:00:00.001Z" }
+        body: {date_source_field: "2020-33"}
+        id: "my_pipeline"
+"Test week based date parsing with locale":
+          }
+  - match: { _source.date_target_field: "2010-06-01T01:00:00.000+01:00" }
+                }
+      get:
+                "date" : {
+                  "timezone" : "+01:00"
+      ingest.put_pipeline:
+        index: test
+          {
+  - match: { _source.date_target_3: "2018-08-10T07:45:56.000Z" }
+                "date" : {
+              {
+                "date" : {
+          mappings:
+                  "field" : "date_source_field",
+   # date field with a timezone has its time recalculated to a target timezone from a pipeline
+                "date" : {
+                  "target_field" : "date_target_field",
+                  "field" : "date_source_5",
+  - do:
+                  "field" : "date_source_4",
+        pipeline: "my_pipeline"
+  - do:
+        id: "my_pipeline"
+                type: date
   - do:
       ingest.delete_pipeline:
-        id: "my_pipeline"
-        ignore: 404
-
----
-"Test date processor":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "date" : {
-                  "field" : "date_source_field",
-                  "target_field" : "date_target_field",
-                  "formats" : ["dd/MM/yyyy"],
-                  "timezone" : "Europe/Amsterdam"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
         id: 1
-        pipeline: "my_pipeline"
-        body: {date_source_field: "12/06/2010"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.date_source_field: "12/06/2010" }
-  - match: { _source.date_target_field: "2010-06-12T00:00:00.000+02:00" }
-
-
----
-"Test date processor timezone calculations":
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline_2"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "date" : {
-                  "field" : "date_source_field",
-                  "target_field" : "date_target_field",
-                  "formats" : ["ISO8601"],
-                  "timezone" : "+01:00"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-
-  - do:
-      index:
-        index: test2
-        id: 1
-        pipeline: "my_pipeline_2"
-        body: {date_source_field: "2010-06-01T00:00:00.000"}
-
-  - do:
-      get:
-        index: test2
-        id: 1
-  - match: { _source.date_source_field: "2010-06-01T00:00:00.000" }
-  # date field without a timezone gets timezone from a pipeline
-  - match: { _source.date_target_field: "2010-06-01T00:00:00.000+01:00" }
-
-  - do:
-      index:
-        index: test2
-        id: 2
-        pipeline: "my_pipeline_2"
-        body: {date_source_field: "2010-06-01T00:00:00.000Z"}
-
-  - do:
-      get:
-        index: test2
-        id: 2
-  - match: { _source.date_source_field: "2010-06-01T00:00:00.000Z" }
-   # date field with a timezone has its time recalculated to a target timezone from a pipeline
-  - match: { _source.date_target_field: "2010-06-01T01:00:00.000+01:00" }
-
----
-"Test date processor with no timezone configured":
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        # sample formats from beats, featuring mongodb, icinga, apache
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "date" : {
-                  "field" : "date_source_1",
-                  "target_field" : "date_target_1",
-                  "formats" : ["yyyy-MM-dd'T'HH:mm:ss.SSSZZ" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_2",
-                  "target_field" : "date_target_2",
-                  "formats" : ["yyyy-MM-dd HH:mm:ss Z" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_3",
-                  "target_field" : "date_target_3",
-                  "formats" : [ "dd/MMM/yyyy:H:m:s Z" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_4",
-                  "target_field" : "date_target_4",
-                  "formats" : [ "UNIX" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_5",
-                  "target_field" : "date_target_5",
-                  "formats" : [ "UNIX_MS" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_6",
-                  "target_field" : "date_target_6",
-                  "formats" : [ "TAI64N" ]
-                }
-              },
-              {
-                "date" : {
-                  "field" : "date_source_7",
-                  "target_field" : "date_target_7",
-                  "formats" : [ "ISO8601" ]
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: { date_source_1: "2018-02-05T13:44:56.657+0100", date_source_2: "2017-04-04 13:43:09 +0200", date_source_3: "10/Aug/2018:09:45:56 +0200", date_source_4: "1", date_source_5: "1", date_source_6: "4000000050d506482dbdf024", date_source_7: "2018-02-05T13:44:56.657+0100" }
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.date_source_1: "2018-02-05T13:44:56.657+0100" }
-  - match: { _source.date_target_1: "2018-02-05T12:44:56.657Z" }
-  - match: { _source.date_source_2: "2017-04-04 13:43:09 +0200" }
-  - match: { _source.date_target_2: "2017-04-04T11:43:09.000Z" }
-  - match: { _source.date_source_3: "10/Aug/2018:09:45:56 +0200" }
-  - match: { _source.date_target_3: "2018-08-10T07:45:56.000Z" }
-  - match: { _source.date_source_4: "1" }
-  - match: { _source.date_target_4: "1970-01-01T00:00:01.000Z" }
-  - match: { _source.date_source_5: "1" }
-  - match: { _source.date_target_5: "1970-01-01T00:00:00.001Z" }
-  - match: { _source.date_source_6: "4000000050d506482dbdf024" }
-  - match: { _source.date_target_6: "2012-12-22T01:00:46.767Z" }
-  - match: { _source.date_source_7: "2018-02-05T13:44:56.657+0100" }
   - match: { _source.date_target_7: "2018-02-05T12:44:56.657Z" }
-
-
----
-"Test week based date parsing":
-  - skip:
-      reason:  "Week based calculations require JDK9"
-      features: "spi_on_classpath_jdk9"
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              date_source_field:
-                type: date
-                format: YYYY-ww
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
-                "date" : {
-                  "field" : "date_source_field",
-                  "target_field" : "date_target_field",
-                  "formats" : ["YYYY-ww"]
+  - match: { _source.date_target_1: "2018-02-05T12:44:56.657Z" }
                 }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.simulate:
-        id: "my_pipeline"
-        body: >
-          {
-            "docs": [
-              {
-                "_source": {
-                  "date_source_field": "2020-33"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - match: { docs.0.doc._source.date_source_field: "2020-33" }
-  - match: { docs.0.doc._source.date_target_field: "2020-08-10T00:00:00.000Z" }
-  - length: { docs.0.doc._ingest: 1 }
-  - is_true: docs.0.doc._ingest.timestamp
-
-  - do:
       index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {date_source_field: "2020-33"}
-
   - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.date_source_field: "2020-33" }
-  - match: { _source.date_target_field: "2020-08-10T00:00:00.000Z" }
-
----
-"Test week based date parsing with locale":
-  - skip:
-      reason:  "Week based calculations require JDK9"
-      features: "spi_on_classpath_jdk9"
-  #locale is used when parsing as well on a pipeline. As per US locale, start of the 33rd week 2020 is on 09August2020 (sunday)
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              date_source_field:
-                type: date
-                format: YYYY-ww
-                locale: en-US
-
-  - do:
-      ingest.put_pipeline:
-        id: "my_pipeline"
-        body:  >
-          {
-            "description": "_description",
-            "processors": [
-              {
+  - match: { _source.date_source_field: "2010-06-01T00:00:00.000Z" }
+                  "timezone" : "Europe/Amsterdam"
                 "date" : {
-                  "field" : "date_source_field",
-                  "target_field" : "date_target_field",
-                  "formats" : ["YYYY-ww"],
-                  "locale" : "en-US"
-                }
-              }
-            ]
-          }
-  - match: { acknowledged: true }
-
-  - do:
-      ingest.simulate:
-        id: "my_pipeline"
-        body: >
-          {
-            "docs": [
+        id: 1
+        body: { date_source_1: "2018-02-05T13:44:56.657+0100", date_source_2: "2017-04-04 13:43:09 +0200", date_source_3: "10/Aug/2018:09:45:56 +0200", date_source_4: "1", date_source_5: "1", date_source_6: "4000000050d506482dbdf024", date_source_7: "2018-02-05T13:44:56.657+0100" }
               {
-                "_source": {
-                  "date_source_field": "2020-33"
-                }
-              }
-            ]
-          }
-  - length: { docs: 1 }
-  - match: { docs.0.doc._source.date_source_field: "2020-33" }
+                  "formats" : [ "dd/MMM/yyyy:H:m:s Z" ]
   - match: { docs.0.doc._source.date_target_field: "2020-08-09T00:00:00.000Z" }
-  - length: { docs.0.doc._ingest: 1 }
-  - is_true: docs.0.doc._ingest.timestamp
-
-  - do:
+  #locale is used when parsing as well on a pipeline. As per US locale, start of the 33rd week 2020 is on 09August2020 (sunday)
+        id: "my_pipeline_2"
       index:
-        index: test
-        id: 1
-        pipeline: "my_pipeline"
-        body: {date_source_field: "2020-33"}
-
-  - do:
-      get:
-        index: test
-        id: 1
-  - match: { _source.date_source_field: "2020-33" }
-  - match: { _source.date_target_field: "2020-08-09T00:00:00.000Z" }
+                  "field" : "date_source_3",
+  - match: { _source.date_source_2: "2017-04-04 13:43:09 +0200" }
+                format: YYYY-ww
+          {
+  - match: { docs.0.doc._source.date_source_field: "2020-33" }
+        id: "my_pipeline"
+          }
+  - match: { _source.date_target_2: "2017-04-04T11:43:09.000Z" }
+        body:  >
+              {

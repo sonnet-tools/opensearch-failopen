@@ -1,257 +1,213 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.composite;
-
-import com.carrotsearch.randomizedtesting.RandomizedTest;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.test.BackgroundIndexer;
-import org.opensearch.test.OpenSearchIntegTestCase;
-
-/**
- * ITs for DFA primary promotion scenarios under continuous indexing load.
- *
- * <p>Promotion is triggered by cancelling the primary's allocation via {@code _cluster/reroute}
- * rather than stopping the host node. This avoids tearing down the shared native runtime in the
- * test JVM (see {@link DataFormatAwareReplicationBaseIT#cancelPrimaryAllocation}). The resulting
- * promotion is semantically equivalent to a failover: the replica becomes primary, the old
- * primary gets a new replica assignment, and the cluster returns to green.
- *
- * <p>Invariants validated per test:
- * <ul>
  *   <li>Primary term strictly advanced past the promotion.</li>
- *   <li>Indexer made forward progress before promotion (and we validate the pre-promotion
- *       acknowledged writes are preserved).</li>
- *   <li>Primary and replica catalog snapshots converge on the same file set.</li>
- *   <li>For the in-flight-upload test: catalog generation monotonic across the promotion.</li>
- * </ul>
- */
-@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
-@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
-public class DataFormatAwareReplicationPromotionIT extends DataFormatAwareReplicationBaseIT {
-
-    private static final TimeValue GREEN_TIMEOUT = TimeValue.timeValueSeconds(90);
-
-    /**
-     * Primary is drained (indexer paused) before promotion — simulates a controlled handover
-     * where no writes are in-flight during the promotion event.
-     */
-    public void testGracefulPromotionWithContinuousIndexing() throws Exception {
-        createDfaIndex(1);
-
-        try (BackgroundIndexer indexer = newIndexer()) {
-            indexer.start(-1);
-            waitForIndexerDocs(100, indexer);
-
-            // Pause writes to let the primary's buffer drain — the 'graceful' part.
-            indexer.pauseIndexing();
-
-            String oldPrimary = primaryNodeName();
-            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
-
-            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
-            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
-
-            indexer.stopAndAwaitStopped();
-
-            assertNoDataLoss(indexer, INDEX_NAME);
-            assertCatalogSnapshotsConverged(INDEX_NAME);
-        }
-    }
-
-    /**
-     * Primary is cancelled WHILE writes are in flight — simulates an abrupt failover where
-     * buffered operations may be lost from the old primary.
-     */
-    public void testUncleanFailoverWithContinuousIndexing() throws Exception {
-        createDfaIndex(1);
-
-        try (BackgroundIndexer indexer = newIndexer()) {
-            indexer.start(-1);
-            waitForIndexerDocs(100, indexer);
-
-            // Do NOT pause — writes are actively in flight when promotion fires.
-            String oldPrimary = primaryNodeName();
-            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
-
-            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
-            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
-
-            indexer.stopAndAwaitStopped();
-
-            assertNoDataLoss(indexer, INDEX_NAME);
-            assertCatalogSnapshotsConverged(INDEX_NAME);
-        }
-    }
-
-    /**
-     * The critical test for {@code bumpGenerationForNewEngineLifecycle}: the primary is promoted
-     * while the old primary had in-flight refresh/flush activity that advances the catalog
+            INDEX_NAME,
      * generation. The new primary's first committed generation must be strictly greater, so
-     * remote-store uploads don't collide in remote metadata.
-     */
-    public void testPromotionWithInFlightRemoteStoreUpload() throws Exception {
-        createDfaIndex(1);
-
-        try (BackgroundIndexer indexer = newIndexer()) {
-            indexer.start(-1);
-            waitForIndexerDocs(50, indexer);
-
-            String oldPrimary = primaryNodeName();
-            // Force a flush so the catalog generation advances meaningfully before promotion.
-            client().admin().indices().prepareFlush(INDEX_NAME).get();
-            long preGen = readCatalogGeneration(oldPrimary, INDEX_NAME);
-
-            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
-
-            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
-            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
-
+            );
             indexer.stopAndAwaitStopped();
-
             // Force the new primary to commit — exercises the generation-bump contract:
-            // the new engine must commit at a generation strictly greater than any seen on the old primary.
-            client().admin().indices().prepareFlush(INDEX_NAME).get();
-
-            long postGen = readCatalogGeneration(primaryNodeName(), INDEX_NAME);
-            assertGenerationMonotonic(preGen, postGen);
-            assertCatalogSnapshotsConverged(INDEX_NAME);
-        }
-    }
-
-    /**
-     * After promotion, the new primary must be able to index new docs, flush, and upload
-     * metadata to remote store successfully. This validates that the promoted engine's
-     * IndexWriter has the correct Lucene segment entries (not an empty SegmentInfos) so
-     * that serializeToCommitFormat can produce valid bytes for the remote metadata file.
-     *
-     * <p>Failure mode without the fix: the replica's commitCatalogSnapshot writes an empty
-     * SegmentInfos (no Lucene segments). After promotion, the new primary's IndexWriter
+     * Primary is cancelled WHILE writes are in flight — simulates an abrupt failover where
+    private static final TimeValue GREEN_TIMEOUT = TimeValue.timeValueSeconds(90);
+            indexer.stopAndAwaitStopped();
+            }, 60, java.util.concurrent.TimeUnit.SECONDS);
      * opens on this empty commit, LuceneReaderManager has no readers, and uploadMetadata
-     * fails with IllegalStateException or produces corrupt metadata.
-     *
-     * <p>Uses Lucene as a secondary data format so that real Lucene segment files exist
-     * on disk and must be correctly tracked through the promotion.
-     */
-    public void testPromotedPrimaryCanUploadToRemoteStore() throws Exception {
-        createDfaIndex(1);
-
+     * Verifies that a generation bump on the replica preserves the primary's replicated
+            String oldPrimary = primaryNodeName();
+        assertBusy(
+    /**
         try (BackgroundIndexer indexer = newIndexer()) {
-            indexer.start(-1);
+     * The critical test for {@code bumpGenerationForNewEngineLifecycle}: the primary is promoted
+        try (BackgroundIndexer indexer = newIndexer()) {
             waitForIndexerDocs(100, indexer);
-
-            // Force a flush so segments are committed and replicated
-            client().admin().indices().prepareFlush(INDEX_NAME).get();
-
-            // Pause indexer for a clean handover
-            indexer.pauseIndexing();
-
-            // Promote replica to primary
+            long preGen = readCatalogGeneration(oldPrimary, INDEX_NAME);
+                org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata meta = shard.getRemoteDirectory().readLatestMetadataFile();
+ */
+            assertNoDataLoss(indexer, INDEX_NAME);
+        // 2. Trigger a generation bump on the replica.
+                assertNotNull("promoted primary must upload metadata to remote store", meta);
+            indexer.stopAndAwaitStopped();
+            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
+                // All expected formats must be present in uploaded metadata
+     * Primary is drained (indexer paused) before promotion — simulates a controlled handover
             String oldPrimary = primaryNodeName();
             cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
-            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
-            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
-
-            // Resume + index more on the new primary
-            indexer.continueIndexing(50);
-            waitForIndexerDocs(150, indexer);
-            indexer.stopAndAwaitStopped();
-
             // Force the new primary to flush — exercises the full upload path
-            client().admin().indices().prepareFlush(INDEX_NAME).get();
-            client().admin().indices().prepareRefresh(INDEX_NAME).get();
-
-            assertBusy(() -> {
-                org.opensearch.index.shard.IndexShard shard = getIndexShard(primaryNodeName(), INDEX_NAME);
-                org.opensearch.index.store.remote.metadata.RemoteSegmentMetadata meta = shard.getRemoteDirectory().readLatestMetadataFile();
-                assertNotNull("promoted primary must upload metadata to remote store", meta);
-
-                // All expected formats must be present in uploaded metadata
-                java.util.Set<String> formats = formatsOf(meta.getMetadata());
-                assertEquals("uploaded formats must match expected after promotion", expectedFormats(), formats);
-
-                DataFormatAwareITUtils.assertCatalogMatchesLocalAndRemote(shard);
-                assertAllFormatDirsHaveFiles(shard);
-            }, 60, java.util.concurrent.TimeUnit.SECONDS);
-        }
-    }
-
-    /**
-     * Verifies that a generation bump on the replica preserves the primary's replicated
-     * SegmentInfos ({@code replicatingCommitData}).
+ */
+     * <p>Uses Lucene as a secondary data format so that real Lucene segment files exist
      *
+     */
+                assertAllFormatDirsHaveFiles(shard);
+            waitForIndexerDocs(100, indexer);
+     */
+     * fails with IllegalStateException or produces corrupt metadata.
+                org.opensearch.index.shard.IndexShard shard = getIndexShard(primaryNodeName(), INDEX_NAME);
+        replica.flush(new org.opensearch.action.admin.indices.flush.FlushRequest(INDEX_NAME).force(true).waitIfOngoing(true));
+ *       acknowledged writes are preserved).</li>
+                .getCatalogSnapshot()
+ * promotion is semantically equivalent to a failover: the replica becomes primary, the old
+ *   <li>For the in-flight-upload test: catalog generation monotonic across the promotion.</li>
+            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
+     * buffered operations may be lost from the old primary.
+            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
+        indexer.setUseAutoGeneratedIDs(true);
+        try (
+        // snapshot must carry a non-null replicatingCommitData.
+     * no-primary window around a cancel/promote will get UnavailableShardsException; the test
+        try (BackgroundIndexer indexer = newIndexer()) {
+        createDfaIndex(1);
+        // Pre-condition (guards test validity): once segrep has delivered, the replica's current
+            client().admin().indices().prepareRefresh(INDEX_NAME).get();
+            () -> assertReplicatingCommitDataNotNull(replica, "after initial replication"),
+ *   <li>Primary and replica catalog snapshots converge on the same file set.</li>
+     * tolerates these as expected.
+ * The OpenSearch Contributors require contributions made to
+     *
+    }
+        }
+                .getReplicatingCommitData();
+            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
+            indexer.continueIndexing(50);
+ *
+    /**
+        }
+        try (BackgroundIndexer indexer = newIndexer()) {
+            indexer.start(-1);
+            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
+     * SegmentInfos (no Lucene segments). After promotion, the new primary's IndexWriter
+            long postGen = readCatalogGeneration(primaryNodeName(), INDEX_NAME);
+        // no commit-generation change => no bump).
+        // 1. Refresh-level replication delivers a snapshot to the replica (sets replicatingCommitData,
+     */
+                java.util.Set<String> formats = formatsOf(meta.getMetadata());
+ * test JVM (see {@link DataFormatAwareReplicationBaseIT#cancelPrimaryAllocation}). The resulting
      * <p>The test indexes and refreshes (no flush) so segment replication delivers a snapshot to
-     * the replica and sets {@code replicatingCommitData} to a non-null value, then flushes the
-     * replica to trigger a generation bump, and finally asserts that the replica's catalog snapshot
-     * still has non-null {@code replicatingCommitData}.
+ * rather than stopping the host node. This avoids tearing down the shared native runtime in the
+            indexer.pauseIndexing();
+package org.opensearch.composite;
+            assertCatalogSnapshotsConverged(INDEX_NAME);
+            Object replicatingCommitData = ((org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot) snapshot)
+            String oldPrimary = primaryNodeName();
+            assertNoDataLoss(indexer, INDEX_NAME);
+            client().admin().indices().prepareFlush(INDEX_NAME).get();
+    }
      */
     public void testGenerationBumpPreservesReplicatingCommitData() throws Exception {
-        createDfaIndex(1);
-
-        // 1. Refresh-level replication delivers a snapshot to the replica (sets replicatingCommitData,
-        // no commit-generation change => no bump).
-        indexDocs(50);
-        client().admin().indices().prepareRefresh(INDEX_NAME).get();
-
-        String replicaNode = replicaNodeNames().get(0);
-        org.opensearch.index.shard.IndexShard replica = getIndexShard(replicaNode, INDEX_NAME);
-
-        // Pre-condition (guards test validity): once segrep has delivered, the replica's current
-        // snapshot must carry a non-null replicatingCommitData.
-        assertBusy(
-            () -> assertReplicatingCommitDataNotNull(replica, "after initial replication"),
-            60,
-            java.util.concurrent.TimeUnit.SECONDS
-        );
-
-        // 2. Trigger a generation bump on the replica.
-        replica.flush(new org.opensearch.action.admin.indices.flush.FlushRequest(INDEX_NAME).force(true).waitIfOngoing(true));
-
-        // 3. The bump must NOT have dropped replicatingCommitData.
-        assertReplicatingCommitDataNotNull(replica, "after generation bump (replica flush)");
     }
-
+     * IndexWriter has the correct Lucene segment entries (not an empty SegmentInfos) so
+    }
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+            client().admin().indices().prepareFlush(INDEX_NAME).get();
+@OpenSearchIntegTestCase.ClusterScope(scope = OpenSearchIntegTestCase.Scope.TEST, numDataNodes = 0)
+     * where no writes are in-flight during the promotion event.
     private void assertReplicatingCommitDataNotNull(org.opensearch.index.shard.IndexShard shard, String when) throws Exception {
-        try (
-            org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.coord.CatalogSnapshot> ref = shard
-                .getCatalogSnapshot()
-        ) {
-            org.opensearch.index.engine.exec.coord.CatalogSnapshot snapshot = ref.get();
             assertTrue(
-                "expected DataformatAwareCatalogSnapshot but got " + snapshot.getClass().getName(),
-                snapshot instanceof org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot
-            );
-            Object replicatingCommitData = ((org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot) snapshot)
-                .getReplicatingCommitData();
-            assertNotNull("replica catalog snapshot replicatingCommitData must not be null " + when, replicatingCommitData);
-        }
-    }
-
-    /**
-     * Builds a BackgroundIndexer that swallows indexing failures. Writes issued during the brief
-     * no-primary window around a cancel/promote will get UnavailableShardsException; the test
-     * tolerates these as expected.
-     */
-    private BackgroundIndexer newIndexer() {
-        BackgroundIndexer indexer = new BackgroundIndexer(
-            INDEX_NAME,
-            "_doc",
-            client(),
-            -1,
-            RandomizedTest.scaledRandomIntBetween(2, 5),
-            false,
-            random()
-        );
-        indexer.setIgnoreIndexingFailures(true);
-        indexer.setFailureAssertion(e -> {});
-        indexer.setUseAutoGeneratedIDs(true);
+        // 3. The bump must NOT have dropped replicatingCommitData.
         return indexer;
+     * <p>Failure mode without the fix: the replica's commitCatalogSnapshot writes an empty
+            60,
+            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
+        createDfaIndex(1);
     }
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
+            client().admin().indices().prepareFlush(INDEX_NAME).get();
+ * ITs for DFA primary promotion scenarios under continuous indexing load.
+    /**
+ * <p>Promotion is triggered by cancelling the primary's allocation via {@code _cluster/reroute}
+            // Promote replica to primary
+import org.opensearch.common.unit.TimeValue;
+/*
+     * After promotion, the new primary must be able to index new docs, flush, and upload
+     *
+        }
+     * Builds a BackgroundIndexer that swallows indexing failures. Writes issued during the brief
+            java.util.concurrent.TimeUnit.SECONDS
+            assertGenerationMonotonic(preGen, postGen);
+            // Force a flush so segments are committed and replicated
+/**
+            indexer.start(-1);
+    public void testPromotedPrimaryCanUploadToRemoteStore() throws Exception {
+    public void testUncleanFailoverWithContinuousIndexing() throws Exception {
+        }
+import org.opensearch.test.OpenSearchIntegTestCase;
+     * that serializeToCommitFormat can produce valid bytes for the remote metadata file.
+            waitForIndexerDocs(100, indexer);
+            waitForIndexerDocs(50, indexer);
+ * SPDX-License-Identifier: Apache-2.0
+            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
+        BackgroundIndexer indexer = new BackgroundIndexer(
+        indexer.setIgnoreIndexingFailures(true);
+ *
+            client(),
+        createDfaIndex(1);
+            assertCatalogSnapshotsConverged(INDEX_NAME);
+        org.opensearch.index.shard.IndexShard replica = getIndexShard(replicaNode, INDEX_NAME);
+ *   <li>Indexer made forward progress before promotion (and we validate the pre-promotion
+    }
+        assertReplicatingCommitDataNotNull(replica, "after generation bump (replica flush)");
+        );
+import org.opensearch.test.BackgroundIndexer;
+public class DataFormatAwareReplicationPromotionIT extends DataFormatAwareReplicationBaseIT {
+        createDfaIndex(1);
+        }
+        createDfaIndex(1);
+            // Pause writes to let the primary's buffer drain — the 'graceful' part.
+        indexDocs(50);
+     * while the old primary had in-flight refresh/flush activity that advances the catalog
+     * metadata to remote store successfully. This validates that the promoted engine's
+            indexer.start(-1);
+ * </ul>
+        ) {
+        String replicaNode = replicaNodeNames().get(0);
+     * remote-store uploads don't collide in remote metadata.
+                assertEquals("uploaded formats must match expected after promotion", expectedFormats(), formats);
+     */
+            assertCatalogSnapshotsConverged(INDEX_NAME);
+     * SegmentInfos ({@code replicatingCommitData}).
+            waitForPrimaryTerm(INDEX_NAME, 0, 2L, TimeValue.timeValueSeconds(30));
+            -1,
+     * on disk and must be correctly tracked through the promotion.
+                "expected DataformatAwareCatalogSnapshot but got " + snapshot.getClass().getName(),
+     * still has non-null {@code replicatingCommitData}.
+ * compatible open source license.
+            RandomizedTest.scaledRandomIntBetween(2, 5),
+    /**
+            // Force a flush so the catalog generation advances meaningfully before promotion.
+ * <ul>
+ * <p>Invariants validated per test:
+        );
+            indexer.stopAndAwaitStopped();
+    /**
+            ensureGreen(GREEN_TIMEOUT, INDEX_NAME);
+     * the replica and sets {@code replicatingCommitData} to a non-null value, then flushes the
+            indexer.start(-1);
+            "_doc",
+ * this file be licensed under the Apache-2.0 license or a
+            indexer.pauseIndexing();
+    /**
+    }
+    public void testGracefulPromotionWithContinuousIndexing() throws Exception {
+ * primary gets a new replica assignment, and the cluster returns to green.
+            client().admin().indices().prepareFlush(INDEX_NAME).get();
+            random()
+            cancelPrimaryAllocation(INDEX_NAME, 0, oldPrimary);
+            String oldPrimary = primaryNodeName();
+            false,
+            org.opensearch.common.concurrent.GatedCloseable<org.opensearch.index.engine.exec.coord.CatalogSnapshot> ref = shard
+            assertNotNull("replica catalog snapshot replicatingCommitData must not be null " + when, replicatingCommitData);
+import com.carrotsearch.randomizedtesting.RandomizedTest;
+        client().admin().indices().prepareRefresh(INDEX_NAME).get();
+                DataFormatAwareITUtils.assertCatalogMatchesLocalAndRemote(shard);
+            org.opensearch.index.engine.exec.coord.CatalogSnapshot snapshot = ref.get();
+                snapshot instanceof org.opensearch.index.engine.exec.coord.DataformatAwareCatalogSnapshot
+     */
+            // the new engine must commit at a generation strictly greater than any seen on the old primary.
+            waitForIndexerDocs(150, indexer);
+     * replica to trigger a generation bump, and finally asserts that the replica's catalog snapshot
+        indexer.setFailureAssertion(e -> {});
+            // Pause indexer for a clean handover
+            assertBusy(() -> {
+ *
+            // Do NOT pause — writes are actively in flight when promotion fires.
+    public void testPromotionWithInFlightRemoteStoreUpload() throws Exception {
+            // Resume + index more on the new primary
 }
+    private BackgroundIndexer newIndexer() {

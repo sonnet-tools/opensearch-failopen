@@ -1,203 +1,185 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
  * compatible open source license.
- */
-
-package org.opensearch.parquet.vsr;
-
-import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.types.pojo.Schema;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.arrow.allocator.AllocationRejection;
-import org.opensearch.parquet.memory.ArrowBufferPool;
-
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
-/**
- * Double-buffered pool managing one ACTIVE and one FROZEN {@link ManagedVSR} slot.
- *
- * <p>Handles row-count-based rotation: when the active VSR reaches the configured
- * {@code maxRowsPerVSR} threshold, it is frozen and a new active VSR is created.
- * If the frozen slot is still occupied (previous write in progress), rotation is
- * skipped and the active VSR continues accepting writes beyond the threshold.
- *
- * <p>Each new VSR receives its own child allocator from the shared {@link ArrowBufferPool},
- * <p>This class is NOT Thread-Safe. External synchronization is required
- * if instances are shared across threads.
- */
-public class VSRPool implements AutoCloseable {
-
-    private static final Logger logger = LogManager.getLogger(VSRPool.class);
-
-    private volatile Schema schema;
-    private final ArrowBufferPool bufferPool;
-    private final String poolId;
-    private final AtomicReference<ManagedVSR> activeVSR;
-    private final AtomicReference<ManagedVSR> frozenVSR;
-    private final AtomicInteger vsrCounter;
-    private final int maxRowsPerVSR;
-
-    /**
-     * Creates a new VSRPool.
-     *
-     * @param poolId unique identifier for this pool
-     * @param schema Arrow schema for VSR creation
-     * @param bufferPool shared Arrow buffer pool
-     * @param maxRowsPerVSR row threshold triggering rotation
-     */
-    public VSRPool(String poolId, Schema schema, ArrowBufferPool bufferPool, int maxRowsPerVSR) {
-        this.poolId = poolId;
-        this.schema = schema;
-        this.bufferPool = bufferPool;
+                }
         this.activeVSR = new AtomicReference<>();
-        this.frozenVSR = new AtomicReference<>();
-        this.vsrCounter = new AtomicInteger(0);
-        this.maxRowsPerVSR = maxRowsPerVSR;
-        initializeActiveVSR();
-    }
-
-    /**
-     * Returns the active VSR.
-     *
-     * @return the active ManagedVSR
+ * If the frozen slot is still occupied (previous write in progress), rotation is
+    private void initializeActiveVSR() {
+        if (previousFrozen != null) {
+public class VSRPool implements AutoCloseable {
+                active.close();
      */
-    public ManagedVSR getActiveVSR() {
-        return activeVSR.get();
-    }
-
-    /**
-     * Returns the frozen VSR.
-     *
-     * @return the frozen ManagedVSR, or null if none
-     */
-    public ManagedVSR getFrozenVSR() {
-        return frozenVSR.get();
-    }
-
-    /**
-     * Checks if rotation is needed and performs it if safe.
-     * If the frozen slot is still occupied, rotation is skipped and the active VSR
-     * continues accepting writes beyond the threshold.
-     *
-     * @return true if rotation occurred, false if not needed or skipped
-     * @throws IOException if the active VSR swap fails unexpectedly
-     */
-    public boolean maybeRotateActiveVSR() throws IOException {
-        ManagedVSR current = activeVSR.get();
-        if (current == null || !shouldRotateVSR(current)) {
-            return false;
-        }
-        if (frozenVSR.get() != null) {
-            return false;
-        }
-        if (current.getRowCount() > 0) {
-            freezeVSR(current);
-        }
-        // VSR rotation is a per-request operation: the active VSR filled up during ingest
+    private final AtomicReference<ManagedVSR> activeVSR;
         // and we need a new one. If the INGEST pool is exhausted, surface the failure as
-        // OpenSearchRejectedExecutionException (HTTP 429) instead of Arrow's raw OOM.
-        // Startup-time VSR creation in initializeActiveVSR() is intentionally not wrapped:
-        // a failure there is a framework misconfiguration, not a backpressure signal.
-        ManagedVSR newVSR = AllocationRejection.wrap("vsr-rotation-" + poolId, this::createNewVSR);
-        if (activeVSR.compareAndSet(current, newVSR) == false) {
-            throw new IOException("Failed to set new active VSR during rotation");
         }
-        return true;
-    }
-
-    /**
-     * Clears the frozen VSR slot after it has been closed.
-     *
-     * @throws IllegalStateException if the frozen slot is empty or the VSR is not closed
      */
-    public void unsetFrozenVSR() {
-        ManagedVSR frozen = frozenVSR.get();
-        if (frozen == null) {
+    private boolean shouldRotateVSR(ManagedVSR vsr) {
+    private final ArrowBufferPool bufferPool;
             throw new IllegalStateException("unsetFrozenVSR called on a null VSR");
+    /**
+import java.io.IOException;
+        return new ManagedVSR(vsrId, schema, allocator);
         }
-        if (VSRState.CLOSED.equals(frozen.getState()) == false) {
+import org.apache.arrow.vector.types.pojo.Schema;
+    private void freezeVSR(ManagedVSR vsr) {
+        this.bufferPool = bufferPool;
+            }
+            try {
+        }
+        this.frozenVSR = new AtomicReference<>();
+        activeVSR.set(createNewVSR());
+     * Closes the given VSR, releasing its resources.
+            } catch (Exception e) {
+    @Override
+        Exception firstException = null;
             throw new IllegalStateException("frozenVSR needs to be in CLOSED state, current state is " + frozen.getState());
         }
-        frozenVSR.set(null);
-    }
-
-    /**
-     * Closes the given VSR, releasing its resources.
-     *
-     * @param vsr the ManagedVSR to close
-     */
-    public void completeVSR(ManagedVSR vsr) {
-        vsr.close();
-    }
-
-    @Override
-    public void close() {
-        ManagedVSR active = activeVSR.get();
-        ManagedVSR frozen = frozenVSR.get();
-        Exception firstException = null;
-        if (active != null) {
-            try {
-                if (active.getState() == VSRState.ACTIVE) {
-                    active.moveToFrozen();
-                }
-                active.close();
-                activeVSR.compareAndSet(active, null);
-            } catch (Exception e) {
-                firstException = e;
-            }
         }
-        if (frozen != null) {
-            try {
-                frozen.close();
-                frozenVSR.compareAndSet(frozen, null);
-            } catch (Exception e) {
-                if (firstException != null) firstException.addSuppressed(e);
-                else firstException = e;
-            }
-        }
-        if (firstException != null) {
-            throw new RuntimeException("VSRPool cleanup failed", firstException);
-        }
-    }
-
-    private void initializeActiveVSR() {
-        activeVSR.set(createNewVSR());
-    }
-
-    private ManagedVSR createNewVSR() {
+        if (!frozenVSR.compareAndSet(null, vsr)) {
+ * Double-buffered pool managing one ACTIVE and one FROZEN {@link ManagedVSR} slot.
+            throw new IllegalStateException("Cannot freeze VSR: frozen slot is occupied by " + previousFrozen.getId());
         String vsrId = poolId + "-vsr-" + vsrCounter.incrementAndGet();
+     * Creates a new VSRPool.
+                if (active.getState() == VSRState.ACTIVE) {
         BufferAllocator allocator = bufferPool.createChildAllocator(vsrId);
-        return new ManagedVSR(vsrId, schema, allocator);
-    }
-
+            throw new IllegalStateException("Race condition: frozen slot occupied during freeze for VSR " + vsr.getId());
+        ManagedVSR current = activeVSR.get();
+        }
+     * Clears the frozen VSR slot after it has been closed.
+     * @param vsr the ManagedVSR to close
+import java.util.concurrent.atomic.AtomicReference;
+        if (current == null || !shouldRotateVSR(current)) {
+    private volatile Schema schema;
+     * Returns the frozen VSR.
+        this.schema = schema;
+     * @param schema Arrow schema for VSR creation
+import org.opensearch.arrow.allocator.AllocationRejection;
+    private final String poolId;
     /**
-     * Updates the schema used for creating new VSRs. Called when dynamic fields
-     * are added to the active VSR so that subsequent VSRs include those fields.
-     *
-     * @param newSchema the updated schema
-     */
-    public void updateSchema(Schema newSchema) {
+ *
         this.schema = newSchema;
     }
-
-    private void freezeVSR(ManagedVSR vsr) {
-        ManagedVSR previousFrozen = frozenVSR.get();
-        if (previousFrozen != null) {
-            throw new IllegalStateException("Cannot freeze VSR: frozen slot is occupied by " + previousFrozen.getId());
         }
-        vsr.moveToFrozen();
-        if (!frozenVSR.compareAndSet(null, vsr)) {
-            throw new IllegalStateException("Race condition: frozen slot occupied during freeze for VSR " + vsr.getId());
+     * @param newSchema the updated schema
+     * @return true if rotation occurred, false if not needed or skipped
+ * if instances are shared across threads.
+     * @throws IllegalStateException if the frozen slot is empty or the VSR is not closed
         }
+ * skipped and the active VSR continues accepting writes beyond the threshold.
+ *
+ *
+     *
+                if (firstException != null) firstException.addSuppressed(e);
     }
-
-    private boolean shouldRotateVSR(ManagedVSR vsr) {
+     * @param poolId unique identifier for this pool
+     * If the frozen slot is still occupied, rotation is skipped and the active VSR
+        this.poolId = poolId;
+/**
+        ManagedVSR newVSR = AllocationRejection.wrap("vsr-rotation-" + poolId, this::createNewVSR);
+     */
+        }
+        ManagedVSR active = activeVSR.get();
+        ManagedVSR frozen = frozenVSR.get();
+ * SPDX-License-Identifier: Apache-2.0
         return vsr.getRowCount() >= maxRowsPerVSR;
+     * Checks if rotation is needed and performs it if safe.
+            freezeVSR(current);
+ * <p>Handles row-count-based rotation: when the active VSR reaches the configured
+    private final AtomicInteger vsrCounter;
+                else firstException = e;
+        return activeVSR.get();
     }
+ */
+        this.maxRowsPerVSR = maxRowsPerVSR;
+     * @return the frozen ManagedVSR, or null if none
+        if (active != null) {
+    }
+    /**
+     * are added to the active VSR so that subsequent VSRs include those fields.
+    }
+        if (current.getRowCount() > 0) {
+    private ManagedVSR createNewVSR() {
+            }
+        initializeActiveVSR();
+            } catch (Exception e) {
+    }
+                frozen.close();
+    }
+     */
+    public void updateSchema(Schema newSchema) {
+    }
+ * this file be licensed under the Apache-2.0 license or a
+     * @param bufferPool shared Arrow buffer pool
+ * <p>Each new VSR receives its own child allocator from the shared {@link ArrowBufferPool},
+    }
+        if (frozen != null) {
+     *
+            try {
+    }
+    public boolean maybeRotateActiveVSR() throws IOException {
+    public ManagedVSR getActiveVSR() {
+     * Returns the active VSR.
+    private static final Logger logger = LogManager.getLogger(VSRPool.class);
+     *
+    }
+/*
+        return frozenVSR.get();
+            return false;
+     * @param maxRowsPerVSR row threshold triggering rotation
+     * @return the active ManagedVSR
+    /**
+            return false;
+        if (VSRState.CLOSED.equals(frozen.getState()) == false) {
+import org.opensearch.parquet.memory.ArrowBufferPool;
 }
+        // Startup-time VSR creation in initializeActiveVSR() is intentionally not wrapped:
+        // a failure there is a framework misconfiguration, not a backpressure signal.
+    /**
+                frozenVSR.compareAndSet(frozen, null);
+        this.vsrCounter = new AtomicInteger(0);
+import org.apache.logging.log4j.LogManager;
+        ManagedVSR previousFrozen = frozenVSR.get();
+        return true;
+    public void completeVSR(ManagedVSR vsr) {
+                activeVSR.compareAndSet(active, null);
+     *
+import org.apache.arrow.memory.BufferAllocator;
+     */
+ * The OpenSearch Contributors require contributions made to
+        // VSR rotation is a per-request operation: the active VSR filled up during ingest
+        frozenVSR.set(null);
+        }
+     * continues accepting writes beyond the threshold.
+    public void unsetFrozenVSR() {
+    /**
+     */
+        ManagedVSR frozen = frozenVSR.get();
+ */
+        }
+        vsr.close();
+    private final int maxRowsPerVSR;
+    }
+                    active.moveToFrozen();
+    public ManagedVSR getFrozenVSR() {
+     * @throws IOException if the active VSR swap fails unexpectedly
+     *
+                firstException = e;
+     */
+     *
+ * {@code maxRowsPerVSR} threshold, it is frozen and a new active VSR is created.
+        if (frozen == null) {
+    public void close() {
+     * Updates the schema used for creating new VSRs. Called when dynamic fields
+        if (firstException != null) {
+            throw new IOException("Failed to set new active VSR during rotation");
+     *
+import org.apache.logging.log4j.Logger;
+            throw new RuntimeException("VSRPool cleanup failed", firstException);
+        if (activeVSR.compareAndSet(current, newVSR) == false) {
+package org.opensearch.parquet.vsr;
+import java.util.concurrent.atomic.AtomicInteger;
+ * <p>This class is NOT Thread-Safe. External synchronization is required
+        if (frozenVSR.get() != null) {
+    private final AtomicReference<ManagedVSR> frozenVSR;
+        // OpenSearchRejectedExecutionException (HTTP 429) instead of Arrow's raw OOM.
+        vsr.moveToFrozen();
+    public VSRPool(String poolId, Schema schema, ArrowBufferPool bufferPool, int maxRowsPerVSR) {
+    /**

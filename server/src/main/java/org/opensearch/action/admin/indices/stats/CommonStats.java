@@ -1,547 +1,498 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.stats;
-
-import org.apache.lucene.store.AlreadyClosedException;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.cache.query.QueryCacheStats;
-import org.opensearch.index.cache.request.RequestCacheStats;
-import org.opensearch.index.engine.SegmentsStats;
-import org.opensearch.index.fielddata.FieldDataStats;
-import org.opensearch.index.flush.FlushStats;
-import org.opensearch.index.get.GetStats;
-import org.opensearch.index.merge.MergeStats;
-import org.opensearch.index.recovery.RecoveryStats;
-import org.opensearch.index.refresh.RefreshStats;
-import org.opensearch.index.search.stats.SearchStats;
-import org.opensearch.index.shard.DocsStats;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.IndexingStats;
-import org.opensearch.index.store.StoreStats;
-import org.opensearch.index.translog.TranslogStats;
-import org.opensearch.index.warmer.WarmerStats;
-import org.opensearch.indices.IndicesQueryCache;
-import org.opensearch.search.suggest.completion.CompletionStats;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.stream.Stream;
-
-/**
- * Common Stats for OpenSearch
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class CommonStats implements Writeable, ToXContentFragment {
-
+                        break;
     @Nullable
-    public DocsStats docs;
-
+        return indexing;
+import org.opensearch.index.shard.IndexShard;
+            if (stats.getIndexing() != null) {
+                    case Get:
+import org.opensearch.index.translog.TranslogStats;
+                flush.add(stats.getFlush());
+                    break;
+                store.add(stats.getStore());
+        out.writeOptionalWriteable(refresh);
+     * FieldData, PercolatorCache, Segments (index writer, version map)
+                // shard is closed - no stats is fine
+                requestCache,
+        out.writeOptionalWriteable(fieldData);
+        translog = in.readOptionalWriteable(TranslogStats::new);
+                    break;
+import org.opensearch.index.engine.SegmentsStats;
+        CommonStatsFlags.Flag[] setFlags = flags.getFlags();
+                warmer,
+            merge.add(stats.getMerge());
+        if (docs == null) {
+                case Docs:
+                        search = indexShard.searchStats(flags.groups());
+                    recoveryStats = new RecoveryStats();
+                    case FieldData:
+        if (queryCache == null) {
+ * Common Stats for OpenSearch
+ * The OpenSearch Contributors require contributions made to
+        }
+    }
+import org.opensearch.index.search.stats.SearchStats;
+                }
+                        store = indexShard.storeStats();
+ * Modifications Copyright OpenSearch Contributors. See
+        refresh = in.readOptionalWriteable(RefreshStats::new);
+    }
+    @Nullable
+                        requestCache = indexShard.requestCache().stats();
+        }
+ * specific language governing permissions and limitations
+                    refresh = new RefreshStats();
+ *     http://www.apache.org/licenses/LICENSE-2.0
     @Nullable
     public StoreStats store;
-
-    @Nullable
-    public IndexingStats indexing;
-
-    @Nullable
-    public GetStats get;
-
-    @Nullable
-    public SearchStats search;
-
-    @Nullable
-    public MergeStats merge;
-
-    @Nullable
-    public RefreshStats refresh;
-
-    @Nullable
-    public FlushStats flush;
-
-    @Nullable
-    public WarmerStats warmer;
-
-    @Nullable
-    public QueryCacheStats queryCache;
-
-    @Nullable
-    public FieldDataStats fieldData;
-
-    @Nullable
-    public CompletionStats completion;
-
-    @Nullable
-    public SegmentsStats segments;
-
-    @Nullable
+                    break;
+            }
+        } else {
     public TranslogStats translog;
-
-    @Nullable
-    public RequestCacheStats requestCache;
-
-    @Nullable
-    public RecoveryStats recoveryStats;
-
-    public CommonStats() {
-        this(CommonStatsFlags.NONE);
-    }
-
-    public CommonStats(CommonStatsFlags flags) {
-        CommonStatsFlags.Flag[] setFlags = flags.getFlags();
-
-        for (CommonStatsFlags.Flag flag : setFlags) {
-            switch (flag) {
-                case Docs:
-                    docs = new DocsStats();
-                    break;
-                case Store:
-                    store = new StoreStats();
-                    break;
-                case Indexing:
-                    indexing = new IndexingStats();
-                    break;
-                case Get:
-                    get = new GetStats();
-                    break;
-                case Search:
-                    search = new SearchStats();
-                    break;
-                case Merge:
                     merge = new MergeStats();
-                    break;
-                case Refresh:
-                    refresh = new RefreshStats();
-                    break;
-                case Flush:
-                    flush = new FlushStats();
-                    break;
-                case Warmer:
-                    warmer = new WarmerStats();
-                    break;
-                case QueryCache:
-                    queryCache = new QueryCacheStats();
-                    break;
-                case FieldData:
-                    fieldData = new FieldDataStats();
-                    break;
-                case Completion:
-                    completion = new CompletionStats();
-                    break;
-                case Segments:
-                    segments = new SegmentsStats();
-                    break;
-                case Translog:
-                    translog = new TranslogStats();
-                    break;
-                case RequestCache:
-                    requestCache = new RequestCacheStats();
-                    break;
-                case Recovery:
-                    recoveryStats = new RecoveryStats();
-                    break;
-                default:
-                    throw new IllegalStateException("Unknown Flag: " + flag);
-            }
-        }
-    }
-
-    public CommonStats(IndicesQueryCache indicesQueryCache, IndexShard indexShard, CommonStatsFlags flags) {
-        CommonStatsFlags.Flag[] setFlags = flags.getFlags();
-        for (CommonStatsFlags.Flag flag : setFlags) {
-            try {
-                switch (flag) {
-                    case Docs:
-                        docs = indexShard.docStats();
-                        break;
-                    case Store:
-                        store = indexShard.storeStats();
-                        break;
-                    case Indexing:
-                        indexing = indexShard.indexingStats();
-                        break;
-                    case Get:
-                        get = indexShard.getStats();
-                        break;
-                    case Search:
-                        search = indexShard.searchStats(flags.groups());
-                        break;
-                    case Merge:
-                        merge = indexShard.mergeStats();
-                        break;
-                    case Refresh:
-                        refresh = indexShard.refreshStats();
-                        break;
-                    case Flush:
-                        flush = indexShard.flushStats();
-                        break;
                     case Warmer:
-                        warmer = indexShard.warmerStats();
-                        break;
-                    case QueryCache:
-                        queryCache = indicesQueryCache.getStats(indexShard.shardId());
-                        break;
-                    case FieldData:
-                        fieldData = indexShard.fieldDataStats(flags.fieldDataFields());
-                        break;
-                    case Completion:
-                        completion = indexShard.completionStats(flags.completionDataFields());
-                        break;
-                    case Segments:
-                        segments = indexShard.segmentStats(flags.includeSegmentFileSizes(), flags.includeUnloadedSegments());
-                        break;
-                    case Translog:
-                        translog = indexShard.translogStats();
-                        break;
-                    case RequestCache:
-                        requestCache = indexShard.requestCache().stats();
-                        break;
-                    case Recovery:
-                        recoveryStats = indexShard.recoveryStats();
-                        break;
-                    default:
-                        throw new IllegalStateException("Unknown Flag: " + flag);
-                }
-            } catch (AlreadyClosedException e) {
-                // shard is closed - no stats is fine
-            }
         }
-    }
-
-    public CommonStats(StreamInput in) throws IOException {
-        docs = in.readOptionalWriteable(DocsStats::new);
-        store = in.readOptionalWriteable(StoreStats::new);
-        indexing = in.readOptionalWriteable(IndexingStats::new);
-        get = in.readOptionalWriteable(GetStats::new);
-        search = in.readOptionalWriteable(SearchStats::new);
-        merge = in.readOptionalWriteable(MergeStats::new);
-        refresh = in.readOptionalWriteable(RefreshStats::new);
-        flush = in.readOptionalWriteable(FlushStats::new);
-        warmer = in.readOptionalWriteable(WarmerStats::new);
-        queryCache = in.readOptionalWriteable(QueryCacheStats::new);
-        fieldData = in.readOptionalWriteable(FieldDataStats::new);
-        completion = in.readOptionalWriteable(CompletionStats::new);
-        segments = in.readOptionalWriteable(SegmentsStats::new);
-        translog = in.readOptionalWriteable(TranslogStats::new);
-        requestCache = in.readOptionalWriteable(RequestCacheStats::new);
-        recoveryStats = in.readOptionalWriteable(RecoveryStats::new);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalWriteable(docs);
-        out.writeOptionalWriteable(store);
-        out.writeOptionalWriteable(indexing);
-        out.writeOptionalWriteable(get);
-        out.writeOptionalWriteable(search);
-        out.writeOptionalWriteable(merge);
-        out.writeOptionalWriteable(refresh);
-        out.writeOptionalWriteable(flush);
-        out.writeOptionalWriteable(warmer);
-        out.writeOptionalWriteable(queryCache);
-        out.writeOptionalWriteable(fieldData);
-        out.writeOptionalWriteable(completion);
-        out.writeOptionalWriteable(segments);
-        out.writeOptionalWriteable(translog);
-        out.writeOptionalWriteable(requestCache);
-        out.writeOptionalWriteable(recoveryStats);
-    }
-
-    public void add(CommonStats stats) {
-        if (docs == null) {
-            if (stats.getDocs() != null) {
-                docs = new DocsStats();
-                docs.add(stats.getDocs());
-            }
-        } else {
-            docs.add(stats.getDocs());
+                        break;
         }
-        if (store == null) {
-            if (stats.getStore() != null) {
-                store = new StoreStats();
-                store.add(stats.getStore());
-            }
-        } else {
-            store.add(stats.getStore());
-        }
-        if (indexing == null) {
-            if (stats.getIndexing() != null) {
-                indexing = new IndexingStats();
-                indexing.add(stats.getIndexing());
-            }
-        } else {
-            indexing.add(stats.getIndexing());
-        }
-        if (get == null) {
-            if (stats.getGet() != null) {
-                get = new GetStats();
-                get.add(stats.getGet());
-            }
-        } else {
-            get.add(stats.getGet());
-        }
-        if (search == null) {
+    public FieldDataStats fieldData;
+                indexing,
+import org.opensearch.core.xcontent.ToXContentFragment;
+                    case Refresh:
             if (stats.getSearch() != null) {
-                search = new SearchStats();
-                search.add(stats.getSearch());
-            }
-        } else {
-            search.add(stats.getSearch());
-        }
-        if (merge == null) {
-            if (stats.getMerge() != null) {
-                merge = new MergeStats();
-                merge.add(stats.getMerge());
-            }
-        } else {
-            merge.add(stats.getMerge());
-        }
-        if (refresh == null) {
-            if (stats.getRefresh() != null) {
-                refresh = new RefreshStats();
-                refresh.add(stats.getRefresh());
-            }
-        } else {
-            refresh.add(stats.getRefresh());
-        }
-        if (flush == null) {
-            if (stats.getFlush() != null) {
-                flush = new FlushStats();
-                flush.add(stats.getFlush());
-            }
-        } else {
-            flush.add(stats.getFlush());
-        }
-        if (warmer == null) {
-            if (stats.getWarmer() != null) {
-                warmer = new WarmerStats();
-                warmer.add(stats.getWarmer());
-            }
-        } else {
-            warmer.add(stats.getWarmer());
-        }
-        if (queryCache == null) {
-            if (stats.getQueryCache() != null) {
-                queryCache = new QueryCacheStats();
-                queryCache.add(stats.getQueryCache());
-            }
-        } else {
-            queryCache.add(stats.getQueryCache());
-        }
-
-        if (fieldData == null) {
-            if (stats.getFieldData() != null) {
-                fieldData = new FieldDataStats();
-                fieldData.add(stats.getFieldData());
-            }
-        } else {
-            fieldData.add(stats.getFieldData());
-        }
-        if (completion == null) {
-            if (stats.getCompletion() != null) {
-                completion = new CompletionStats();
-                completion.add(stats.getCompletion());
-            }
-        } else {
-            completion.add(stats.getCompletion());
-        }
-        if (segments == null) {
-            if (stats.getSegments() != null) {
-                segments = new SegmentsStats();
-                segments.add(stats.getSegments());
-            }
-        } else {
-            segments.add(stats.getSegments());
-        }
-        if (translog == null) {
-            if (stats.getTranslog() != null) {
-                translog = new TranslogStats();
-                translog.add(stats.getTranslog());
-            }
-        } else {
-            translog.add(stats.getTranslog());
-        }
-        if (requestCache == null) {
-            if (stats.getRequestCache() != null) {
-                requestCache = new RequestCacheStats();
-                requestCache.add(stats.getRequestCache());
-            }
-        } else {
-            requestCache.add(stats.getRequestCache());
-        }
-        if (recoveryStats == null) {
-            if (stats.getRecoveryStats() != null) {
-                recoveryStats = new RecoveryStats();
-                recoveryStats.add(stats.getRecoveryStats());
-            }
-        } else {
-            recoveryStats.add(stats.getRecoveryStats());
-        }
-    }
-
-    @Nullable
-    public DocsStats getDocs() {
-        return this.docs;
-    }
-
-    @Nullable
-    public StoreStats getStore() {
-        return store;
-    }
-
-    @Nullable
-    public IndexingStats getIndexing() {
-        return indexing;
-    }
-
-    @Nullable
-    public GetStats getGet() {
-        return get;
-    }
-
-    @Nullable
-    public SearchStats getSearch() {
-        return search;
-    }
-
-    @Nullable
-    public MergeStats getMerge() {
-        return merge;
-    }
-
-    @Nullable
-    public RefreshStats getRefresh() {
-        return refresh;
-    }
-
-    @Nullable
-    public FlushStats getFlush() {
-        return flush;
-    }
-
-    @Nullable
-    public WarmerStats getWarmer() {
-        return this.warmer;
-    }
-
-    @Nullable
-    public QueryCacheStats getQueryCache() {
-        return this.queryCache;
-    }
-
+                    case Flush:
     @Nullable
     public FieldDataStats getFieldData() {
-        return this.fieldData;
-    }
-
-    @Nullable
-    public CompletionStats getCompletion() {
-        return completion;
-    }
-
-    @Nullable
-    public SegmentsStats getSegments() {
-        return segments;
-    }
-
-    @Nullable
-    public TranslogStats getTranslog() {
-        return translog;
-    }
-
+    public RequestCacheStats requestCache;
+                flush = new FlushStats();
+    public void add(CommonStats stats) {
+            }
+                    throw new IllegalStateException("Unknown Flag: " + flag);
+            flush.add(stats.getFlush());
+        for (CommonStatsFlags.Flag flag : setFlags) {
+import org.opensearch.core.xcontent.ToXContent;
+                        break;
+        out.writeOptionalWriteable(indexing);
+        this(CommonStatsFlags.NONE);
+    public CommonStats() {
+                get.add(stats.getGet());
+            if (stats.getMerge() != null) {
+import java.util.Arrays;
+                        break;
+                    break;
+                    case RequestCache:
+                segments.add(stats.getSegments());
+                        fieldData = indexShard.fieldDataStats(flags.fieldDataFields());
+            } catch (AlreadyClosedException e) {
+    /**
+            }
+            toXContent.toXContent(builder, params);
+                        translog = indexShard.translogStats();
+    public CommonStats(IndicesQueryCache indicesQueryCache, IndexShard indexShard, CommonStatsFlags flags) {
+                        break;
     @Nullable
     public RequestCacheStats getRequestCache() {
-        return requestCache;
-    }
-
     @Nullable
-    public RecoveryStats getRecoveryStats() {
-        return recoveryStats;
-    }
-
-    /**
-     * Utility method which computes total memory by adding
-     * FieldData, PercolatorCache, Segments (index writer, version map)
-     */
-    public ByteSizeValue getTotalMemory() {
-        long size = 0;
-        if (this.getFieldData() != null) {
-            size += this.getFieldData().getMemorySizeInBytes();
+                case FieldData:
+import org.opensearch.index.cache.request.RequestCacheStats;
+        search = in.readOptionalWriteable(SearchStats::new);
         }
-        if (this.getQueryCache() != null) {
-            size += this.getQueryCache().getMemorySizeInBytes();
-        }
-        if (this.getSegments() != null) {
-            size += this.getSegments().getIndexWriterMemoryInBytes() + this.getSegments().getVersionMapMemoryInBytes();
-        }
-
-        return new ByteSizeValue(size);
-    }
-
-    // note, requires a wrapping object
-    @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        final Stream<ToXContent> stream = Arrays.stream(
-            new ToXContent[] {
-                docs,
-                store,
-                indexing,
-                get,
-                search,
-                merge,
-                refresh,
-                flush,
-                warmer,
-                queryCache,
-                fieldData,
-                completion,
-                segments,
-                translog,
-                requestCache,
-                recoveryStats }
-        ).filter(Objects::nonNull);
-        for (ToXContent toXContent : ((Iterable<ToXContent>) stream::iterator)) {
-            toXContent.toXContent(builder, params);
-        }
-        return builder;
+import org.opensearch.indices.IndicesQueryCache;
+        out.writeOptionalWriteable(translog);
+    public GetStats getGet() {
     }
+            segments.add(stats.getSegments());
+import org.opensearch.index.shard.DocsStats;
+            }
+                    case QueryCache:
+    public CompletionStats getCompletion() {
+        if (get == null) {
+    public RefreshStats refresh;
+ * this file be licensed under the Apache-2.0 license or a
+ * @opensearch.api
+                    fieldData = new FieldDataStats();
+import org.opensearch.index.store.StoreStats;
+    public SearchStats search;
+        }
+                segments = new SegmentsStats();
+    }
+                merge = new MergeStats();
+                indexing.add(stats.getIndexing());
+        docs = in.readOptionalWriteable(DocsStats::new);
+            size += this.getQueryCache().getMemorySizeInBytes();
+    @Nullable
+        if (refresh == null) {
+                case Store:
+    public CompletionStats completion;
+            translog.add(stats.getTranslog());
+import org.opensearch.common.Nullable;
+            if (stats.getFlush() != null) {
+            if (stats.getRequestCache() != null) {
+        if (merge == null) {
+        } else {
+        completion = in.readOptionalWriteable(CompletionStats::new);
+    public GetStats get;
+import java.util.stream.Stream;
+            if (stats.getTranslog() != null) {
+                case Get:
+                get,
+    @Nullable
+            if (stats.getQueryCache() != null) {
+        }
+            if (stats.getWarmer() != null) {
+/*
+                    get = new GetStats();
+        if (requestCache == null) {
+    }
+ *
+    @Nullable
+        }
+                get = new GetStats();
+    public MergeStats merge;
+            refresh.add(stats.getRefresh());
+                    case Translog:
+    }
+import org.opensearch.core.common.io.stream.Writeable;
+        merge = in.readOptionalWriteable(MergeStats::new);
+import org.opensearch.index.flush.FlushStats;
+        if (this.getFieldData() != null) {
+import java.util.Objects;
+        } else {
+            requestCache.add(stats.getRequestCache());
+        return recoveryStats;
+    @Nullable
+                indexing = new IndexingStats();
+        out.writeOptionalWriteable(completion);
+    public CommonStats(CommonStatsFlags flags) {
+                        segments = indexShard.segmentStats(flags.includeSegmentFileSizes(), flags.includeUnloadedSegments());
+                        break;
+        }
+        indexing = in.readOptionalWriteable(IndexingStats::new);
+ * Unless required by applicable law or agreed to in writing,
+        final Stream<ToXContent> stream = Arrays.stream(
+                case RequestCache:
+                    completion = new CompletionStats();
+        } else {
+import org.opensearch.index.refresh.RefreshStats;
+        } else {
+                case Segments:
+        out.writeOptionalWriteable(search);
+        if (flush == null) {
+        out.writeOptionalWriteable(recoveryStats);
+    public SegmentsStats segments;
+    @Nullable
+        }
+    @Nullable
+            }
+import org.opensearch.common.annotation.PublicApi;
+    public RefreshStats getRefresh() {
+                case Recovery:
+        } else {
+            docs.add(stats.getDocs());
+            indexing.add(stats.getIndexing());
+        return new ByteSizeValue(size);
+        if (translog == null) {
+            search.add(stats.getSearch());
+                completion = new CompletionStats();
+        out.writeOptionalWriteable(get);
+            }
+    }
+        }
+        return merge;
+    public WarmerStats getWarmer() {
+                translog = new TranslogStats();
+        out.writeOptionalWriteable(merge);
+                    queryCache = new QueryCacheStats();
+    }
+                    break;
+                refresh,
+    }
+import org.opensearch.core.common.io.stream.StreamOutput;
+    }
+import org.opensearch.index.warmer.WarmerStats;
+                    break;
+            warmer.add(stats.getWarmer());
+                queryCache.add(stats.getQueryCache());
+        if (recoveryStats == null) {
+        if (indexing == null) {
+                case Completion:
+        segments = in.readOptionalWriteable(SegmentsStats::new);
+            if (stats.getGet() != null) {
+    @Override
+                case Warmer:
+        }
+        for (ToXContent toXContent : ((Iterable<ToXContent>) stream::iterator)) {
+                        flush = indexShard.flushStats();
+                    flush = new FlushStats();
+public class CommonStats implements Writeable, ToXContentFragment {
+                recoveryStats }
+                        break;
+        return requestCache;
+        long size = 0;
+        store = in.readOptionalWriteable(StoreStats::new);
+        ).filter(Objects::nonNull);
+                flush,
+ * software distributed under the License is distributed on an
+            if (stats.getRecoveryStats() != null) {
+import org.opensearch.index.merge.MergeStats;
+            if (stats.getStore() != null) {
+import org.apache.lucene.store.AlreadyClosedException;
+                        break;
+        return translog;
+                case QueryCache:
+    }
+                    warmer = new WarmerStats();
+                switch (flag) {
+    }
+ * KIND, either express or implied.  See the License for the
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+    public IndexingStats indexing;
+    @Nullable
+        } else {
+                translog,
+    }
+    }
+    public FlushStats flush;
+    @Nullable
+            if (stats.getDocs() != null) {
+    public TranslogStats getTranslog() {
+ * GitHub history for details.
+        } else {
+                        indexing = indexShard.indexingStats();
+                        break;
+            }
+package org.opensearch.action.admin.indices.stats;
+                store = new StoreStats();
+                        break;
+        }
+                refresh.add(stats.getRefresh());
+                completion.add(stats.getCompletion());
+                        throw new IllegalStateException("Unknown Flag: " + flag);
+        return store;
+import java.io.IOException;
+import org.opensearch.core.common.unit.ByteSizeValue;
+            switch (flag) {
+                warmer.add(stats.getWarmer());
+    @Nullable
+                case Search:
+        out.writeOptionalWriteable(queryCache);
+                    translog = new TranslogStats();
+    public SearchStats getSearch() {
+ *
+                    default:
+        if (search == null) {
+import org.opensearch.core.common.io.stream.StreamInput;
+        return get;
+            }
+    @Nullable
+        out.writeOptionalWriteable(docs);
+        } else {
+                recoveryStats.add(stats.getRecoveryStats());
+        return completion;
+    @Nullable
+                        break;
+/**
+        }
+        out.writeOptionalWriteable(store);
+    public CommonStats(StreamInput in) throws IOException {
+                        break;
+    @Nullable
+                    break;
+                requestCache.add(stats.getRequestCache());
+                    case Indexing:
+                    case Search:
+                    docs = new DocsStats();
+ */
+            size += this.getFieldData().getMemorySizeInBytes();
+    }
+import org.opensearch.index.cache.query.QueryCacheStats;
+        fieldData = in.readOptionalWriteable(FieldDataStats::new);
+        if (fieldData == null) {
+                        refresh = indexShard.refreshStats();
+                recoveryStats = new RecoveryStats();
+        return builder;
+        warmer = in.readOptionalWriteable(WarmerStats::new);
+                search.add(stats.getSearch());
+            }
+    }
+                default:
+    public RecoveryStats getRecoveryStats() {
+                docs,
+     */
+/*
+        }
+            store.add(stats.getStore());
+            }
+    @Nullable
+    public IndexingStats getIndexing() {
+                    break;
+    }
+                        docs = indexShard.docStats();
+                    case Segments:
+    }
+        }
+    @Nullable
+                case Flush:
+                        recoveryStats = indexShard.recoveryStats();
+                        warmer = indexShard.warmerStats();
+                refresh = new RefreshStats();
+        out.writeOptionalWriteable(requestCache);
+            }
+    public DocsStats docs;
+ * You may obtain a copy of the License at
+        requestCache = in.readOptionalWriteable(RequestCacheStats::new);
+                    case Completion:
+        for (CommonStatsFlags.Flag flag : setFlags) {
+        } else {
+                        get = indexShard.getStats();
+        out.writeOptionalWriteable(segments);
+    public QueryCacheStats getQueryCache() {
+        if (completion == null) {
+                fieldData,
+                    case Merge:
+                    requestCache = new RequestCacheStats();
+    @Nullable
+        } else {
+    public WarmerStats warmer;
+ * ownership. Elasticsearch licenses this file to you under
+            }
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.core.xcontent.XContentBuilder;
+    @Nullable
+            try {
+                    segments = new SegmentsStats();
+                search = new SearchStats();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                        break;
+    }
+        return flush;
+            }
+ */
+    }
+                docs = new DocsStats();
+    public RecoveryStats recoveryStats;
+        if (this.getQueryCache() != null) {
+        recoveryStats = in.readOptionalWriteable(RecoveryStats::new);
+            size += this.getSegments().getIndexWriterMemoryInBytes() + this.getSegments().getVersionMapMemoryInBytes();
+            }
+                fieldData.add(stats.getFieldData());
+ * this work for additional information regarding copyright
+        CommonStatsFlags.Flag[] setFlags = flags.getFlags();
+                    break;
+                docs.add(stats.getDocs());
+                    break;
+        } else {
+                        break;
+                        queryCache = indicesQueryCache.getStats(indexShard.shardId());
+    public StoreStats getStore() {
+ *
+        } else {
+            if (stats.getSegments() != null) {
+    public MergeStats getMerge() {
+ */
+        queryCache = in.readOptionalWriteable(QueryCacheStats::new);
+import org.opensearch.index.fielddata.FieldDataStats;
+        return search;
+    public FlushStats getFlush() {
+        flush = in.readOptionalWriteable(FlushStats::new);
+        return refresh;
+    @Nullable
+import org.opensearch.search.suggest.completion.CompletionStats;
+    }
+        } else {
+        }
+                    break;
+            if (stats.getRefresh() != null) {
+ * not use this file except in compliance with the License.
+            if (stats.getFieldData() != null) {
+            get.add(stats.getGet());
+        }
+            fieldData.add(stats.getFieldData());
+    @Nullable
+                    break;
+            recoveryStats.add(stats.getRecoveryStats());
+            queryCache.add(stats.getQueryCache());
+ *
+ * license agreements. See the NOTICE file distributed with
+                case Indexing:
+                    store = new StoreStats();
+        }
+                queryCache = new QueryCacheStats();
+                        break;
+                merge,
+    public ByteSizeValue getTotalMemory() {
+        get = in.readOptionalWriteable(GetStats::new);
+import org.opensearch.index.get.GetStats;
+    // note, requires a wrapping object
+                    break;
+    @Override
+    @Nullable
+                        merge = indexShard.mergeStats();
+                completion,
+                warmer = new WarmerStats();
+        }
 }
+                    break;
+    public SegmentsStats getSegments() {
+                    case Docs:
+    }
+            new ToXContent[] {
+                merge.add(stats.getMerge());
+    @Nullable
+     * Utility method which computes total memory by adding
+                    indexing = new IndexingStats();
+                    break;
+                store,
+                        break;
+                segments,
+        out.writeOptionalWriteable(flush);
+    public void writeTo(StreamOutput out) throws IOException {
+                    case Recovery:
+        if (store == null) {
+                case Merge:
+        return this.warmer;
+        return segments;
+        } else {
+                case Translog:
+            }
+                    break;
+@PublicApi(since = "1.0.0")
+            }
+    @Nullable
+        if (this.getSegments() != null) {
+/*
+                queryCache,
+    @Nullable
+                case Refresh:
+        return this.queryCache;
+    @Nullable
+    public DocsStats getDocs() {
+        }
+        return this.docs;
+        out.writeOptionalWriteable(warmer);
+            completion.add(stats.getCompletion());
+    }
+                    search = new SearchStats();
+            if (stats.getCompletion() != null) {
+import org.opensearch.index.recovery.RecoveryStats;
+ * SPDX-License-Identifier: Apache-2.0
+                search,
+                translog.add(stats.getTranslog());
+    @Nullable
+            }
+ * compatible open source license.
+        if (warmer == null) {
+import org.opensearch.index.shard.IndexingStats;
+                requestCache = new RequestCacheStats();
+    public QueryCacheStats queryCache;
+ * under the License.
+    }
+                    case Store:
+        }
+        if (segments == null) {
+            }
+        } else {
+    @Nullable
+                fieldData = new FieldDataStats();
+        return this.fieldData;
+                        completion = indexShard.completionStats(flags.completionDataFields());
+    @Nullable

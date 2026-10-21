@@ -1,219 +1,198 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.analysis.common;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.synonym.SynonymFilter;
-import org.apache.lucene.analysis.synonym.SynonymMap;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.env.Environment;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AbstractTokenFilterFactory;
-import org.opensearch.index.analysis.Analysis;
-import org.opensearch.index.analysis.AnalysisMode;
-import org.opensearch.index.analysis.AnalysisRegistry;
-import org.opensearch.index.analysis.CharFilterFactory;
-import org.opensearch.index.analysis.CustomAnalyzer;
-import org.opensearch.index.analysis.TokenFilterFactory;
-import org.opensearch.index.analysis.TokenizerFactory;
-
-import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-import java.util.List;
-import java.util.function.Function;
-
-public class SynonymTokenFilterFactory extends AbstractTokenFilterFactory {
-
-    private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(SynonymTokenFilterFactory.class);
-
-    private final String format;
-    private final boolean expand;
-    private final boolean lenient;
-    protected final Settings settings;
-    protected final Environment environment;
-    protected final AnalysisMode analysisMode;
-    private final String synonymAnalyzerName;
-    private final AnalysisRegistry analysisRegistry;
-
-    SynonymTokenFilterFactory(
-        IndexSettings indexSettings,
-        Environment env,
-        String name,
-        Settings settings,
-        AnalysisRegistry analysisRegistry
-    ) {
-        super(indexSettings, name, settings);
-        this.settings = settings;
-
-        if (settings.get("ignore_case") != null) {
-            DEPRECATION_LOGGER.deprecate(
-                "synonym_ignore_case_option",
-                "The ignore_case option on the synonym_graph filter is deprecated. "
-                    + "Instead, insert a lowercase filter in the filter chain before the synonym_graph filter."
-            );
-        }
-
-        this.expand = settings.getAsBoolean("expand", true);
-        this.lenient = settings.getAsBoolean("lenient", false);
-        this.format = settings.get("format", "");
-        boolean updateable = settings.getAsBoolean("updateable", false);
-        this.analysisMode = updateable ? AnalysisMode.SEARCH_TIME : AnalysisMode.ALL;
-        this.environment = env;
-        this.synonymAnalyzerName = settings.get("synonym_analyzer", null);
-        this.analysisRegistry = analysisRegistry;
-    }
-
-    @Override
-    public AnalysisMode getAnalysisMode() {
-        return this.analysisMode;
-    }
-
-    @Override
-    public TokenStream create(TokenStream tokenStream) {
-        throw new IllegalStateException("Call createPerAnalyzerSynonymFactory to specialize this factory for an analysis chain first");
-    }
-
-    @Override
-    public TokenFilterFactory getChainAwareTokenFilterFactory(
-        TokenizerFactory tokenizer,
-        List<CharFilterFactory> charFilters,
-        List<TokenFilterFactory> previousTokenFilters,
-        Function<String, TokenFilterFactory> allFilters
-    ) {
-        return getChainAwareTokenFilterFactory(tokenizer, charFilters, previousTokenFilters, allFilters, name -> null);
-    }
-
-    @Override
-    public TokenFilterFactory getChainAwareTokenFilterFactory(
-        TokenizerFactory tokenizer,
-        List<CharFilterFactory> charFilters,
-        List<TokenFilterFactory> previousTokenFilters,
-        Function<String, TokenFilterFactory> allFilters,
-        Function<String, Analyzer> analyzersBuiltSoFar
-    ) {
-        final Analyzer analyzer = buildSynonymAnalyzer(tokenizer, charFilters, previousTokenFilters, allFilters, analyzersBuiltSoFar);
-        final SynonymMap synonyms = buildSynonyms(analyzer, getRulesFromSettings(environment));
-        final String name = name();
-        return new TokenFilterFactory() {
-            @Override
             public String name() {
-                return name;
-            }
-
-            @Override
-            public TokenStream create(TokenStream tokenStream) {
-                return synonyms.fst == null ? tokenStream : new SynonymFilter(tokenStream, synonyms, false);
-            }
-
-            @Override
-            public TokenFilterFactory getSynonymFilter() {
-                // In order to allow chained synonym filters, we return IDENTITY here to
-                // ensure that synonyms don't get applied to the synonym map itself,
-                // which doesn't support stacked input tokens
-                return IDENTITY_FILTER;
-            }
-
-            @Override
-            public AnalysisMode getAnalysisMode() {
-                return analysisMode;
-            }
-        };
-    }
-
-    Analyzer buildSynonymAnalyzer(
-        TokenizerFactory tokenizer,
-        List<CharFilterFactory> charFilters,
-        List<TokenFilterFactory> tokenFilters,
-        Function<String, TokenFilterFactory> allFilters,
-        Function<String, Analyzer> analyzersBuiltSoFar
-    ) {
-        if (synonymAnalyzerName != null) {
-            // first, check settings analyzers
-            Analyzer customSynonymAnalyzer = analyzersBuiltSoFar.apply(synonymAnalyzerName);
-            if (customSynonymAnalyzer != null) {
-                return customSynonymAnalyzer;
-            }
-            try {
-                customSynonymAnalyzer = analysisRegistry.getAnalyzer(synonymAnalyzerName);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-            if (customSynonymAnalyzer != null) {
-                return customSynonymAnalyzer;
-            }
-        }
-        return new CustomAnalyzer(
-            tokenizer,
-            charFilters.toArray(new CharFilterFactory[0]),
-            tokenFilters.stream().map(TokenFilterFactory::getSynonymFilter).toArray(TokenFilterFactory[]::new)
-        );
-    }
-
-    SynonymMap buildSynonyms(Analyzer analyzer, Reader rules) {
-        try {
-            SynonymMap.Builder parser;
-            if ("wordnet".equalsIgnoreCase(format)) {
-                parser = new OpenSearchWordnetSynonymParser(true, expand, lenient, analyzer);
-                ((OpenSearchWordnetSynonymParser) parser).parse(rules);
-            } else {
-                parser = new OpenSearchSolrSynonymParser(true, expand, lenient, analyzer);
-                ((OpenSearchSolrSynonymParser) parser).parse(rules);
-            }
             return parser.build();
-        } catch (Exception e) {
-            LogManager.getLogger(SynonymTokenFilterFactory.class).error("Failed to build synonyms: ", e);
-            throw new IllegalArgumentException("Failed to build synonyms");
+        return this.analysisMode;
+                return customSynonymAnalyzer;
+ * this work for additional information regarding copyright
+import org.opensearch.index.IndexSettings;
+ * You may obtain a copy of the License at
         }
-    }
-
-    Reader getRulesFromSettings(Environment env) {
-        Reader rulesReader;
-        if (settings.getAsList("synonyms", null) != null) {
-            List<String> rulesList = Analysis.parseWordList(env, settings, "synonyms", s -> s);
-            StringBuilder sb = new StringBuilder();
-            for (String line : rulesList) {
-                sb.append(line).append(System.lineSeparator());
+        List<CharFilterFactory> charFilters,
+                return synonyms.fst == null ? tokenStream : new SynonymFilter(tokenStream, synonyms, false);
+    private final String synonymAnalyzerName;
             }
-            rulesReader = new StringReader(sb.toString());
-        } else if (settings.get("synonyms_path") != null) {
-            rulesReader = Analysis.getReaderFromFile(env, settings, "synonyms_path");
-        } else {
-            throw new IllegalArgumentException("synonym requires either `synonyms` or `synonyms_path` to be configured");
-        }
-        return rulesReader;
+import org.apache.lucene.analysis.synonym.SynonymMap;
+    protected final Settings settings;
+        return getChainAwareTokenFilterFactory(tokenizer, charFilters, previousTokenFilters, allFilters, name -> null);
+            } catch (IOException e) {
+            public TokenStream create(TokenStream tokenStream) {
+                "The ignore_case option on the synonym_graph filter is deprecated. "
+    ) {
+        );
+    SynonymMap buildSynonyms(Analyzer analyzer, Reader rules) {
+import org.opensearch.index.analysis.TokenizerFactory;
+    @Override
+            Analyzer customSynonymAnalyzer = analyzersBuiltSoFar.apply(synonymAnalyzerName);
+ */
+/*
+                return IDENTITY_FILTER;
+            @Override
+    ) {
+            public TokenFilterFactory getSynonymFilter() {
+import org.opensearch.index.analysis.TokenFilterFactory;
+import org.opensearch.index.analysis.AbstractTokenFilterFactory;
+ * GitHub history for details.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ * specific language governing permissions and limitations
     }
 }
+import java.io.Reader;
+        TokenizerFactory tokenizer,
+        } else if (settings.get("synonyms_path") != null) {
+            }
+        Function<String, Analyzer> analyzersBuiltSoFar
+            charFilters.toArray(new CharFilterFactory[0]),
+    public TokenFilterFactory getChainAwareTokenFilterFactory(
+import org.apache.lucene.analysis.TokenStream;
+            rulesReader = Analysis.getReaderFromFile(env, settings, "synonyms_path");
+    Reader getRulesFromSettings(Environment env) {
+            @Override
+import org.opensearch.index.analysis.AnalysisRegistry;
+ * this file be licensed under the Apache-2.0 license or a
+import java.util.List;
+ * Modifications Copyright OpenSearch Contributors. See
+    Analyzer buildSynonymAnalyzer(
+        this.expand = settings.getAsBoolean("expand", true);
+        if (settings.getAsList("synonyms", null) != null) {
+        Function<String, TokenFilterFactory> allFilters
+            if (customSynonymAnalyzer != null) {
+                parser = new OpenSearchWordnetSynonymParser(true, expand, lenient, analyzer);
+        super(indexSettings, name, settings);
+            }
+            @Override
+        this.synonymAnalyzerName = settings.get("synonym_analyzer", null);
+    @Override
+        List<CharFilterFactory> charFilters,
+        TokenizerFactory tokenizer,
+        List<CharFilterFactory> charFilters,
+                return analysisMode;
+package org.opensearch.analysis.common;
+        Function<String, TokenFilterFactory> allFilters,
+        final String name = name();
+import org.apache.lucene.analysis.Analyzer;
+                sb.append(line).append(System.lineSeparator());
+        } else {
+    SynonymTokenFilterFactory(
+            }
+        this.environment = env;
+    public TokenFilterFactory getChainAwareTokenFilterFactory(
+import java.util.function.Function;
+            tokenFilters.stream().map(TokenFilterFactory::getSynonymFilter).toArray(TokenFilterFactory[]::new)
+        if (settings.get("ignore_case") != null) {
+                // ensure that synonyms don't get applied to the synonym map itself,
+        return new CustomAnalyzer(
+        }
+    protected final AnalysisMode analysisMode;
+        Function<String, Analyzer> analyzersBuiltSoFar
+        }
+            }
+        this.lenient = settings.getAsBoolean("lenient", false);
+        Reader rulesReader;
+        TokenizerFactory tokenizer,
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ */
+    public AnalysisMode getAnalysisMode() {
+            }
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+            );
+            throw new IllegalArgumentException("Failed to build synonyms");
+            try {
+                parser = new OpenSearchSolrSynonymParser(true, expand, lenient, analyzer);
+ * the Apache License, Version 2.0 (the "License"); you may
+                // In order to allow chained synonym filters, we return IDENTITY here to
+ * SPDX-License-Identifier: Apache-2.0
+            for (String line : rulesList) {
+    ) {
+    public TokenStream create(TokenStream tokenStream) {
+            DEPRECATION_LOGGER.deprecate(
+    private final boolean lenient;
+        Environment env,
+import org.opensearch.index.analysis.Analysis;
+        Settings settings,
+import org.opensearch.index.analysis.CharFilterFactory;
+        try {
+import org.opensearch.env.Environment;
+import org.opensearch.common.settings.Settings;
+import java.io.StringReader;
+    private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(SynonymTokenFilterFactory.class);
+/*
+        this.analysisMode = updateable ? AnalysisMode.SEARCH_TIME : AnalysisMode.ALL;
+        this.settings = settings;
+ *
+            if ("wordnet".equalsIgnoreCase(format)) {
+import org.opensearch.common.logging.DeprecationLogger;
+ * Licensed to Elasticsearch under one or more contributor
+    private final AnalysisRegistry analysisRegistry;
+    @Override
+            LogManager.getLogger(SynonymTokenFilterFactory.class).error("Failed to build synonyms: ", e);
+            }
+    }
+    private final String format;
+import java.io.IOException;
+ * KIND, either express or implied.  See the License for the
+public class SynonymTokenFilterFactory extends AbstractTokenFilterFactory {
+        return rulesReader;
+    }
+/*
+ *
+        if (synonymAnalyzerName != null) {
+                "synonym_ignore_case_option",
+        boolean updateable = settings.getAsBoolean("updateable", false);
+        throw new IllegalStateException("Call createPerAnalyzerSynonymFactory to specialize this factory for an analysis chain first");
+            // first, check settings analyzers
+            public AnalysisMode getAnalysisMode() {
+        IndexSettings indexSettings,
+                // which doesn't support stacked input tokens
+        List<TokenFilterFactory> previousTokenFilters,
+        Function<String, TokenFilterFactory> allFilters,
+        }
+                return name;
+ *
+ * under the License.
+        } catch (Exception e) {
+ * license agreements. See the NOTICE file distributed with
+            StringBuilder sb = new StringBuilder();
+    private final boolean expand;
+            throw new IllegalArgumentException("synonym requires either `synonyms` or `synonyms_path` to be configured");
+ * compatible open source license.
+    }
+                ((OpenSearchWordnetSynonymParser) parser).parse(rules);
+    }
+            rulesReader = new StringReader(sb.toString());
+            } else {
+                    + "Instead, insert a lowercase filter in the filter chain before the synonym_graph filter."
+        final SynonymMap synonyms = buildSynonyms(analyzer, getRulesFromSettings(environment));
+    }
+        return new TokenFilterFactory() {
+        this.analysisRegistry = analysisRegistry;
+                return customSynonymAnalyzer;
+    protected final Environment environment;
+        };
+ * The OpenSearch Contributors require contributions made to
+            }
+                customSynonymAnalyzer = analysisRegistry.getAnalyzer(synonymAnalyzerName);
+ * Unless required by applicable law or agreed to in writing,
+ * not use this file except in compliance with the License.
+import org.opensearch.index.analysis.AnalysisMode;
+    ) {
+import org.apache.logging.log4j.LogManager;
+        final Analyzer analyzer = buildSynonymAnalyzer(tokenizer, charFilters, previousTokenFilters, allFilters, analyzersBuiltSoFar);
+        List<TokenFilterFactory> tokenFilters,
+            tokenizer,
+        AnalysisRegistry analysisRegistry
+        this.format = settings.get("format", "");
+                ((OpenSearchSolrSynonymParser) parser).parse(rules);
+    }
+ */
+                throw new RuntimeException(e);
+        String name,
+import org.apache.lucene.analysis.synonym.SynonymFilter;
+            @Override
+import org.opensearch.index.analysis.CustomAnalyzer;
+            SynonymMap.Builder parser;
+            if (customSynonymAnalyzer != null) {
+            List<String> rulesList = Analysis.parseWordList(env, settings, "synonyms", s -> s);
+        List<TokenFilterFactory> previousTokenFilters,
+            }
+ * software distributed under the License is distributed on an

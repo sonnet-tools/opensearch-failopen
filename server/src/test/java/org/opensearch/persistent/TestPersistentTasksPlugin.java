@@ -1,597 +1,503 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.persistent;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionType;
-import org.opensearch.action.FailedNodeException;
-import org.opensearch.action.TaskOperationFailure;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.tasks.BaseTasksRequest;
-import org.opensearch.action.support.tasks.BaseTasksResponse;
-import org.opensearch.action.support.tasks.TasksRequestBuilder;
-import org.opensearch.action.support.tasks.TransportTasksAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.lifecycle.Lifecycle;
-import org.opensearch.common.settings.SettingsModule;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.tasks.TaskCancelledException;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.persistent.PersistentTasksCustomMetadata.Assignment;
-import org.opensearch.persistent.PersistentTasksCustomMetadata.PersistentTask;
-import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.PersistentTaskPlugin;
-import org.opensearch.plugins.Plugin;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.OpenSearchClient;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static java.util.Objects.requireNonNull;
-import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
-import static org.opensearch.test.OpenSearchTestCase.assertBusy;
-import static org.opensearch.test.OpenSearchTestCase.randomBoolean;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-/**
- * A plugin that adds a test persistent task.
- */
-public class TestPersistentTasksPlugin extends Plugin implements ActionPlugin, PersistentTaskPlugin {
-
+            out.writeOptionalString(operation);
     @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return Collections.singletonList(new ActionHandler<>(TestTaskAction.INSTANCE, TransportTestTaskAction.class));
-    }
-
-    @Override
-    public List<PersistentTasksExecutor<?>> getPersistentTasksExecutor(
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        Client client,
-        SettingsModule settingsModule,
-        IndexNameExpressionResolver expressionResolver
-    ) {
-        return Collections.singletonList(new TestPersistentTasksExecutor(clusterService));
-    }
-
-    @Override
-    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
-        return Arrays.asList(
-            new NamedWriteableRegistry.Entry(PersistentTaskParams.class, TestPersistentTasksExecutor.NAME, TestParams::new),
-            new NamedWriteableRegistry.Entry(PersistentTaskState.class, TestPersistentTasksExecutor.NAME, State::new)
-        );
-    }
-
-    @Override
+            } else {
+                task.markAsFailed(e);
     public List<NamedXContentRegistry.Entry> getNamedXContent() {
-        return Arrays.asList(
-            new NamedXContentRegistry.Entry(
-                PersistentTaskParams.class,
-                new ParseField(TestPersistentTasksExecutor.NAME),
-                TestParams::fromXContent
-            ),
-            new NamedXContentRegistry.Entry(
-                PersistentTaskState.class,
-                new ParseField(TestPersistentTasksExecutor.NAME),
-                State::fromXContent
-            )
-        );
-    }
-
-    public static class TestParams implements PersistentTaskParams {
-
-        public static final ConstructingObjectParser<TestParams, Void> REQUEST_PARSER = new ConstructingObjectParser<>(
-            TestPersistentTasksExecutor.NAME,
-            args -> new TestParams((String) args[0])
-        );
-
-        static {
-            REQUEST_PARSER.declareString(constructorArg(), new ParseField("param"));
+                        // Cancellation make cause different ways for the task to finish
+import org.opensearch.cluster.ClusterState;
+/**
+                        task.markAsCompleted();
+                    } catch (Exception ex) {
+import org.opensearch.plugins.PersistentTaskPlugin;
         }
-
-        private final Version minVersion;
-        private final Optional<String> feature;
-
-        private String executorNodeAttr = null;
-
-        private String responseNode = null;
-
-        private String testParam = null;
-
-        public TestParams() {
-            this((String) null);
-        }
-
-        public TestParams(String testParam) {
-            this(testParam, Version.CURRENT, Optional.empty());
-        }
-
-        public TestParams(String testParam, Version minVersion, Optional<String> feature) {
-            this.testParam = testParam;
-            this.minVersion = minVersion;
-            this.feature = feature;
-        }
-
-        public TestParams(StreamInput in) throws IOException {
-            executorNodeAttr = in.readOptionalString();
-            responseNode = in.readOptionalString();
-            testParam = in.readOptionalString();
-            minVersion = in.readVersion();
-            feature = Optional.ofNullable(in.readOptionalString());
-        }
-
-        @Override
+            if (nonClusterStateCondition == false) {
+import org.apache.logging.log4j.LogManager;
+import org.opensearch.core.action.ActionListener;
         public String getWriteableName() {
-            return TestPersistentTasksExecutor.NAME;
         }
-
-        public void setExecutorNodeAttr(String executorNodeAttr) {
-            this.executorNodeAttr = executorNodeAttr;
-        }
-
-        public void setTestParam(String testParam) {
-            this.testParam = testParam;
-        }
-
-        public String getExecutorNodeAttr() {
-            return executorNodeAttr;
-        }
-
-        public String getTestParam() {
-            return testParam;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeOptionalString(executorNodeAttr);
-            out.writeOptionalString(responseNode);
-            out.writeOptionalString(testParam);
-            out.writeVersion(minVersion);
-            out.writeOptionalString(feature.orElse(null));
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("param", testParam);
-            builder.endObject();
-            return builder;
-        }
-
-        public static TestParams fromXContent(XContentParser parser) throws IOException {
-            return REQUEST_PARSER.parse(parser, null);
-        }
-
-        @Override
+    public static class TestTasksRequest extends BaseTasksRequest<TestTasksRequest> {
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            TestParams that = (TestParams) o;
-            return Objects.equals(executorNodeAttr, that.executorNodeAttr)
-                && Objects.equals(responseNode, that.responseNode)
-                && Objects.equals(testParam, that.testParam);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(executorNodeAttr, responseNode, testParam);
-        }
-
-        @Override
-        public Version getMinimalSupportedVersion() {
+import java.util.Optional;
+import org.opensearch.action.TaskOperationFailure;
+                    return NO_NODE_FOUND;
+            }
+        @Inject
+        public static final TestTaskAction INSTANCE = new TestTaskAction();
+        private TestTaskAction() {
+        public void setExecutorNodeAttr(String executorNodeAttr) {
             return minVersion;
         }
-
-        @Override
-        public Optional<String> getRequiredFeature() {
-            return feature;
+                                latch.countDown();
         }
-    }
-
-    public static class State implements PersistentTaskState {
-
-        private final String phase;
-
-        public static final ConstructingObjectParser<State, Void> STATE_PARSER = new ConstructingObjectParser<>(
-            TestPersistentTasksExecutor.NAME,
-            args -> new State((String) args[0])
-        );
-
-        static {
-            STATE_PARSER.declareString(constructorArg(), new ParseField("phase"));
         }
-
-        public State(String phase) {
-            this.phase = requireNonNull(phase, "Phase cannot be null");
+        public void setTestParam(String testParam) {
         }
-
-        public State(StreamInput in) throws IOException {
-            phase = in.readString();
-        }
-
-        @Override
-        public String getWriteableName() {
-            return TestPersistentTasksExecutor.NAME;
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field("phase", phase);
-            builder.endObject();
-            return builder;
-        }
-
-        public static PersistentTaskState fromXContent(XContentParser parser) throws IOException {
-            return STATE_PARSER.parse(parser, null);
-        }
-
-        @Override
-        public boolean isFragment() {
-            return false;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(phase);
-        }
-
-        @Override
-        public String toString() {
-            return Strings.toString(MediaTypeRegistry.JSON, this);
-        }
-
-        // Implements equals and hashcode for testing
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || obj.getClass() != State.class) {
-                return false;
-            }
-            State other = (State) obj;
-            return phase.equals(other.phase);
-        }
-
-        @Override
-        public int hashCode() {
-            return phase.hashCode();
-        }
-    }
-
-    public static class TestPersistentTasksExecutor extends PersistentTasksExecutor<TestParams> {
-
-        private static final Logger logger = LogManager.getLogger(TestPersistentTasksExecutor.class);
-
-        public static final String NAME = "cluster:admin/persistent/test";
-        private final ClusterService clusterService;
-
-        private static volatile boolean nonClusterStateCondition = true;
-
-        public TestPersistentTasksExecutor(ClusterService clusterService) {
-            super(NAME, ThreadPool.Names.GENERIC);
-            this.clusterService = clusterService;
-        }
-
-        public static void setNonClusterStateCondition(boolean nonClusterStateCondition) {
-            TestPersistentTasksExecutor.nonClusterStateCondition = nonClusterStateCondition;
-        }
-
-        @Override
-        public Assignment getAssignment(TestParams params, ClusterState clusterState) {
-            if (nonClusterStateCondition == false) {
-                return new Assignment(null, "non cluster state condition prevents assignment");
-            }
-            if (params == null || params.getExecutorNodeAttr() == null) {
-                return super.getAssignment(params, clusterState);
-            } else {
-                DiscoveryNode executorNode = selectLeastLoadedNode(
-                    clusterState,
-                    discoveryNode -> params.getExecutorNodeAttr().equals(discoveryNode.getAttributes().get("test_attr"))
-                );
+import java.util.Map;
                 if (executorNode != null) {
-                    return new Assignment(executorNode.getId(), "test assignment");
-                } else {
-                    return NO_NODE_FOUND;
-                }
-            }
-        }
-
-        @Override
-        protected void nodeOperation(AllocatedPersistentTask task, TestParams params, PersistentTaskState state) {
-            logger.info("started node operation for the task {}", task);
-            try {
-                TestTask testTask = (TestTask) task;
-                AtomicInteger phase = new AtomicInteger();
-                while (true) {
-                    // wait for something to happen
-                    try {
-                        assertBusy(
-                            () -> assertTrue(
-                                testTask.isCancelled()
-                                    || testTask.getOperation() != null
-                                    || clusterService.lifecycleState() != Lifecycle.State.STARTED
-                            ),   // speedup finishing on closed nodes
-                            45,
-                            TimeUnit.SECONDS
-                        ); // This can take a while during large cluster restart
-                    } catch (Exception ex) {
-                        throw new RuntimeException(ex);
-                    }
-
-                    if (clusterService.lifecycleState() != Lifecycle.State.STARTED) {
-                        return;
-                    }
-                    if ("finish".equals(testTask.getOperation())) {
-                        task.markAsCompleted();
-                        return;
-                    } else if ("fail".equals(testTask.getOperation())) {
-                        task.markAsFailed(new RuntimeException("Simulating failure"));
-                        return;
-                    } else if ("update_status".equals(testTask.getOperation())) {
-                        testTask.setOperation(null);
-                        CountDownLatch latch = new CountDownLatch(1);
-                        State newState = new State("phase " + phase.incrementAndGet());
-                        logger.info("updating the task state to {}", newState);
-                        task.updatePersistentTaskState(newState, new ActionListener<PersistentTask<?>>() {
-                            @Override
-                            public void onResponse(PersistentTask<?> persistentTask) {
-                                logger.info("updating was successful");
-                                latch.countDown();
-                            }
-
-                            @Override
-                            public void onFailure(Exception e) {
-                                logger.info("updating failed", e);
-                                latch.countDown();
-                                fail(e.toString());
-                            }
-                        });
-                        assertTrue(latch.await(10, TimeUnit.SECONDS));
-                    } else if (testTask.isCancelled()) {
-                        // Cancellation make cause different ways for the task to finish
-                        if (randomBoolean()) {
-                            if (randomBoolean()) {
-                                task.markAsFailed(new TaskCancelledException(testTask.getReasonCancelled()));
-                            } else {
-                                task.markAsCompleted();
-                            }
-                        } else {
-                            task.markAsFailed(new RuntimeException(testTask.getReasonCancelled()));
-                        }
-                        return;
-                    } else {
-                        fail("We really shouldn't be here");
-                    }
-                }
-            } catch (InterruptedException e) {
-                task.markAsFailed(e);
-            }
-        }
-
-        @Override
-        protected AllocatedPersistentTask createTask(
-            long id,
-            String type,
-            String action,
+ */
+        private final ClusterService clusterService;
+            out.writeOptionalString(testParam);
             TaskId parentTaskId,
-            PersistentTask<TestParams> task,
-            Map<String, String> headers
-        ) {
-            return new TestTask(id, type, action, getDescription(task), parentTaskId, headers);
         }
-    }
-
-    public static class TestTaskAction extends ActionType<TestTasksResponse> {
-
-        public static final TestTaskAction INSTANCE = new TestTaskAction();
-        public static final String NAME = "cluster:admin/persistent/task_test";
-
-        private TestTaskAction() {
-            super(NAME, TestTasksResponse::new);
+                        assertTrue(latch.await(10, TimeUnit.SECONDS));
+        private String testParam = null;
         }
-    }
-
-    public static class TestTask extends AllocatedPersistentTask {
-        private volatile String operation;
-
-        public TestTask(long id, String type, String action, String description, TaskId parentTask, Map<String, String> headers) {
-            super(id, type, action, description, parentTask, headers);
-        }
-
-        public String getOperation() {
-            return operation;
-        }
-
-        public void setOperation(String operation) {
-            this.operation = operation;
-        }
-
+ *
+            return TestPersistentTasksExecutor.NAME;
+ * specific language governing permissions and limitations
+            String type,
         @Override
-        public String toString() {
-            return "TestTask[" + this.getId() + ", " + this.getParentTaskId() + ", " + this.getOperation() + "]";
-        }
+ * ownership. Elasticsearch licenses this file to you under
+                        ); // This can take a while during large cluster restart
     }
-
-    static class TestTaskResponse implements Writeable {
-
-        TestTaskResponse() {
-
-        }
-
-        TestTaskResponse(StreamInput in) throws IOException {
-            in.readBoolean();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeBoolean(true);
-        }
-    }
-
-    public static class TestTasksRequest extends BaseTasksRequest<TestTasksRequest> {
-        private String operation;
-
-        public TestTasksRequest() {}
-
-        public TestTasksRequest(StreamInput in) throws IOException {
-            super(in);
             operation = in.readOptionalString();
         }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeOptionalString(operation);
         }
-
-        public void setOperation(String operation) {
-            this.operation = operation;
         }
-
-        public String getOperation() {
-            return operation;
-        }
-
-    }
-
-    public static class TestTasksRequestBuilder extends TasksRequestBuilder<TestTasksRequest, TestTasksResponse, TestTasksRequestBuilder> {
-
-        protected TestTasksRequestBuilder(OpenSearchClient client) {
-            super(client, TestTaskAction.INSTANCE, new TestTasksRequest());
-        }
-
-        public TestTasksRequestBuilder setOperation(String operation) {
-            request.setOperation(operation);
-            return this;
-        }
-    }
-
-    public static class TestTasksResponse extends BaseTasksResponse {
-
-        private List<TestTaskResponse> tasks;
-
-        public TestTasksResponse(
-            List<TestTaskResponse> tasks,
-            List<TaskOperationFailure> taskFailures,
-            List<? extends FailedNodeException> nodeFailures
-        ) {
-            super(taskFailures, nodeFailures);
-            this.tasks = tasks == null ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(tasks));
-        }
-
-        public TestTasksResponse(StreamInput in) throws IOException {
-            super(in);
-            tasks = in.readList(TestTaskResponse::new);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeList(tasks);
-        }
-
-        public List<TestTaskResponse> getTasks() {
-            return tasks;
-        }
-    }
-
-    public static class TransportTestTaskAction extends TransportTasksAction<
-        TestTask,
-        TestTasksRequest,
-        TestTasksResponse,
-        TestTaskResponse> {
-
-        @Inject
         public TransportTestTaskAction(ClusterService clusterService, TransportService transportService, ActionFilters actionFilters) {
-            super(
-                TestTaskAction.NAME,
-                clusterService,
-                transportService,
-                actionFilters,
-                TestTasksRequest::new,
-                TestTasksResponse::new,
-                TestTaskResponse::new,
-                ThreadPool.Names.MANAGEMENT
-            );
-        }
-
-        @Override
-        protected TestTasksResponse newResponse(
-            TestTasksRequest request,
-            List<TestTaskResponse> tasks,
-            List<TaskOperationFailure> taskOperationFailures,
-            List<FailedNodeException> failedNodeExceptions
-        ) {
+ * You may obtain a copy of the License at
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+            Map<String, String> headers
+        return Collections.singletonList(new ActionHandler<>(TestTaskAction.INSTANCE, TransportTestTaskAction.class));
+                return false;
             return new TestTasksResponse(tasks, taskOperationFailures, failedNodeExceptions);
+            }
         }
-
+            args -> new TestParams((String) args[0])
+            return operation;
+import org.opensearch.core.xcontent.XContentParser;
+    @Override
+                        if (randomBoolean()) {
+            )
+                            public void onResponse(PersistentTask<?> persistentTask) {
+    public static class TestTasksResponse extends BaseTasksResponse {
+                        assertBusy(
+                TestTask testTask = (TestTask) task;
+import java.io.IOException;
+            super.writeTo(out);
+import java.util.Collections;
+                    // wait for something to happen
+                ThreadPool.Names.MANAGEMENT
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                && Objects.equals(testParam, that.testParam);
         @Override
-        protected void taskOperation(TestTasksRequest request, TestTask task, ActionListener<TestTaskResponse> listener) {
-            task.setOperation(request.operation);
+        }
+        @Override
+            TestParams that = (TestParams) o;
+ * GitHub history for details.
+        public static final ConstructingObjectParser<TestParams, Void> REQUEST_PARSER = new ConstructingObjectParser<>(
+                            ),   // speedup finishing on closed nodes
+            long id,
+                    try {
+            );
+        public void setOperation(String operation) {
+                            task.markAsFailed(new RuntimeException(testTask.getReasonCancelled()));
+import org.opensearch.transport.client.Client;
+        public String getOperation() {
+        TestTasksRequest,
+                            }
+import static org.junit.Assert.assertTrue;
+            if (o == null || getClass() != o.getClass()) return false;
+                new ParseField(TestPersistentTasksExecutor.NAME),
+            TestPersistentTasksExecutor.NAME,
+            out.writeBoolean(true);
+ * the Apache License, Version 2.0 (the "License"); you may
+            this.clusterService = clusterService;
+                }
+                TestTaskAction.NAME,
+        public void writeTo(StreamOutput out) throws IOException {
             listener.onResponse(new TestTaskResponse());
         }
-
+                return new Assignment(null, "non cluster state condition prevents assignment");
+import org.apache.logging.log4j.Logger;
+                                logger.info("updating was successful");
+            new NamedXContentRegistry.Entry(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            String action,
+        public TestTasksResponse(StreamInput in) throws IOException {
+                    if ("finish".equals(testTask.getOperation())) {
+                                latch.countDown();
+import org.opensearch.threadpool.ThreadPool;
+        public void writeTo(StreamOutput out) throws IOException {
+            return phase.hashCode();
+        @Override
     }
-
+        }
+                        task.markAsFailed(new RuntimeException("Simulating failure"));
+import org.opensearch.common.inject.Inject;
 }
+        protected void taskOperation(TestTasksRequest request, TestTask task, ActionListener<TestTaskResponse> listener) {
+import org.opensearch.core.ParseField;
+/*
+import java.util.ArrayList;
+                );
+                    } else if (testTask.isCancelled()) {
+    }
+                    if (clusterService.lifecycleState() != Lifecycle.State.STARTED) {
+                TestParams::fromXContent
+        IndexNameExpressionResolver expressionResolver
+        @Override
+        public TestParams(String testParam, Version minVersion, Optional<String> feature) {
+        private String responseNode = null;
+        Client client,
+ */
+        public boolean isFragment() {
+                        return;
+        }
+        }
+                        task.updatePersistentTaskState(newState, new ActionListener<PersistentTask<?>>() {
+import org.opensearch.action.FailedNodeException;
+        @Override
+                TestTaskResponse::new,
+            return this;
+import org.opensearch.action.ActionType;
+    public static class TestTask extends AllocatedPersistentTask {
+        TestTasksResponse,
+        // Implements equals and hashcode for testing
+import org.opensearch.core.common.io.stream.StreamInput;
+            if (params == null || params.getExecutorNodeAttr() == null) {
+ * compatible open source license.
+        public TestTasksRequestBuilder setOperation(String operation) {
+        }
+                while (true) {
+import static org.opensearch.core.xcontent.ConstructingObjectParser.constructorArg;
+                    discoveryNode -> params.getExecutorNodeAttr().equals(discoveryNode.getAttributes().get("test_attr"))
+            return new TestTask(id, type, action, getDescription(task), parentTaskId, headers);
+import org.opensearch.plugins.ActionPlugin;
+                PersistentTaskParams.class,
+                    return new Assignment(executorNode.getId(), "test assignment");
+        protected TestTasksResponse newResponse(
+        private String operation;
+                            TimeUnit.SECONDS
+                actionFilters,
+import static org.opensearch.test.OpenSearchTestCase.assertBusy;
+import org.opensearch.action.support.tasks.BaseTasksRequest;
+        }
+        ) {
+            List<TaskOperationFailure> taskFailures,
+        public List<TestTaskResponse> getTasks() {
+        @Override
+        ThreadPool threadPool,
+            new NamedXContentRegistry.Entry(
+        TestTaskResponse() {
+            builder.endObject();
+        public String getTestParam() {
+        @Override
+            return feature;
+        }
+            out.writeOptionalString(responseNode);
+            REQUEST_PARSER.declareString(constructorArg(), new ParseField("param"));
+import java.util.Objects;
+        return Arrays.asList(
+        TestTaskResponse> {
+            return Strings.toString(MediaTypeRegistry.JSON, this);
+        }
+        public Version getMinimalSupportedVersion() {
+                            }
+import org.opensearch.core.xcontent.XContentBuilder;
+    @Override
+        private final Optional<String> feature;
+        public TestParams() {
+        protected void nodeOperation(AllocatedPersistentTask task, TestParams params, PersistentTaskState state) {
+import org.opensearch.core.tasks.TaskId;
+import org.opensearch.core.common.io.stream.StreamOutput;
+            request.setOperation(operation);
+            in.readBoolean();
+import org.opensearch.persistent.PersistentTasksCustomMetadata.Assignment;
+import org.opensearch.cluster.node.DiscoveryNode;
+                        });
+        @Override
+        static {
+        @Override
+            TestPersistentTasksExecutor.nonClusterStateCondition = nonClusterStateCondition;
+import org.opensearch.persistent.PersistentTasksCustomMetadata.PersistentTask;
+            return builder;
+        }
+                    }
+    public static class TestTaskAction extends ActionType<TestTasksResponse> {
+        private static final Logger logger = LogManager.getLogger(TestPersistentTasksExecutor.class);
+    }
+        private List<TestTaskResponse> tasks;
+import org.opensearch.core.common.Strings;
+                return super.getAssignment(params, clusterState);
+            return testParam;
+        @Override
+                        fail("We really shouldn't be here");
+        public int hashCode() {
+        private final String phase;
+            builder.startObject();
+                    } else if ("update_status".equals(testTask.getOperation())) {
+            State other = (State) obj;
+ * under the License.
+    public static class TestParams implements PersistentTaskParams {
+import java.util.concurrent.TimeUnit;
+                                logger.info("updating failed", e);
+                                fail(e.toString());
+        public String toString() {
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+    }
+            phase = in.readString();
+        );
+            return operation;
+            return TestPersistentTasksExecutor.NAME;
+import org.opensearch.action.support.tasks.TasksRequestBuilder;
+        public String getWriteableName() {
+        }
+ * SPDX-License-Identifier: Apache-2.0
+    }
+            return phase.equals(other.phase);
+import org.opensearch.common.settings.SettingsModule;
+    public List<PersistentTasksExecutor<?>> getPersistentTasksExecutor(
+        public static final ConstructingObjectParser<State, Void> STATE_PARSER = new ConstructingObjectParser<>(
+    }
+                                    || clusterService.lifecycleState() != Lifecycle.State.STARTED
+import org.opensearch.action.support.tasks.TransportTasksAction;
+        @Override
+            if (obj == null || obj.getClass() != State.class) {
+        @Override
+            } catch (InterruptedException e) {
+        private volatile String operation;
+    }
+        }
+        @Override
+                        CountDownLatch latch = new CountDownLatch(1);
+                    } else {
+        }
+                            () -> assertTrue(
+import static org.junit.Assert.fail;
+            tasks = in.readList(TestTaskResponse::new);
+            out.writeVersion(minVersion);
+            builder.endObject();
+            return REQUEST_PARSER.parse(parser, null);
+            out.writeString(phase);
+        TestTaskResponse(StreamInput in) throws IOException {
+        }
+        public static final String NAME = "cluster:admin/persistent/task_test";
+    }
+            out.writeOptionalString(feature.orElse(null));
+            STATE_PARSER.declareString(constructorArg(), new ParseField("phase"));
+            this.phase = requireNonNull(phase, "Phase cannot be null");
+ * Modifications Copyright OpenSearch Contributors. See
+    public static class State implements PersistentTaskState {
+import java.util.concurrent.CountDownLatch;
+            if (this == o) return true;
+        }
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+            return Objects.equals(executorNodeAttr, that.executorNodeAttr)
+ * Unless required by applicable law or agreed to in writing,
+            List<TestTaskResponse> tasks,
+        private static volatile boolean nonClusterStateCondition = true;
+                        }
+            super(in);
+        public Optional<String> getRequiredFeature() {
+        public static PersistentTaskState fromXContent(XContentParser parser) throws IOException {
+            }
+                TestTasksRequest::new,
+        }
+        ) {
+        @Override
+        }
+            builder.startObject();
+            this.minVersion = minVersion;
+            List<FailedNodeException> failedNodeExceptions
+            builder.field("phase", phase);
+        @Override
+        @Override
+            }
+        }
+        return Arrays.asList(
+        }
+            this.testParam = testParam;
+            new NamedWriteableRegistry.Entry(PersistentTaskState.class, TestPersistentTasksExecutor.NAME, State::new)
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.common.lifecycle.Lifecycle;
+        public TestParams(String testParam) {
+        }
+        protected AllocatedPersistentTask createTask(
+    }
+                                task.markAsFailed(new TaskCancelledException(testTask.getReasonCancelled()));
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+                DiscoveryNode executorNode = selectLeastLoadedNode(
+            super(NAME, ThreadPool.Names.GENERIC);
+        }
+ */
+                new ParseField(TestPersistentTasksExecutor.NAME),
+            return executorNodeAttr;
+        return Collections.singletonList(new TestPersistentTasksExecutor(clusterService));
+                        throw new RuntimeException(ex);
+import static org.opensearch.test.OpenSearchTestCase.randomBoolean;
+/*
+            super(client, TestTaskAction.INSTANCE, new TestTasksRequest());
+        }
+        }
+            super(id, type, action, description, parentTask, headers);
+            List<TaskOperationFailure> taskOperationFailures,
+        public State(StreamInput in) throws IOException {
+        protected TestTasksRequestBuilder(OpenSearchClient client) {
+                        logger.info("updating the task state to {}", newState);
+import java.util.Arrays;
+                transportService,
+            return tasks;
+ * The OpenSearch Contributors require contributions made to
+            super(in);
+        TestTask,
+        @Override
+            return "TestTask[" + this.getId() + ", " + this.getParentTaskId() + ", " + this.getOperation() + "]";
+                            @Override
+            super(taskFailures, nodeFailures);
+        SettingsModule settingsModule,
+        }
+ * KIND, either express or implied.  See the License for the
+        private final Version minVersion;
+        @Override
+        public TestParams(StreamInput in) throws IOException {
+            builder.field("param", testParam);
+            return builder;
+/*
+        public static void setNonClusterStateCondition(boolean nonClusterStateCondition) {
+            super(NAME, TestTasksResponse::new);
+    public static class TestTasksRequestBuilder extends TasksRequestBuilder<TestTasksRequest, TestTasksResponse, TestTasksRequestBuilder> {
+import org.opensearch.Version;
+            return STATE_PARSER.parse(parser, null);
+ *
+ * this file be licensed under the Apache-2.0 license or a
+        public String getOperation() {
+            testParam = in.readOptionalString();
+            out.writeOptionalString(executorNodeAttr);
+            this.tasks = tasks == null ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(tasks));
+                TestTasksResponse::new,
+        }
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            responseNode = in.readOptionalString();
+        }
+        public int hashCode() {
+        }
+        public void writeTo(StreamOutput out) throws IOException {
+                    clusterState,
+import java.util.List;
+        ) {
+                PersistentTaskState.class,
+            PersistentTask<TestParams> task,
+                            } else {
+import org.opensearch.core.common.io.stream.Writeable;
+        }
+    static class TestTaskResponse implements Writeable {
+        public void writeTo(StreamOutput out) throws IOException {
+            List<? extends FailedNodeException> nodeFailures
+            new NamedWriteableRegistry.Entry(PersistentTaskParams.class, TestPersistentTasksExecutor.NAME, TestParams::new),
+        }
+        public static TestParams fromXContent(XContentParser parser) throws IOException {
+ */
+import java.util.concurrent.atomic.AtomicInteger;
+        public static final String NAME = "cluster:admin/persistent/test";
+        );
+        }
+ * not use this file except in compliance with the License.
+    }
+        }
+            logger.info("started node operation for the task {}", task);
+                    }
+import org.opensearch.transport.client.OpenSearchClient;
+        }
+            minVersion = in.readVersion();
+                }
+                } else {
+            return Objects.hash(executorNodeAttr, responseNode, testParam);
+        }
+        public TestTask(long id, String type, String action, String description, TaskId parentTask, Map<String, String> headers) {
+        @Override
+        @Override
+                        return;
+import org.opensearch.cluster.service.ClusterService;
+            this.executorNodeAttr = executorNodeAttr;
+import org.opensearch.action.support.ActionFilters;
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+        public void setOperation(String operation) {
+        }
+        public TestTasksRequest() {}
+            List<TestTaskResponse> tasks,
+ * A plugin that adds a test persistent task.
+        }
+                            @Override
+import org.opensearch.plugins.Plugin;
+            executorNodeAttr = in.readOptionalString();
+        ClusterService clusterService,
+                AtomicInteger phase = new AtomicInteger();
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        }
+        );
+        public TestTasksResponse(
+                                testTask.isCancelled()
+ * software distributed under the License is distributed on an
+        @Override
+                clusterService,
+    ) {
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        @Override
+            this.feature = feature;
+            this((String) null);
+public class TestPersistentTasksPlugin extends Plugin implements ActionPlugin, PersistentTaskPlugin {
+            try {
+            this(testParam, Version.CURRENT, Optional.empty());
+            return false;
+                            }
+            super.writeTo(out);
+        static {
+                    } else if ("fail".equals(testTask.getOperation())) {
+            args -> new State((String) args[0])
+                            45,
+            this.testParam = testParam;
+    }
+        public String getExecutorNodeAttr() {
+            out.writeList(tasks);
+            feature = Optional.ofNullable(in.readOptionalString());
+                                    || testTask.getOperation() != null
+import org.opensearch.core.tasks.TaskCancelledException;
+import org.opensearch.action.support.tasks.BaseTasksResponse;
+        }
+    }
+        }
+                            public void onFailure(Exception e) {
+                            if (randomBoolean()) {
+        public TestPersistentTasksExecutor(ClusterService clusterService) {
+                        State newState = new State("phase " + phase.incrementAndGet());
+import org.opensearch.action.ActionRequest;
+            ),
+ * this work for additional information regarding copyright
+        }
+        public boolean equals(Object obj) {
+    public static class TransportTestTaskAction extends TransportTasksAction<
+        public State(String phase) {
+ * license agreements. See the NOTICE file distributed with
+        );
+                        return;
+import org.opensearch.core.action.ActionResponse;
+                State::fromXContent
+import static java.util.Objects.requireNonNull;
+ * Licensed to Elasticsearch under one or more contributor
+        public String toString() {
+                        testTask.setOperation(null);
+package org.opensearch.persistent;
+    @Override
+            super(
+                    }
+        public Assignment getAssignment(TestParams params, ClusterState clusterState) {
+ *
+                && Objects.equals(responseNode, that.responseNode)
+        public void writeTo(StreamOutput out) throws IOException {
+            TestTasksRequest request,
+            this.operation = operation;
+                                task.markAsCompleted();
+            TestPersistentTasksExecutor.NAME,
+import org.opensearch.transport.TransportService;
+        }
+            this.operation = operation;
+    }
+            task.setOperation(request.operation);
+                        } else {
+        public TestTasksRequest(StreamInput in) throws IOException {
+                        return;
+        private String executorNodeAttr = null;
+    public static class TestPersistentTasksExecutor extends PersistentTasksExecutor<TestParams> {
+        }

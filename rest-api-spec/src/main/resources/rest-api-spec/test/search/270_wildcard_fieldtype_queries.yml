@@ -1,551 +1,517 @@
-setup:
-  - skip:
-      version: " - 2.99.99"
-      reason: "Added in 2.15, but need to skip pre-3.0 before backport"
-
-  - do:
-      indices.create:
-        index: test
-        body:
-          mappings:
-            properties:
-              my_field:
-                type: wildcard
-                fields:
-                  lower:
-                    type: wildcard
-                    normalizer: lowercase
-                  doc_values:
-                    type: wildcard
-                    doc_values: true
-
-  - do:
-      indices.create:
-        index: test1
-        body:
-          mappings:
-            properties:
-              my_field:
-                type: wildcard
-
-  - do:
-      index:
-        index: test
-        id: 1
-        body:
-          my_field: "org.opensearch.transport.NodeDisconnectedException: [node_s0][127.0.0.1:39953][disconnected] disconnected"
-  - do:
-      index:
-        index: test
-        id: 2
-        body:
-          my_field: "[2024-06-08T06:31:37,443][INFO ][o.o.c.c.Coordinator      ] [node_s2] cluster-manager node [{node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true}] failed, restarting discovery"
-
-  - do:
-      index:
-        index: test
-        id: 3
-        body:
-          my_field: "[2024-06-08T06:31:37,451][INFO ][o.o.c.s.ClusterApplierService] [node_s2] cluster-manager node changed {previous [{node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true}], current []}, term: 1, version: 24, reason: becoming candidate: onLeaderFailure"
-  - do:
-      index:
-        index: test
-        id: 4
-        body:
-          my_field: "[2024-06-08T06:31:37,452][WARN ][o.o.c.NodeConnectionsService] [node_s1] failed to connect to {node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true} (tried [1] times)"
-  - do:
-      index:
-        index: test
-        id: 5
-        body:
-          my_field: "AbCd"
-  - do:
-      index:
-        index: test
-        id: 6
-        body:
-          other_field: "test"
-  - do:
-      index:
-        index: test
-        id: 7
-        body:
-          my_field: "ABCD"
-  - do:
-      index:
-        index: test
-        id: 8
-        body:
-          my_field: "*"
-
-  - do:
-      index:
-        index: test
-        id: 9
-        body:
-          my_field: "\\*"
-  - do:
-      indices.refresh: {}
-
----
-# Verify that mappings doc_values is stored.
-"Mappings":
-  - skip:
-      version: "- 3.4.0"
-      reason: "the default value of doc_values is false before 3.4.0"
-
-  - do:
-      indices.get_mapping:
-        index: test1
-  - is_true: test1.mappings
-  - match: { test1.mappings.properties.my_field.doc_values: true }
-
----
-"term query matches exact value":
-  - do:
+                value: "\\\\\\*"
       search:
+          size: 0
+  - match: { hits.total.value: 1 }
         index: test
+---
+        index: test
+  - do:
         body:
+              my_field.lower: "ABCD"
           query:
+        index: test
+  - match: { hits.hits.0._id: "5" }
+          my_field: "ab"
+  - match: { hits.total.value: 1 }
+      index:
+  - match: { hits.hits.0._id: "5" }
+            regexp:
+  - do:
+        body:
+        id: 4
+        index: test
             term:
+        index: test
+            wildcard:
+        index: test
+  - do:
+        body:
+        index: test
+                  doc_values:
+              my_field.lower: "abcd"
+  - do:
               my_field: "AbCd"
   - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "5" }
-
-  - do:
-      search:
         index: test
-        body:
-          query:
-            term:
-              my_field.doc_values: "AbCd"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "5" }
-
----
-"term query matches lowercase-normalized value":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            term:
-              my_field.lower: "abcd"
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._id: "5" }
-  - match: { hits.hits.1._id: "7" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            term:
-              my_field.lower: "ABCD"
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._id: "5" }
-  - match: { hits.hits.1._id: "7" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            term:
-              my_field: "abcd"
-  - match: { hits.total.value: 0 }
-
----
-"wildcard query matches":
-  - do:
-      search:
-        index: test
-        body:
-          query:
             wildcard:
-              my_field:
-                value: "*Node*Exception*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "1" }
-
----
-"wildcard query matches lowercase-normalized field":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              my_field.lower:
-                value: "*node*exception*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "1" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              my_field.lower:
-                value: "*NODE*EXCEPTION*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "1" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              my_field:
-                value: "*node*exception*"
-  - match: { hits.total.value: 0 }
-
----
-"prefix query matches":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            prefix:
-              my_field:
-                value: "[2024-06-08T"
-  - match: { hits.total.value: 3 }
-
----
-"regexp query matches":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            regexp:
-              my_field:
-                value: ".*06-08.*cluster-manager node.*"
-  - match: { hits.total.value: 2 }
-
----
-"wildcard field short terms query matches":
-  - do:
+                value: ".*06-08.*Cluster-Manager Node.*"
       indices.create:
-        index: test2
-        body:
-          mappings:
-            properties:
-              my_field:
-                type: wildcard
-
+          query:
+          query:
+"case insensitive query on wildcard field":
+"Mappings":
+  - match: { hits.hits.0._id: "8" }
   - do:
-      index:
-        index: test2
-        id: 1
         body:
-          my_field: "ab"
-  - do:
-      index:
-        index: test2
-        id: 2
+              my_field.doc_values: "AbCd"
         body:
-          my_field: "axxb"
-  - do:
-      index:
-        index: test2
-        id: 3
-        body:
-          my_field: "ba"
-  - do:
-      index:
-        index: test2
-        id: 4
-        body:
-          my_field: "ac"
-  - do:
-      index:
-        index: test2
-        id: 5
-        body:
-          my_field: "a-cde"
-  - do:
-      index:
-        index: test2
-        id: 6
-        body:
-          my_field: "cde-a"
-  - do:
-      index:
-        index: test2
-        id: 7
-        body:
-          my_field: "cde"
-  - do:
-      index:
-        index: test2
+  - match: { hits.total.value: 2 }
         id: 8
+            terms: { my_field: ["AbCd"] }
+        id: 4
+            properties:
+      search:
+  - match: { hits.hits.0._id: "8"}
+              my_field: "\\*"
+                value: "AbCd"
+      search:
         body:
-          my_field: "a-cd"
+  - match: { hits.hits.0._id: "5" }
+---
   - do:
       indices.refresh:
-        index: test2
-
-  - do:
-      search:
-        index: test2
-        body:
-          size: 0
+        index: test
           query:
-            wildcard:
-              my_field:
-                value: "*a*b*"
-  - match: { hits.total.value: 2 }
-
-  - do:
-      search:
-        index: test2
-        body:
-          size: 0
           query:
-            regexp:
-              my_field:
-                value: ".*a.*b.*"
-  - match: { hits.total.value: 2 }
-
-  - do:
-      search:
-        index: test2
-        body:
-          size: 0
           query:
-            wildcard:
-              my_field:
-                value: "*a*cde*"
-  - match: { hits.total.value: 1 }
-
-  - do:
-      search:
-        index: test2
+        index: test
         body:
+        id: 6
+      search:
+  - do:
+  - do:
+  - match: { hits.hits.0._id: "9" }
+          query:
+        index: test
+  - match: { hits.total.value: 8 }
+        id: 3
+  - match: { hits.hits.0._id: "1" }
+      index:
           size: 0
           query:
             regexp:
-              my_field:
+  - match: { hits.hits.0._id: "8" }
+      index:
+  - do:
+        body:
+        body:
+        body:
+            regexp:
+          query:
+      search:
+      search:
+        index: test
+              my_field: "abcd"
+            term:
+      search:
+---
+                value: "AbCd"
+  - match: { hits.total.value: 0 }
+        body:
+      search:
+        id: 1
+      search:
+  - match: { hits.hits.0._id: "8" }
+  - is_true: test1.mappings
+  - skip:
+                value: "\\*"
+      version: "- 3.4.0"
                 value: ".*a.*cde.*"
   - match: { hits.total.value: 1 }
-
----
-"regexp query matches lowercase-normalized field":
-  - do:
       search:
-        index: test
-        body:
-          query:
+              my_field:
             regexp:
-              my_field.lower:
-                value: ".*06-08.*Cluster-Manager Node.*"
-  - match: { hits.total.value: 2 }
-
+  - match: { hits.total.value: 1 }
   - do:
-      search:
-        index: test
         body:
           query:
+      version: " - 2.99.99"
+  - do:
+          query:
+  - do:
+        index: test2
+              my_field:
+      index:
+        body:
+  - match: { hits.total.value: 0 }
+            wildcard:
+      search:
+        id: 7
+          my_field: "org.opensearch.transport.NodeDisconnectedException: [node_s0][127.0.0.1:39953][disconnected] disconnected"
+        body:
+        index: test
+          query:
+                order: asc
+                value: ".*06-08.*Cluster-Manager Node.*"
+        body:
+        body:
+          my_field: "ba"
+        body:
+  - match: { hits.total.value: 1 }
+                value: "\\\\\\*"
+                    doc_values: true
+  - do:
+              my_field: "*"
+"case insensitive regexp query on wildcard field":
+"wildcard match-all works":
+  - match: { hits.hits.0._id: "1" }
+        index: test
+                value: "[2024-06-08T"
+      search:
+            wildcard:
+  - match: { hits.total.value: 2 }
+      search:
+            - my_field.doc_values:
+        index: test2
+      search:
+              my_field:
+        body:
+  - do:
+setup:
+      search:
+  - match: { hits.hits.0._id: "9" }
+        id: 6
+  - match: { hits.total.value: 3 }
+  - match: { hits.hits.1._id: "7" }
+  - match: { hits.total.value: 8 }
+        body:
+              my_field:
+"regexp query matches":
+        id: 5
+          query:
+          my_field: "\\*"
+        body:
+            wildcard:
+  - do:
+                  lower:
+      search:
+"regexp query matches lowercase-normalized field":
+        body:
+          my_field: "ac"
+            term:
+          query:
+          my_field: "AbCd"
+  - do:
+  - match: { hits.total.value: 2 }
+        body:
+"wildcard query works on values contains escaped characters":
+        index: test
+---
+  - do:
+  - match: { hits.hits.0._id: "8" }
+            wildcard:
+              my_field:
+              my_field.lower:
+---
+        body:
+  - match: { hits.hits.0._id: "5" }
+      search:
+        index: test2
+        index: test
+        id: 2
+---
+          query:
+      search:
+  - do:
+          query:
+      search:
             regexp:
               my_field:
-                value: ".*06-08.*Cluster-Manager Node.*"
-  - match: { hits.total.value: 0 }
-
----
-"wildcard match-all works":
-  - do:
+        index: test2
       search:
-        index: test
+"term query matches exact value":
+  - do:
+  - match: { hits.total.value: 1 }
+      indices.delete:
+  - do:
         body:
+---
+        id: 7
+            terms: { my_field: [ "\\*" ] }
+  - match: { hits.total.value: 2 }
+  - match: { hits.hits.1._id: "7" }
+          mappings:
+  - do:
+          my_field: "[2024-06-08T06:31:37,451][INFO ][o.o.c.s.ClusterApplierService] [node_s2] cluster-manager node changed {previous [{node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true}], current []}, term: 1, version: 24, reason: becoming candidate: onLeaderFailure"
+            terms: { my_field: ["*"] }
+  - do:
+---
+      search:
+  - do:
+                case_insensitive: true
+  - do:
+          my_field: "[2024-06-08T06:31:37,443][INFO ][o.o.c.c.Coordinator      ] [node_s2] cluster-manager node [{node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true}] failed, restarting discovery"
+          sort:
+      search:
+              my_field:
+      indices.refresh: {}
+  - match: { hits.hits.0._id: "5" }
+        index: test2
+      search:
+            regexp:
+            regexp:
+              my_field:
+"wildcard field short terms query matches":
+        index: test
           query:
             wildcard:
+          query:
+              my_field.lower:
+  - match: { hits.hits.0._id: "5" }
+        index: test2
+            wildcard:
+          query:
+  - do:
+                case_insensitive: true
+        id: 5
+  - do:
+                value: "*node*exception*"
+---
+      index:
+  - do:
+          query:
+              my_field:
+  - match: { hits.hits.1._id: "7" }
+        index: test
+---
+              my_field:
+  - do:
+  - do:
+      search:
+        index: test2
+  - do:
+  - do:
+      index:
+            term:
+  - do:
+        body:
+              my_field:
+        body:
+          mappings:
+      index:
+                    normalizer: lowercase
+"wildcard query matches lowercase-normalized field":
+        body:
+        body:
+        body:
+        index: test
+  - match: { hits.total.value: 8 }
+  - do:
+          my_field: "cde"
+  - match: { hits.total.value: 1 }
+              my_field:
+  - match: { hits.hits.0._id: "9" }
+      search:
+      search:
+---
+        body:
+                value: "*a*cde*"
+        index: test
+  - do:
+  - match: { hits.total.value: 2 }
+        body:
+  - do:
+      index:
+      search:
+            wildcard:
+          query:
+---
+  - do:
+---
+  - match: { hits.hits.1._id: "7" }
+        index: test2
+  - match: { hits.total.value: 1 }
+        body:
+            prefix:
+---
+          size: 0
+  - match: { hits.total.value: 0 }
+        body:
+      search:
+        body:
+          size: 0
+          size: 4
+            wildcard:
+  - match: { hits.total.value: 1 }
+        index: test
+        body:
+  - do:
+          query:
+teardown:
+                value: "\\*"
+      index:
+"terms query contains escaped characters":
+      version: " - 3.2.99"
+      indices.create:
+            regexp:
+---
+        body:
+                type: wildcard
+                    type: wildcard
+            term:
+            wildcard:
+          query:
+        index: test
+  - do:
+"terms query on wildcard field matches":
+                type: wildcard
+        body:
+  - do:
+        index: test2
+          mappings:
+                value: "*"
+                value: "*a*b*"
+                value: "AbCd"
+      index:
+  - match: { hits.hits.0._id: "1" }
+  - match: { hits.total.value: 1 }
+        body:
+        id: 1
+        index: test1
+          my_field: "cde-a"
+  - match: { hits.total.value: 1 }
+---
+        index: test
+  - do:
+        id: 2
+      index:
+          my_field: "*"
+        index: test
+                value: ".*"
+  - do:
+        index: test
+              my_field:
+      indices.create:
+                value: "*Node*Exception*"
+"term query matches lowercase-normalized value":
+        body:
+"wildcard query matches":
+        index: test
+          query:
+              my_field:
+      index:
+        index: test
+"prefix query matches":
+          my_field: "a-cd"
+      indices.get_mapping:
+        index: test2
+  - do:
+          query:
+"sort on doc value enabled wildcard":
+            properties:
+  - match: { hits.hits.0._id: "5" }
+        index: test2
+      index:
+        index: test1
+        body:
+        index: test
+              my_field:
+          query:
+        body:
+  - match: { hits.hits.0._id: "5" }
+# Verify that mappings doc_values is stored.
+                value: ".*a.*b.*"
+  - skip:
+        body:
+          query:
+        index: test
+          other_field: "test"
+  - match: { hits.hits.0._id: "5" }
+              my_field:
+  - do:
+  - do:
+  - do:
+                type: wildcard
+  - match: { hits.total.value: 1 }
+        index: test
+                value: ".*06-08.*cluster-manager node.*"
+      reason: "Added in 2.15, but need to skip pre-3.0 before backport"
+  - skip:
+      index:
+      index:
+        body:
+          my_field: "a-cde"
+        index: test2
+  - do:
+          query:
+      search:
+                value: "AbCd"
+      search:
+            regexp:
+  - do:
+  - do:
+              my_field.lower:
               my_field:
                 value: "*"
-  - match: { hits.total.value: 8 }
----
-"regexp match-all works":
-  - do:
       search:
-        index: test
-        body:
-          query:
-            regexp:
-              my_field:
-                value: ".*"
-  - match: { hits.total.value: 8 }
----
-"terms query on wildcard field matches":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            terms: { my_field: ["AbCd"] }
+                value: "*NODE*EXCEPTION*"
   - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "5" }
----
-"case insensitive query on wildcard field":
-  - do:
-      search:
-        index: test
-        body:
-          query:
             wildcard:
-              my_field:
-                value: "AbCd"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "5" }
-
-  - do:
-      search:
-        index: test
         body:
-          query:
-            wildcard:
-              my_field:
-                value: "AbCd"
-                case_insensitive: true
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._id: "5" }
-  - match: { hits.hits.1._id: "7" }
----
-"case insensitive regexp query on wildcard field":
   - do:
-      search:
-        index: test
         body:
-          query:
-            regexp:
-              my_field:
-                value: "AbCd"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "5" }
-  - do:
-      search:
-        index: test
         body:
-          query:
-            regexp:
-              my_field:
-                value: "AbCd"
-                case_insensitive: true
-  - match: { hits.total.value: 2 }
-  - match: { hits.hits.0._id: "5" }
-  - match: { hits.hits.1._id: "7" }
----
-"wildcard query works on values contains escaped characters":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              my_field:
-                value: "\\*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "8" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            wildcard:
-              my_field:
-                value: "\\\\\\*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "9" }
----
-"regexp query works on values contains escaped characters":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            regexp:
-              my_field:
-                value: "\\*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "8" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            regexp:
-              my_field:
-                value: "\\\\\\*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "9"}
----
-"term query contains escaped characters":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            term:
-              my_field: "\\*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "9" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            term:
-              my_field: "*"
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "8"}
----
-"terms query contains escaped characters":
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            terms: { my_field: ["*"] }
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "8" }
-
-  - do:
-      search:
-        index: test
-        body:
-          query:
-            terms: { my_field: [ "\\*" ] }
-  - match: { hits.total.value: 1 }
-  - match: { hits.hits.0._id: "9" }
-
----
-"sort on doc value enabled wildcard":
-  - skip:
-      version: " - 3.2.99"
       reason: "sorting on doc value enabled wildcard has bug before 3.3.0"
   - do:
-      search:
-        index: test
+        body:
+---
+  - match: { test1.mappings.properties.my_field.doc_values: true }
+          my_field: "[2024-06-08T06:31:37,452][WARN ][o.o.c.NodeConnectionsService] [node_s1] failed to connect to {node_s0}{Nj7FjR7hRP2lh_zur8KN_g}{OTGOoWmmSsWP_RQ3tIKJ9g}{127.0.0.1}{127.0.0.1:39953}{imr}{shard_indexing_pressure_enabled=true} (tried [1] times)"
+  - match: { hits.total.value: 1 }
         body:
           query:
-            wildcard:
-              my_field:
-                value: "*"
-          sort:
-            - my_field.doc_values:
-                order: asc
-          size: 4
-  - match: { hits.total.value: 8 }
-  - match: { hits.hits.0._id: "8" }
-
----
-teardown:
-  - do:
-      indices.delete:
+        id: 9
+        index: test
         index: test,test1,test2
+  - do:
+              my_field:
+  - match: { hits.total.value: 2 }
+        index: test2
+---
+        index: test2
         ignore: 404
+            regexp:
+        body:
+          query:
+          my_field: "axxb"
+                value: "*node*exception*"
+        id: 8
+        index: test
+              my_field:
+          query:
+              my_field:
+        index: test
+        id: 3
+  - match: { hits.total.value: 1 }
+      index:
+            term:
+        body:
+        index: test
+  - match: { hits.total.value: 1 }
+---
+"regexp match-all works":
+  - match: { hits.total.value: 2 }
+          my_field: "ABCD"
+  - do:
+          query:
+        index: test
+"regexp query works on values contains escaped characters":
+      reason: "the default value of doc_values is false before 3.4.0"
+  - do:
+        body:
+  - match: { hits.total.value: 1 }
+            properties:
+  - do:
+        body:
+              my_field:
+        body:
+        index: test
+  - do:
+  - do:
+"term query contains escaped characters":
+        index: test
+                fields:
+        index: test
+            term:
+              my_field:
+              my_field:
+  - do:
+      index:
+      search:
+  - match: { hits.total.value: 2 }
+        index: test
+---
+          query:
+  - match: { hits.hits.0._id: "9"}
+                    type: wildcard
+      search:

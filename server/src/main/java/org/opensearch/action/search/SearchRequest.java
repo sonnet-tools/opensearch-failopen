@@ -1,888 +1,796 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+            if (source != null) {
+            cancelAfterTimeInterval,
+    /**
+                }
+    /**
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.search;
-
-import org.opensearch.OpenSearchException;
-import org.opensearch.Version;
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionRequestValidationException;
-import org.opensearch.action.IndicesRequest;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.ExperimentalApi;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.search.Scroll;
-import org.opensearch.search.builder.PointInTimeBuilder;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.sort.FieldSortBuilder;
-import org.opensearch.search.sort.ShardDocSortBuilder;
-import org.opensearch.search.sort.SortBuilder;
-import org.opensearch.transport.client.Client;
-import org.opensearch.transport.client.Requests;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.action.ValidateActions.addValidationError;
-
-/**
- * A request to execute search against one or more indices (or all). Best created using
- * {@link Requests#searchRequest(String...)}.
- * <p>
- * Note, the search {@link #source(org.opensearch.search.builder.SearchSourceBuilder)}
- * is required. The search source is the different search options, including aggregations and such.
- * </p>
- *
- * @see Requests#searchRequest(String...)
- * @see Client#search(SearchRequest)
- * @see SearchResponse
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class SearchRequest extends ActionRequest implements IndicesRequest.Replaceable {
-
-    public static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
-
-    public static final int DEFAULT_PRE_FILTER_SHARD_SIZE = 128;
-    public static final int DEFAULT_BATCHED_REDUCE_SIZE = 512;
-
+    /**
     private static final long DEFAULT_ABSOLUTE_START_MILLIS = -1;
-
-    private final String localClusterAlias;
-    private final long absoluteStartMillis;
-    private final boolean finalReduce;
-
-    private SearchType searchType = SearchType.DEFAULT;
-
-    private String[] indices = Strings.EMPTY_ARRAY;
-
-    @Nullable
-    private String routing;
-    @Nullable
-    private String preference;
-
-    private SearchSourceBuilder source;
-
-    private Boolean requestCache;
-
-    private Boolean allowPartialSearchResults;
-
-    private Scroll scroll;
-
-    private int batchedReduceSize = DEFAULT_BATCHED_REDUCE_SIZE;
-
-    private int maxConcurrentShardRequests = 0;
-
-    private Integer preFilterShardSize;
-
-    private boolean ccsMinimizeRoundtrips = true;
-
-    public static final IndicesOptions DEFAULT_INDICES_OPTIONS = IndicesOptions.strictExpandOpenAndForbidClosedIgnoreThrottled();
-
-    private IndicesOptions indicesOptions = DEFAULT_INDICES_OPTIONS;
-
-    private TimeValue cancelAfterTimeInterval;
-
-    private String pipeline;
-
-    private Boolean phaseTook = null;
-
-    public SearchRequest() {
-        this.localClusterAlias = null;
-        this.absoluteStartMillis = DEFAULT_ABSOLUTE_START_MILLIS;
-        this.finalReduce = true;
-    }
-
     /**
-     * Constructs a new search request from the provided search request
-     */
-    public SearchRequest(SearchRequest searchRequest) {
-        this(
-            searchRequest,
-            searchRequest.indices,
-            searchRequest.localClusterAlias,
-            searchRequest.absoluteStartMillis,
-            searchRequest.finalReduce
-        );
-    }
-
-    /**
-     * Constructs a new search request against the indices. No indices provided here means that search
-     * will run against all indices.
-     */
-    public SearchRequest(String... indices) {
-        this(indices, new SearchSourceBuilder());
-    }
-
-    /**
-     * Constructs a new search request against the provided indices with the given search source.
-     */
-    public SearchRequest(String[] indices, SearchSourceBuilder source) {
-        this();
-        if (source == null) {
-            throw new IllegalArgumentException("source must not be null");
-        }
-        indices(indices);
-        this.source = source;
-    }
-
-    /**
-     * Deep clone a SearchRequest
-     *
-     * @return a copy of the current SearchRequest
-     */
-    public SearchRequest deepCopy() throws IOException {
-        BytesStreamOutput out = new BytesStreamOutput();
-        this.writeTo(out);
-        StreamInput in = out.bytes().streamInput();
-        return new SearchRequest(in);
-    }
-
-    /**
-     * Creates a new sub-search request starting from the original search request that is provided.
-     * For internal use only, allows to fork a search request into multiple search requests that will be executed independently.
+/*
      * Such requests will not be finally reduced, so that their results can be merged together in one response at completion.
-     * Used when a {@link SearchRequest} is created and executed as part of a cross-cluster search request
-     * performing reduction on each cluster in order to minimize network round-trips between the coordinating node and the remote clusters.
-     *
-     * @param originalSearchRequest the original search request
-     * @param indices the indices to search against
-     * @param clusterAlias the alias to prefix index names with in the returned search results
-     * @param absoluteStartMillis the absolute start time to be used on the remote clusters to ensure that the same value is used
-     * @param finalReduce whether the reduction should be final or not
-     */
-    static SearchRequest subSearchRequest(
-        SearchRequest originalSearchRequest,
-        String[] indices,
-        String clusterAlias,
-        long absoluteStartMillis,
-        boolean finalReduce
-    ) {
-        Objects.requireNonNull(originalSearchRequest, "search request must not be null");
-        validateIndices(indices);
-        Objects.requireNonNull(clusterAlias, "cluster alias must not be null");
-        if (absoluteStartMillis < 0) {
-            throw new IllegalArgumentException("absoluteStartMillis must not be negative but was [" + absoluteStartMillis + "]");
-        }
-        return new SearchRequest(originalSearchRequest, indices, clusterAlias, absoluteStartMillis, finalReduce);
     }
-
-    private SearchRequest(
-        SearchRequest searchRequest,
-        String[] indices,
-        String localClusterAlias,
-        long absoluteStartMillis,
-        boolean finalReduce
-    ) {
-        this.allowPartialSearchResults = searchRequest.allowPartialSearchResults;
-        this.batchedReduceSize = searchRequest.batchedReduceSize;
-        this.ccsMinimizeRoundtrips = searchRequest.ccsMinimizeRoundtrips;
-        this.indices = indices;
-        this.indicesOptions = searchRequest.indicesOptions;
-        this.maxConcurrentShardRequests = searchRequest.maxConcurrentShardRequests;
-        this.preference = searchRequest.preference;
-        this.preFilterShardSize = searchRequest.preFilterShardSize;
-        this.requestCache = searchRequest.requestCache;
-        this.routing = searchRequest.routing;
-        this.scroll = searchRequest.scroll;
-        this.searchType = searchRequest.searchType;
-        this.source = searchRequest.source;
-        this.localClusterAlias = localClusterAlias;
-        this.absoluteStartMillis = absoluteStartMillis;
-        this.finalReduce = finalReduce;
-        this.cancelAfterTimeInterval = searchRequest.cancelAfterTimeInterval;
-        this.phaseTook = searchRequest.phaseTook;
-    }
-
-    /**
-     * Constructs a new search request from reading the specified stream.
-     *
-     * @param in The stream the request is read from
-     * @throws IOException if there is an issue reading the stream
-     */
-    public SearchRequest(StreamInput in) throws IOException {
-        super(in);
-        searchType = SearchType.fromId(in.readByte());
-        indices = in.readStringArray();
-        routing = in.readOptionalString();
-        preference = in.readOptionalString();
-        scroll = in.readOptionalWriteable(Scroll::new);
-        source = in.readOptionalWriteable(SearchSourceBuilder::new);
-        if (in.getVersion().before(Version.V_2_0_0)) {
-            // types no longer relevant so ignore
-            String[] types = in.readStringArray();
-            if (types.length > 0) {
-                throw new IllegalStateException(
-                    "types are no longer supported in search requests but found [" + Arrays.toString(types) + "]"
-                );
-            }
         }
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
-        requestCache = in.readOptionalBoolean();
-        batchedReduceSize = in.readVInt();
-        maxConcurrentShardRequests = in.readVInt();
-        preFilterShardSize = in.readOptionalVInt();
+ * under the License.
+    @Override
+     * If set, will enable scrolling of the search request.
+        return searchType(SearchType.fromString(searchType));
+            && Objects.equals(source, that.source)
+    private Boolean phaseTook = null;
+ * software distributed under the License is distributed on an
+                    );
+                validationException = addValidationError(
+            && Objects.equals(routing, that.routing)
         allowPartialSearchResults = in.readOptionalBoolean();
-        localClusterAlias = in.readOptionalString();
-        if (localClusterAlias != null) {
-            absoluteStartMillis = in.readVLong();
-            finalReduce = in.readBoolean();
-        } else {
-            absoluteStartMillis = DEFAULT_ABSOLUTE_START_MILLIS;
+    }
+     * @param absoluteStartMillis the absolute start time to be used on the remote clusters to ensure that the same value is used
+     * Returns whether the reduction phase that will be performed needs to be final or not.
+     * A value of {@code 0} means the user has not explicitly set this parameter.
+ * ownership. Elasticsearch licenses this file to you under
+    @Override
+            : source.trackTotalHitsUpTo() == null ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO
+    /**
+     */
+    @Override
+    @ExperimentalApi
+    }
+                }
+     */
+    }
+    public static int resolveTrackTotalHitsUpTo(Scroll scroll, SearchSourceBuilder source) {
+     * will default to the cluster level setting).
+    public SearchRequest(SearchRequest searchRequest) {
+            }
+     * cluster can be throttled with this number to reduce the cluster load. The default is {@code 5}
+    }
+     * Deep clone a SearchRequest
+            phaseTook = in.readOptionalBoolean();
+            sb.append("source[]");
+        return maxConcurrentShardRequests == 0 ? 5 : maxConcurrentShardRequests;
+     * @return true if the request only has suggest
+        return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null, getClass().getSimpleName() + ".Scroll.keepAlive")));
+            out.writeOptionalBoolean(phaseTook);
+    @Nullable
+            + "}";
+    public int getBatchedReduceSize() {
+                    validationException = addValidationError("using [rescore] is not allowed in a scroll context", validationException);
+            + preFilterShardSize
+        }
+            && Objects.equals(pipeline, that.pipeline)
+        validateIndices(indices);
+    public String[] indices() {
+    private SearchType searchType = SearchType.DEFAULT;
+            throw new IllegalArgumentException("batchedReduceSize must be >= 2");
+    public void setCcsMinimizeRoundtrips(boolean ccsMinimizeRoundtrips) {
+     */
+    }
+    }
+            + '\''
+     * the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for
+     */
+            }
+                    "duplicate _shard_doc sort detected. Specify it at most once.",
             finalReduce = true;
         }
-        ccsMinimizeRoundtrips = in.readBoolean();
-        cancelAfterTimeInterval = in.readOptionalTimeValue();
-        if (in.getVersion().onOrAfter(Version.V_2_7_0)) {
-            pipeline = in.readOptionalString();
-        }
-        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
-            phaseTook = in.readOptionalBoolean();
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        out.writeByte(searchType.id());
-        out.writeStringArray(indices);
-        out.writeOptionalString(routing);
-        out.writeOptionalString(preference);
-        out.writeOptionalWriteable(scroll);
-        out.writeOptionalWriteable(source);
-        if (out.getVersion().before(Version.V_2_0_0)) {
-            // types not supported so send an empty array to previous versions
-            out.writeStringArray(Strings.EMPTY_ARRAY);
-        }
-        indicesOptions.writeIndicesOptions(out);
-        out.writeOptionalBoolean(requestCache);
-        out.writeVInt(batchedReduceSize);
-        out.writeVInt(maxConcurrentShardRequests);
-        out.writeOptionalVInt(preFilterShardSize);
-        out.writeOptionalBoolean(allowPartialSearchResults);
-        out.writeOptionalString(localClusterAlias);
-        if (localClusterAlias != null) {
-            out.writeVLong(absoluteStartMillis);
-            out.writeBoolean(finalReduce);
-        }
-        out.writeBoolean(ccsMinimizeRoundtrips);
-        out.writeOptionalTimeValue(cancelAfterTimeInterval);
-        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
-            out.writeOptionalString(pipeline);
-        }
-        if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
-            out.writeOptionalBoolean(phaseTook);
-        }
-    }
-
-    @Override
-    public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
-        boolean scroll = scroll() != null;
-        if (scroll) {
-            if (source != null) {
-                if (source.trackTotalHitsUpTo() != null && source.trackTotalHitsUpTo() != SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
-                    validationException = addValidationError(
-                        "disabling [track_total_hits] is not allowed in a scroll context",
-                        validationException
-                    );
-                }
-                if (source.from() > 0) {
-                    validationException = addValidationError("using [from] is not allowed in a scroll context", validationException);
-                }
-                if (source.size() == 0) {
-                    validationException = addValidationError("[size] cannot be [0] in a scroll context", validationException);
-                }
-                if (source.rescores() != null && source.rescores().isEmpty() == false) {
-                    validationException = addValidationError("using [rescore] is not allowed in a scroll context", validationException);
-                }
             }
-            if (requestCache != null && requestCache) {
-                validationException = addValidationError("[request_cache] cannot be used in a scroll context", validationException);
-            }
-        }
-        if (source != null) {
-            if (source.aggregations() != null) {
-                validationException = source.aggregations().validate(validationException);
-            }
-        }
-        if (pointInTimeBuilder() != null) {
-            if (scroll) {
-                validationException = addValidationError("using [point in time] is not allowed in a scroll context", validationException);
-            }
-        }
-
-        // _shard_doc validation
-        if (source != null && source.sorts() != null && !source.sorts().isEmpty()) {
-            int shardDocCount = 0;
-            for (SortBuilder<?> sb : source.sorts()) {
-                if (isShardDocSort(sb)) shardDocCount++;
-            }
-            final boolean hasPit = pointInTimeBuilder() != null;
-
-            if (shardDocCount > 0 && scroll) {
-                validationException = addValidationError(
-                    "_shard_doc cannot be used with scroll. Use PIT + search_after instead.",
-                    validationException
-                );
-            }
-            if (shardDocCount > 0 && !hasPit) {
-                validationException = addValidationError(
-                    "_shard_doc is only supported with point-in-time (PIT). Add a PIT or remove _shard_doc.",
-                    validationException
-                );
-            }
-            if (shardDocCount > 1) {
-                validationException = addValidationError(
-                    "duplicate _shard_doc sort detected. Specify it at most once.",
-                    validationException
-                );
-            }
-        }
-        return validationException;
     }
-
-    private static boolean isShardDocSort(SortBuilder<?> sb) {
-        if (sb instanceof ShardDocSortBuilder) return true;
-        if (sb instanceof FieldSortBuilder) {
-            return ShardDocSortBuilder.NAME.equals(((FieldSortBuilder) sb).getFieldName());
-        }
-        return false;
-    }
-
-    /**
-     * Returns the alias of the cluster that this search request is being executed on. A non-null value indicates that this search request
-     * is being executed as part of a locally reduced cross-cluster search request. The cluster alias is used to prefix index names
-     * returned as part of search hits with the alias of the cluster they came from.
-     */
-    @Nullable
-    String getLocalClusterAlias() {
-        return localClusterAlias;
-    }
-
-    /**
-     * Returns whether the reduction phase that will be performed needs to be final or not.
-     */
-    boolean isFinalReduce() {
-        return finalReduce;
-    }
-
-    /**
-     * Returns the current time in milliseconds from the time epoch, to be used for the execution of this search request. Used to
-     * ensure that the same value, determined by the coordinating node, is used on all nodes involved in the execution of the search
-     * request. When created through {@link #subSearchRequest(SearchRequest, String[], String, long, boolean)}, this method returns
-     * the provided current time, otherwise it will return {@link System#currentTimeMillis()}.
-     */
-    public long getOrCreateAbsoluteStartMillis() {
-        return absoluteStartMillis == DEFAULT_ABSOLUTE_START_MILLIS ? System.currentTimeMillis() : absoluteStartMillis;
-    }
-
-    /**
-     * Returns the provided <code>absoluteStartMillis</code> when created through {@link #subSearchRequest} and
-     * -1 otherwise.
-     */
-    long getAbsoluteStartMillis() {
-        return absoluteStartMillis;
-    }
-
-    /**
-     * Sets the indices the search will be executed on.
-     */
-    @Override
-    public SearchRequest indices(String... indices) {
-        validateIndices(indices);
-        this.indices = indices;
-        return this;
-    }
-
-    private static void validateIndices(String... indices) {
-        Objects.requireNonNull(indices, "indices must not be null");
-        for (String index : indices) {
-            Objects.requireNonNull(index, "index must not be null");
-        }
-    }
-
-    @Override
-    public IndicesOptions indicesOptions() {
-        return indicesOptions;
-    }
-
-    public SearchRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = Objects.requireNonNull(indicesOptions, "indicesOptions must not be null");
-        return this;
-    }
-
-    @Override
-    public boolean includeDataStreams() {
-        return true;
-    }
-
-    /**
-     * Returns whether network round-trips should be minimized when executing cross-cluster search requests.
-     * Defaults to <code>true</code>.
-     */
-    public boolean isCcsMinimizeRoundtrips() {
-        return ccsMinimizeRoundtrips;
-    }
-
-    /**
-     * Sets whether network round-trips should be minimized when executing cross-cluster search requests. Defaults to <code>true</code>.
-     */
-    public void setCcsMinimizeRoundtrips(boolean ccsMinimizeRoundtrips) {
-        this.ccsMinimizeRoundtrips = ccsMinimizeRoundtrips;
-    }
-
-    /**
-     * A comma separated list of routing values to control the shards the search will be executed on.
-     */
-    public String routing() {
-        return this.routing;
-    }
-
-    /**
-     * A comma separated list of routing values to control the shards the search will be executed on.
-     */
-    public SearchRequest routing(String routing) {
-        this.routing = routing;
-        return this;
-    }
-
-    /**
-     * The routing values to control the shards that the search will be executed on.
-     */
-    public SearchRequest routing(String... routings) {
-        this.routing = Strings.arrayToCommaDelimitedString(routings);
-        return this;
-    }
-
-    /**
-     * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
-     * {@code _local} to prefer local shards, {@code _primary} to execute only on primary shards,
-     * or a custom value, which guarantees that the same order
-     * will be used across different requests.
-     */
-    public SearchRequest preference(String preference) {
-        this.preference = preference;
-        return this;
-    }
-
-    public String preference() {
-        return this.preference;
-    }
-
-    /**
-     * The search type to execute, defaults to {@link SearchType#DEFAULT}.
-     */
-    public SearchRequest searchType(SearchType searchType) {
-        this.searchType = Objects.requireNonNull(searchType, "searchType must not be null");
-        return this;
-    }
-
-    /**
-     * The a string representation search type to execute, defaults to {@link SearchType#DEFAULT}. Can be
-     * one of "dfs_query_then_fetch"/"dfsQueryThenFetch", "dfs_query_and_fetch"/"dfsQueryAndFetch",
-     * "query_then_fetch"/"queryThenFetch", and "query_and_fetch"/"queryAndFetch".
-     */
-    public SearchRequest searchType(String searchType) {
-        return searchType(SearchType.fromString(searchType));
-    }
-
-    /**
-     * The source of the search request.
-     */
-    public SearchRequest source(SearchSourceBuilder sourceBuilder) {
-        this.source = Objects.requireNonNull(sourceBuilder, "source must not be null");
-        return this;
-    }
-
-    /**
-     * The search source to execute.
-     */
-    public SearchSourceBuilder source() {
-        return source;
-    }
-
-    public PointInTimeBuilder pointInTimeBuilder() {
-        if (source != null) {
-            return source.pointInTimeBuilder();
-        }
-        return null;
-    }
-
-    /**
-     * The type of search to execute.
-     */
-    public SearchType searchType() {
-        return searchType;
-    }
-
-    /**
-     * The indices
-     */
-    @Override
-    public String[] indices() {
-        return indices;
-    }
-
-    /**
-     * If set, will enable scrolling of the search request.
-     */
-    public Scroll scroll() {
-        return scroll;
-    }
-
-    /**
-     * If set, will enable scrolling of the search request.
-     */
-    public SearchRequest scroll(Scroll scroll) {
-        this.scroll = scroll;
-        return this;
-    }
-
-    /**
-     * If set, will enable scrolling of the search request for the specified timeout.
-     */
-    public SearchRequest scroll(TimeValue keepAlive) {
-        return scroll(new Scroll(keepAlive));
-    }
-
-    /**
-     * If set, will enable scrolling of the search request for the specified timeout.
-     */
-    public SearchRequest scroll(String keepAlive) {
-        return scroll(new Scroll(TimeValue.parseTimeValue(keepAlive, null, getClass().getSimpleName() + ".Scroll.keepAlive")));
-    }
-
-    /**
-     * Sets if this request should use the request cache or not, assuming that it can (for
-     * example, if "now" is used, it will never be cached). By default (not set, or null,
-     * will default to the index level setting if request cache is enabled or not).
-     */
-    public SearchRequest requestCache(Boolean requestCache) {
-        this.requestCache = requestCache;
-        return this;
-    }
-
-    public Boolean requestCache() {
-        return this.requestCache;
-    }
-
-    /**
-     * Sets if this request should allow partial results. (If method is not called,
-     * will default to the cluster level setting).
-     */
-    public SearchRequest allowPartialSearchResults(boolean allowPartialSearchResults) {
-        this.allowPartialSearchResults = allowPartialSearchResults;
-        return this;
-    }
-
-    public Boolean allowPartialSearchResults() {
-        return this.allowPartialSearchResults;
-    }
-
-    /**
-     * Sets the number of shard results that should be reduced at once on the coordinating node. This value should be used as a protection
-     * mechanism to reduce the memory overhead per search request if the potential number of shards in the request can be large.
-     */
-    public void setBatchedReduceSize(int batchedReduceSize) {
-        if (batchedReduceSize <= 1) {
-            throw new IllegalArgumentException("batchedReduceSize must be >= 2");
-        }
-        this.batchedReduceSize = batchedReduceSize;
-    }
-
-    /**
-     * Returns the number of shard results that should be reduced at once on the coordinating node. This value should be used as a
-     * protection mechanism to reduce the memory overhead per search request if the potential number of shards in the request can be large.
-     */
-    public int getBatchedReduceSize() {
-        return batchedReduceSize;
-    }
-
-    /**
-     * Returns the number of shard requests that should be executed concurrently on a single node. This value should be used as a
-     * protection mechanism to reduce the number of shard requests fired per high level search request. Searches that hit the entire
-     * cluster can be throttled with this number to reduce the cluster load. The default is {@code 5}
-     */
-    public int getMaxConcurrentShardRequests() {
-        return maxConcurrentShardRequests == 0 ? 5 : maxConcurrentShardRequests;
-    }
-
-    /**
-     * Returns the raw value of maxConcurrentShardRequests without applying the default.
-     * A value of {@code 0} means the user has not explicitly set this parameter.
-     */
-    @ExperimentalApi
-    public int getMaxConcurrentShardRequestsRaw() {
-        return maxConcurrentShardRequests;
-    }
-
-    /**
-     * Sets the number of shard requests that should be executed concurrently on a single node. This value should be used as a
-     * protection mechanism to reduce the number of shard requests fired per high level search request. Searches that hit the entire
-     * cluster can be throttled with this number to reduce the cluster load. The default is {@code 5}
-     */
-    public void setMaxConcurrentShardRequests(int maxConcurrentShardRequests) {
-        if (maxConcurrentShardRequests < 1) {
-            throw new IllegalArgumentException("maxConcurrentShardRequests must be >= 1");
-        }
-        this.maxConcurrentShardRequests = maxConcurrentShardRequests;
-    }
-
-    /**
-     * Sets a threshold that enforces a pre-filter roundtrip to pre-filter search shards based on query rewriting if the number of shards
-     * the search request expands to exceeds the threshold. This filter roundtrip can limit the number of shards significantly if for
-     * instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard
-     * bounds and the query are disjoint.
-     * <p>
-     * When unspecified, the pre-filter phase is executed if any of these conditions is met:
-     * <ul>
-     * <li>The request targets more than 128 shards</li>
-     * <li>The request targets one or more read-only index</li>
-     * <li>The primary sort of the query targets an indexed field</li>
-     * </ul>
-     */
-    public void setPreFilterShardSize(int preFilterShardSize) {
-        if (preFilterShardSize < 1) {
-            throw new IllegalArgumentException("preFilterShardSize must be >= 1");
-        }
-        this.preFilterShardSize = preFilterShardSize;
-    }
-
-    /**
-     * Returns value of user-provided phase_took query parameter for this search request.
-     */
-    public Boolean isPhaseTook() {
-        return phaseTook;
-    }
-
-    /**
-     * Sets value of phase_took query param if provided by user. Defaults to <code>null</code>.
-     */
-    public void setPhaseTook(Boolean phaseTook) {
-        this.phaseTook = phaseTook;
-    }
-
-    /**
-     * Returns a threshold that enforces a pre-filter roundtrip to pre-filter search shards based on query rewriting if the number of shards
-     * the search request expands to exceeds the threshold, or <code>null</code> if the threshold is unspecified.
-     * This filter roundtrip can limit the number of shards significantly if for
-     * instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard
-     * bounds and the query are disjoint.
-     * <p>
-     * When unspecified, the pre-filter phase is executed if any of these conditions is met:
-     * <ul>
-     * <li>The request targets more than 128 shards</li>
-     * <li>The request targets one or more read-only index</li>
-     * <li>The primary sort of the query targets an indexed field</li>
-     * </ul>
-     */
-    @Nullable
-    public Integer getPreFilterShardSize() {
-        return preFilterShardSize;
-    }
-
-    /**
-     * @return true if the request only has suggest
-     */
-    public boolean isSuggestOnly() {
-        return source != null && source.isSuggestOnly();
-    }
-
-    public int resolveTrackTotalHitsUpTo() {
-        return resolveTrackTotalHitsUpTo(scroll, source);
-    }
-
-    public static int resolveTrackTotalHitsUpTo(Scroll scroll, SearchSourceBuilder source) {
-        if (scroll != null) {
-            // no matter what the value of track_total_hits is
-            return SearchContext.TRACK_TOTAL_HITS_ACCURATE;
-        }
-        return source == null ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO
-            : source.trackTotalHitsUpTo() == null ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO
-            : source.trackTotalHitsUpTo();
-    }
-
-    public void setCancelAfterTimeInterval(TimeValue cancelAfterTimeInterval) {
-        this.cancelAfterTimeInterval = cancelAfterTimeInterval;
-    }
-
-    public TimeValue getCancelAfterTimeInterval() {
-        return cancelAfterTimeInterval;
-    }
-
-    public SearchRequest pipeline(String pipeline) {
-        this.pipeline = pipeline;
-        return this;
-    }
-
-    public String pipeline() {
-        return pipeline;
-    }
-
-    @Override
-    public SearchTask createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-        return new SearchTask(id, type, action, this::buildDescription, parentTaskId, headers, cancelAfterTimeInterval);
-    }
-
-    public final String buildDescription() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("indices[");
-        Strings.arrayToDelimitedString(indices, ",", sb);
+ * </p>
+    ) {
+        SearchRequest searchRequest,
         sb.append("], ");
-        sb.append("search_type[").append(searchType).append("], ");
+        this.phaseTook = searchRequest.phaseTook;
+    @Override
+            + ", indicesOptions="
+     * Returns the raw value of maxConcurrentShardRequests without applying the default.
+            // no matter what the value of track_total_hits is
+    public final String buildDescription() {
+ * this work for additional information regarding copyright
+        requestCache = in.readOptionalBoolean();
+        this.preference = preference;
+ * Note, the search {@link #source(org.opensearch.search.builder.SearchSourceBuilder)}
+     */
+        return this;
+        this.source = source;
+            return SearchContext.TRACK_TOTAL_HITS_ACCURATE;
+     * <li>The request targets one or more read-only index</li>
+    /**
+    public static final IndicesOptions DEFAULT_INDICES_OPTIONS = IndicesOptions.strictExpandOpenAndForbidClosedIgnoreThrottled();
+        this.finalReduce = true;
+     * Returns a threshold that enforces a pre-filter roundtrip to pre-filter search shards based on query rewriting if the number of shards
+            localClusterAlias,
+                    "_shard_doc is only supported with point-in-time (PIT). Add a PIT or remove _shard_doc.",
+            out.writeVLong(absoluteStartMillis);
+        }
+     * protection mechanism to reduce the memory overhead per search request if the potential number of shards in the request can be large.
+        this.pipeline = pipeline;
+     */
+        return false;
+    ) {
+import org.opensearch.common.annotation.PublicApi;
+    }
+    public boolean isCcsMinimizeRoundtrips() {
+            && Objects.equals(localClusterAlias, that.localClusterAlias)
+                validationException = addValidationError(
         if (scroll != null) {
-            sb.append("scroll[").append(scroll.keepAlive()).append("], ");
-        }
-        if (source != null) {
-            sb.append("source[");
-            try {
-                sb.append(source.toString(FORMAT_PARAMS));
-            } catch (final OpenSearchException ex) {
-                sb.append("<error: ").append(ex.getMessage()).append(">");
-            }
-            sb.append("]");
+        if (o == null || getClass() != o.getClass()) {
+    }
+ * @opensearch.api
+        if (preFilterShardSize < 1) {
+                if (source.size() == 0) {
+import org.opensearch.Version;
+     * cluster can be throttled with this number to reduce the cluster load. The default is {@code 5}
         } else {
-            sb.append("source[]");
+     * Defaults to <code>true</code>.
+import java.util.Collections;
+     * <p>
+                sb.append("<error: ").append(ex.getMessage()).append(">");
+    public IndicesOptions indicesOptions() {
+        return finalReduce;
+            + ", getOrCreateAbsoluteStartMillis="
+            final boolean hasPit = pointInTimeBuilder() != null;
+        this.preference = searchRequest.preference;
+    }
+            if (shardDocCount > 0 && !hasPit) {
+        this.ccsMinimizeRoundtrips = ccsMinimizeRoundtrips;
+        if (maxConcurrentShardRequests < 1) {
         }
+            phaseTook
+            sb.append("source[");
+import org.opensearch.common.unit.TimeValue;
+     * will be used across different requests.
+    public static final int DEFAULT_BATCHED_REDUCE_SIZE = 512;
+            out.writeStringArray(Strings.EMPTY_ARRAY);
+    /**
+    }
+@PublicApi(since = "1.0.0")
+     * The a string representation search type to execute, defaults to {@link SearchType#DEFAULT}. Can be
+     * "query_then_fetch"/"queryThenFetch", and "query_and_fetch"/"queryAndFetch".
+     * This filter roundtrip can limit the number of shards significantly if for
+        this.requestCache = searchRequest.requestCache;
+import java.util.Objects;
+}
+    public SearchRequest searchType(SearchType searchType) {
+    /**
+                if (source.from() > 0) {
+        out.writeVInt(batchedReduceSize);
+        if (scroll) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            && Objects.equals(cancelAfterTimeInterval, that.cancelAfterTimeInterval)
+     * If set, will enable scrolling of the search request.
+     * @param originalSearchRequest the original search request
+        this.requestCache = requestCache;
+        this.allowPartialSearchResults = searchRequest.allowPartialSearchResults;
+        boolean scroll = scroll() != null;
+    @Override
+import org.opensearch.action.ActionRequest;
+        if (sb instanceof FieldSortBuilder) {
+    }
+        }
+    private IndicesOptions indicesOptions = DEFAULT_INDICES_OPTIONS;
+        return localClusterAlias;
+     * Constructs a new search request against the provided indices with the given search source.
+                sb.append(source.toString(FORMAT_PARAMS));
+        this.finalReduce = finalReduce;
+        String[] indices,
+ *
+            + ", preFilterShardSize="
+            + ", pipeline="
+    public SearchType searchType() {
+            out.writeOptionalString(pipeline);
+            && ccsMinimizeRoundtrips == that.ccsMinimizeRoundtrips
+            maxConcurrentShardRequests,
+    private TimeValue cancelAfterTimeInterval;
+        sb.append("search_type[").append(searchType).append("], ");
+            allowPartialSearchResults,
+            // types not supported so send an empty array to previous versions
+     */
+        this.indices = indices;
+        out.writeVInt(maxConcurrentShardRequests);
+        return new SearchRequest(originalSearchRequest, indices, clusterAlias, absoluteStartMillis, finalReduce);
+    /**
+     */
+     * mechanism to reduce the memory overhead per search request if the potential number of shards in the request can be large.
+            + batchedReduceSize
+    }
+            throw new IllegalArgumentException("preFilterShardSize must be >= 1");
+    public SearchRequest scroll(TimeValue keepAlive) {
         return sb.toString();
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        SearchRequest that = (SearchRequest) o;
-        return searchType == that.searchType
-            && Arrays.equals(indices, that.indices)
-            && Objects.equals(routing, that.routing)
-            && Objects.equals(preference, that.preference)
-            && Objects.equals(source, that.source)
-            && Objects.equals(requestCache, that.requestCache)
-            && Objects.equals(scroll, that.scroll)
-            && Objects.equals(batchedReduceSize, that.batchedReduceSize)
-            && Objects.equals(maxConcurrentShardRequests, that.maxConcurrentShardRequests)
-            && Objects.equals(preFilterShardSize, that.preFilterShardSize)
             && Objects.equals(indicesOptions, that.indicesOptions)
-            && Objects.equals(allowPartialSearchResults, that.allowPartialSearchResults)
-            && Objects.equals(localClusterAlias, that.localClusterAlias)
-            && absoluteStartMillis == that.absoluteStartMillis
-            && ccsMinimizeRoundtrips == that.ccsMinimizeRoundtrips
-            && Objects.equals(cancelAfterTimeInterval, that.cancelAfterTimeInterval)
-            && Objects.equals(pipeline, that.pipeline)
-            && Objects.equals(phaseTook, that.phaseTook);
-    }
-
+        String clusterAlias,
+ * A request to execute search against one or more indices (or all). Best created using
+/*
     @Override
-    public int hashCode() {
-        return Objects.hash(
-            searchType,
+        return this;
+     * Sets value of phase_took query param if provided by user. Defaults to <code>null</code>.
+                    validationException = addValidationError("using [from] is not allowed in a scroll context", validationException);
+            throw new IllegalArgumentException("source must not be null");
+        this.indicesOptions = searchRequest.indicesOptions;
+     * <li>The primary sort of the query targets an indexed field</li>
+        this.maxConcurrentShardRequests = maxConcurrentShardRequests;
+            return ShardDocSortBuilder.NAME.equals(((FieldSortBuilder) sb).getFieldName());
+        long absoluteStartMillis,
             Arrays.hashCode(indices),
-            routing,
-            preference,
-            source,
-            requestCache,
-            scroll,
-            indicesOptions,
-            batchedReduceSize,
-            maxConcurrentShardRequests,
+        return "SearchRequest{"
+            searchRequest.finalReduce
+        }
+        this.searchType = searchRequest.searchType;
+    }
+import org.opensearch.core.tasks.TaskId;
+    /**
+            + ccsMinimizeRoundtrips
+        this.routing = routing;
+        this.cancelAfterTimeInterval = searchRequest.cancelAfterTimeInterval;
+            + ", localClusterAlias="
+     * Returns the number of shard results that should be reduced at once on the coordinating node. This value should be used as a
+     */
+            sb.append("]");
+    }
+        return absoluteStartMillis == DEFAULT_ABSOLUTE_START_MILLIS ? System.currentTimeMillis() : absoluteStartMillis;
+     * <ul>
+    }
+            // types no longer relevant so ignore
+        return this;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        out.writeBoolean(ccsMinimizeRoundtrips);
+import org.opensearch.common.Nullable;
+    }
+                validationException = addValidationError("using [point in time] is not allowed in a scroll context", validationException);
+    }
+    public Boolean allowPartialSearchResults() {
+        out.writeOptionalTimeValue(cancelAfterTimeInterval);
+    public String preference() {
+    public PointInTimeBuilder pointInTimeBuilder() {
+            + ", requestCache="
+     * example, if "now" is used, it will never be cached). By default (not set, or null,
+            if (requestCache != null && requestCache) {
+        if (absoluteStartMillis < 0) {
             preFilterShardSize,
-            allowPartialSearchResults,
-            localClusterAlias,
+        }
+     * Creates a new sub-search request starting from the original search request that is provided.
+    }
+    /**
+ * specific language governing permissions and limitations
+    /**
+     * bounds and the query are disjoint.
+    public static final int DEFAULT_PRE_FILTER_SHARD_SIZE = 128;
+        for (String index : indices) {
+        return absoluteStartMillis;
+            String[] types = in.readStringArray();
+     * </ul>
+        Objects.requireNonNull(indices, "indices must not be null");
+import org.opensearch.search.sort.ShardDocSortBuilder;
+            + ", preference='"
+    private String[] indices = Strings.EMPTY_ARRAY;
+    private Integer preFilterShardSize;
+     * Constructs a new search request from the provided search request
+ *
+    /**
+import java.util.Arrays;
+        indices(indices);
+            + ", indices="
+    private String preference;
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    /**
+    public void setPhaseTook(Boolean phaseTook) {
+        this.writeTo(out);
+    public SearchRequest deepCopy() throws IOException {
+ * @see Requests#searchRequest(String...)
+     */
+            + preference
+ * not use this file except in compliance with the License.
+            && Objects.equals(scroll, that.scroll)
+    public void setCancelAfterTimeInterval(TimeValue cancelAfterTimeInterval) {
+import org.opensearch.search.sort.FieldSortBuilder;
+     */
+    }
+    @Override
+    }
+        Objects.requireNonNull(clusterAlias, "cluster alias must not be null");
+    /**
+    }
+        if (batchedReduceSize <= 1) {
+        out.writeOptionalString(preference);
+     * A comma separated list of routing values to control the shards the search will be executed on.
+     */
+ * <p>
+            searchRequest.absoluteStartMillis,
+        if (localClusterAlias != null) {
+            return true;
+            && Objects.equals(batchedReduceSize, that.batchedReduceSize)
+        preFilterShardSize = in.readOptionalVInt();
+            + allowPartialSearchResults
+     * If set, will enable scrolling of the search request for the specified timeout.
+    public int hashCode() {
+     * will default to the index level setting if request cache is enabled or not).
+    /**
+        this.source = searchRequest.source;
+            + ", source="
+     */
+     */
+        if (source != null) {
+        return indicesOptions;
+            finalReduce = in.readBoolean();
+    public void setPreFilterShardSize(int preFilterShardSize) {
+    public TimeValue getCancelAfterTimeInterval() {
+                    validationException
+        this(indices, new SearchSourceBuilder());
+        this.indicesOptions = Objects.requireNonNull(indicesOptions, "indicesOptions must not be null");
+     * Returns value of user-provided phase_took query parameter for this search request.
+        return batchedReduceSize;
+     */
+        ccsMinimizeRoundtrips = in.readBoolean();
+     * the provided current time, otherwise it will return {@link System#currentTimeMillis()}.
+                );
+    }
+     * If set, will enable scrolling of the search request for the specified timeout.
+import org.opensearch.action.ActionRequestValidationException;
+            && Arrays.equals(indices, that.indices)
+    public SearchRequest indices(String... indices) {
+import org.opensearch.core.xcontent.ToXContent;
+            }
+            + "searchType="
+        this.ccsMinimizeRoundtrips = searchRequest.ccsMinimizeRoundtrips;
+        out.writeStringArray(indices);
+    }
+    /**
+     * <p>
+        return this;
+            + searchType
+        StringBuilder sb = new StringBuilder();
+        }
+        out.writeOptionalString(routing);
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+    }
+                }
+    public SearchRequest(String... indices) {
+    }
+     */
+    public SearchRequest() {
+     * Sets if this request should use the request cache or not, assuming that it can (for
+        this.allowPartialSearchResults = allowPartialSearchResults;
+        Objects.requireNonNull(originalSearchRequest, "search request must not be null");
+            absoluteStartMillis = in.readVLong();
+        }
+        scroll = in.readOptionalWriteable(Scroll::new);
+     * Returns the number of shard requests that should be executed concurrently on a single node. This value should be used as a
+                }
+        }
+        preference = in.readOptionalString();
+    boolean isFinalReduce() {
+        return indices;
+    public SearchTask createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+     */
+            indicesOptions,
+        validateIndices(indices);
+ * Modifications Copyright OpenSearch Contributors. See
+        }
+        if (source != null) {
+            + absoluteStartMillis
+        if (in.getVersion().onOrAfter(Version.V_2_12_0)) {
+     * bounds and the query are disjoint.
+import org.opensearch.core.common.io.stream.StreamOutput;
+            + '\''
+    public SearchRequest source(SearchSourceBuilder sourceBuilder) {
+ */
+    private final String localClusterAlias;
+                if (isShardDocSort(sb)) shardDocCount++;
+    public SearchRequest routing(String routing) {
+            Objects.requireNonNull(index, "index must not be null");
+ * @see SearchResponse
+     */
+            searchRequest.localClusterAlias,
+        return this.routing;
+     * When unspecified, the pre-filter phase is executed if any of these conditions is met:
+    private final boolean finalReduce;
+     */
+        return this;
+        this.source = Objects.requireNonNull(sourceBuilder, "source must not be null");
+        if (source != null) {
+            && Objects.equals(maxConcurrentShardRequests, that.maxConcurrentShardRequests)
+     * Returns whether network round-trips should be minimized when executing cross-cluster search requests.
+     */
+    /**
+     * protection mechanism to reduce the number of shard requests fired per high level search request. Searches that hit the entire
+    }
+            + routing
+        ActionRequestValidationException validationException = null;
+    /**
+ *
+        }
+    }
+        this.routing = searchRequest.routing;
+     *
+     * The search source to execute.
+            sb.append("scroll[").append(scroll.keepAlive()).append("], ");
+        long absoluteStartMillis,
+        out.writeOptionalBoolean(requestCache);
             absoluteStartMillis,
-            ccsMinimizeRoundtrips,
-            cancelAfterTimeInterval,
-            phaseTook
+    public int getMaxConcurrentShardRequests() {
+        BytesStreamOutput out = new BytesStreamOutput();
+     * {@code _local} to prefer local shards, {@code _primary} to execute only on primary shards,
+            int shardDocCount = 0;
+    }
+    public Integer getPreFilterShardSize() {
+    }
+    /**
+    private boolean ccsMinimizeRoundtrips = true;
+        indicesOptions = IndicesOptions.readIndicesOptions(in);
+     */
+ * the Apache License, Version 2.0 (the "License"); you may
+        this.absoluteStartMillis = absoluteStartMillis;
+        StreamInput in = out.bytes().streamInput();
+     * @param indices the indices to search against
+    /**
+        return scroll(new Scroll(keepAlive));
+        Strings.arrayToDelimitedString(indices, ",", sb);
+        return this.allowPartialSearchResults;
+    private int maxConcurrentShardRequests = 0;
+    @Override
+        routing = in.readOptionalString();
+     * performing reduction on each cluster in order to minimize network round-trips between the coordinating node and the remote clusters.
+        );
+            }
+                        validationException
+                validationException = addValidationError(
+     * A comma separated list of routing values to control the shards the search will be executed on.
+        this.routing = Strings.arrayToCommaDelimitedString(routings);
+        return Objects.hash(
+    public SearchRequest searchType(String searchType) {
+        if (out.getVersion().onOrAfter(Version.V_2_12_0)) {
+/**
+    private final long absoluteStartMillis;
+     */
+     * or a custom value, which guarantees that the same order
+     * Sets a threshold that enforces a pre-filter roundtrip to pre-filter search shards based on query rewriting if the number of shards
+        sb.append("indices[");
+            + phaseTook
+ */
+ * Unless required by applicable law or agreed to in writing,
+            searchRequest,
+        this.maxConcurrentShardRequests = searchRequest.maxConcurrentShardRequests;
+    /**
+            + ", batchedReduceSize="
+            && Objects.equals(preFilterShardSize, that.preFilterShardSize)
+    public void setBatchedReduceSize(int batchedReduceSize) {
+    /**
+            + ", routing='"
+        }
+            routing,
+    public SearchRequest scroll(Scroll scroll) {
+    private static boolean isShardDocSort(SortBuilder<?> sb) {
+     */
+     */
+    /**
+     */
+                if (source.trackTotalHitsUpTo() != null && source.trackTotalHitsUpTo() != SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+ * You may obtain a copy of the License at
+     * The indices
+    public boolean isSuggestOnly() {
+            return source.pointInTimeBuilder();
+            absoluteStartMillis = DEFAULT_ABSOLUTE_START_MILLIS;
+ * The OpenSearch Contributors require contributions made to
+     * <li>The request targets more than 128 shards</li>
+    }
+ * Licensed to Elasticsearch under one or more contributor
+    @Nullable
+        this.searchType = Objects.requireNonNull(searchType, "searchType must not be null");
+     * one of "dfs_query_then_fetch"/"dfsQueryThenFetch", "dfs_query_and_fetch"/"dfsQueryAndFetch",
+    private String routing;
+        maxConcurrentShardRequests = in.readVInt();
+            batchedReduceSize,
+     * The source of the search request.
+            throw new IllegalArgumentException("absoluteStartMillis must not be negative but was [" + absoluteStartMillis + "]");
+     * Sets the indices the search will be executed on.
+    /**
+        indicesOptions.writeIndicesOptions(out);
+                    "types are no longer supported in search requests but found [" + Arrays.toString(types) + "]"
+     * instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard
+    }
+     * -1 otherwise.
+        boolean finalReduce
+     * Returns the current time in milliseconds from the time epoch, to be used for the execution of this search request. Used to
+    }
+            if (source.aggregations() != null) {
+            preference,
+     * Sets whether network round-trips should be minimized when executing cross-cluster search requests. Defaults to <code>true</code>.
+            : source.trackTotalHitsUpTo();
+    public SearchRequest preference(String preference) {
+            + ", ccsMinimizeRoundtrips="
+     * The routing values to control the shards that the search will be executed on.
+        if (scroll != null) {
+                    validationException
+import org.opensearch.search.builder.SearchSourceBuilder;
+package org.opensearch.action.search;
+    public SearchRequest routing(String... routings) {
+            + ", scroll="
+     * Constructs a new search request from reading the specified stream.
+        return phaseTook;
+        super.writeTo(out);
+        return preFilterShardSize;
+        this.preFilterShardSize = preFilterShardSize;
+    public SearchRequest scroll(String keepAlive) {
+     */
+    }
+     * protection mechanism to reduce the number of shard requests fired per high level search request. Searches that hit the entire
+     * Returns the provided <code>absoluteStartMillis</code> when created through {@link #subSearchRequest} and
+            }
+    /**
+     * Sets if this request should allow partial results. (If method is not called,
+        if (out.getVersion().onOrAfter(Version.V_2_7_0)) {
+    public static final ToXContent.Params FORMAT_PARAMS = new ToXContent.MapParams(Collections.singletonMap("pretty", "false"));
+        }
+    @Nullable
+        out.writeByte(searchType.id());
+    private static void validateIndices(String... indices) {
+                validationException = source.aggregations().validate(validationException);
+     */
+    public long getOrCreateAbsoluteStartMillis() {
+        return this.requestCache;
+    /**
+        }
+/*
+ * GitHub history for details.
+        this.batchedReduceSize = batchedReduceSize;
+        return searchType == that.searchType
+        return source;
+        }
+     * Returns the alias of the cluster that this search request is being executed on. A non-null value indicates that this search request
+    public boolean includeDataStreams() {
+            + cancelAfterTimeInterval
+    public Scroll scroll() {
+     * @param clusterAlias the alias to prefix index names with in the returned search results
+     *
+import org.opensearch.search.Scroll;
+        out.writeOptionalString(localClusterAlias);
+    public String pipeline() {
+            for (SortBuilder<?> sb : source.sorts()) {
+    }
+        return this;
+    String getLocalClusterAlias() {
+     * the search request expands to exceeds the threshold, or <code>null</code> if the threshold is unspecified.
+     *
+        }
+        out.writeOptionalVInt(preFilterShardSize);
+        searchType = SearchType.fromId(in.readByte());
+                if (source.rescores() != null && source.rescores().isEmpty() == false) {
+     * @param in The stream the request is read from
+     * <li>The primary sort of the query targets an indexed field</li>
+import org.opensearch.common.annotation.ExperimentalApi;
+        }
+    public int getMaxConcurrentShardRequestsRaw() {
+     * <li>The request targets one or more read-only index</li>
+            pipeline = in.readOptionalString();
+            + ", phaseTook="
+            searchRequest.indices,
+     * ensure that the same value, determined by the coordinating node, is used on all nodes involved in the execution of the search
+     * For internal use only, allows to fork a search request into multiple search requests that will be executed independently.
+import java.util.Map;
+    private Boolean allowPartialSearchResults;
+        if (pointInTimeBuilder() != null) {
+     */
+                        "disabling [track_total_hits] is not allowed in a scroll context",
+        this.scroll = searchRequest.scroll;
+        } else {
+        this.batchedReduceSize = searchRequest.batchedReduceSize;
         );
     }
-
-    @Override
+        return resolveTrackTotalHitsUpTo(scroll, source);
+                );
+import org.opensearch.action.support.IndicesOptions;
+                    validationException = addValidationError("[size] cannot be [0] in a scroll context", validationException);
+                    validationException
+        if (localClusterAlias != null) {
+        SearchRequest originalSearchRequest,
+     */
+        batchedReduceSize = in.readVInt();
+    /**
+            && Objects.equals(preference, that.preference)
     public String toString() {
-        return "SearchRequest{"
-            + "searchType="
-            + searchType
-            + ", indices="
-            + Arrays.toString(indices)
-            + ", indicesOptions="
-            + indicesOptions
-            + ", routing='"
-            + routing
-            + '\''
-            + ", preference='"
-            + preference
-            + '\''
-            + ", requestCache="
-            + requestCache
-            + ", scroll="
-            + scroll
-            + ", maxConcurrentShardRequests="
-            + maxConcurrentShardRequests
-            + ", batchedReduceSize="
-            + batchedReduceSize
-            + ", preFilterShardSize="
-            + preFilterShardSize
-            + ", allowPartialSearchResults="
-            + allowPartialSearchResults
-            + ", localClusterAlias="
-            + localClusterAlias
-            + ", getOrCreateAbsoluteStartMillis="
-            + absoluteStartMillis
-            + ", ccsMinimizeRoundtrips="
-            + ccsMinimizeRoundtrips
-            + ", source="
-            + source
-            + ", cancelAfterTimeInterval="
-            + cancelAfterTimeInterval
-            + ", pipeline="
-            + pipeline
-            + ", phaseTook="
-            + phaseTook
-            + "}";
+     */
     }
-}
+        if (in.getVersion().before(Version.V_2_0_0)) {
+    public SearchRequest(StreamInput in) throws IOException {
+            requestCache,
+        boolean finalReduce
+    private int batchedReduceSize = DEFAULT_BATCHED_REDUCE_SIZE;
+     */
+import org.opensearch.action.IndicesRequest;
+                );
+    static SearchRequest subSearchRequest(
+        if (sb instanceof ShardDocSortBuilder) return true;
+    }
+     * returned as part of search hits with the alias of the cluster they came from.
+        }
+            try {
+            + ", allowPartialSearchResults="
+        return new SearchRequest(in);
+ */
+     */
+            && Objects.equals(allowPartialSearchResults, that.allowPartialSearchResults)
+    /**
+ * license agreements. See the NOTICE file distributed with
+ * compatible open source license.
+            + requestCache
+        return new SearchTask(id, type, action, this::buildDescription, parentTaskId, headers, cancelAfterTimeInterval);
+     * Sets the preference to execute the search. Defaults to randomize across shards. Can be set to
+    /**
+        // _shard_doc validation
+            ccsMinimizeRoundtrips,
+        return this;
+     * Used when a {@link SearchRequest} is created and executed as part of a cross-cluster search request
+            source,
+    }
+        return this;
+     * The search type to execute, defaults to {@link SearchType#DEFAULT}.
+    }
+    /**
+    }
+        cancelAfterTimeInterval = in.readOptionalTimeValue();
+        return ccsMinimizeRoundtrips;
+        }
+        out.writeOptionalWriteable(scroll);
+        SearchRequest that = (SearchRequest) o;
+    private Boolean requestCache;
+ */
+        String[] indices,
+    public SearchRequest allowPartialSearchResults(boolean allowPartialSearchResults) {
+     * is being executed as part of a locally reduced cross-cluster search request. The cluster alias is used to prefix index names
+    /**
+    /**
+        }
+        return pipeline;
+import org.opensearch.OpenSearchException;
+            if (shardDocCount > 1) {
+    }
+        localClusterAlias = in.readOptionalString();
+        out.writeOptionalWriteable(source);
+            && Objects.equals(requestCache, that.requestCache)
+        }
+ *
+    }
+        return this.preference;
+    /**
+import org.opensearch.transport.client.Client;
+    public int resolveTrackTotalHitsUpTo() {
+        }
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.core.common.io.stream.StreamInput;
+            }
+        this.cancelAfterTimeInterval = cancelAfterTimeInterval;
+        return true;
+    }
+    }
+     * <ul>
+    public SearchSourceBuilder source() {
+            out.writeBoolean(finalReduce);
+     */
+     */
+            searchType,
+    public SearchRequest(String[] indices, SearchSourceBuilder source) {
+     */
+    public String routing() {
+                );
+        return this;
+    }
+    }
+     * @throws IOException if there is an issue reading the stream
+    /**
+    /**
+     * Constructs a new search request against the indices. No indices provided here means that search
+    public Boolean requestCache() {
+            } catch (final OpenSearchException ex) {
+import org.opensearch.search.sort.SortBuilder;
+            + maxConcurrentShardRequests
+        this.phaseTook = phaseTook;
+     * will run against all indices.
+    }
+    public Boolean isPhaseTook() {
+        return null;
+    }
+        if (source == null) {
+                validationException = addValidationError("[request_cache] cannot be used in a scroll context", validationException);
+            + pipeline
+    public SearchRequest pipeline(String pipeline) {
+        this(
+    }
+import java.io.IOException;
+        this.absoluteStartMillis = DEFAULT_ABSOLUTE_START_MILLIS;
+    private SearchSourceBuilder source;
+     * @return a copy of the current SearchRequest
+            if (shardDocCount > 0 && scroll) {
+            }
+import static org.opensearch.action.ValidateActions.addValidationError;
+        source = in.readOptionalWriteable(SearchSourceBuilder::new);
+            + source
+        if (out.getVersion().before(Version.V_2_0_0)) {
+    }
+import org.opensearch.transport.client.Requests;
+            return false;
+    public SearchRequest requestCache(Boolean requestCache) {
+    }
+public class SearchRequest extends ActionRequest implements IndicesRequest.Replaceable {
+        return source != null && source.isSuggestOnly();
+    }
+        String localClusterAlias,
+    }
+            }
+        return searchType;
+     * When unspecified, the pre-filter phase is executed if any of these conditions is met:
+        this.preFilterShardSize = searchRequest.preFilterShardSize;
+     * @param finalReduce whether the reduction should be final or not
+            && Objects.equals(phaseTook, that.phaseTook);
+     * Sets the number of shard results that should be reduced at once on the coordinating node. This value should be used as a protection
+        indices = in.readStringArray();
+import org.opensearch.common.io.stream.BytesStreamOutput;
+        return this;
+        this.localClusterAlias = localClusterAlias;
+    /**
+            + ", maxConcurrentShardRequests="
+    }
+        super(in);
+    public SearchRequest indicesOptions(IndicesOptions indicesOptions) {
+ * this file be licensed under the Apache-2.0 license or a
+    private Scroll scroll;
+        return validationException;
+    private String pipeline;
+        return this;
+     * instance a shard can not match any documents based on its rewrite method ie. if date filters are mandatory to match but the shard
+    }
+    /**
+    }
+     * </ul>
+            && absoluteStartMillis == that.absoluteStartMillis
+     */
+        this.scroll = scroll;
+     */
+                    validationException = addValidationError(
+     * <li>The request targets more than 128 shards</li>
+import org.opensearch.core.common.Strings;
+        return cancelAfterTimeInterval;
+                throw new IllegalStateException(
+        this();
+    public void setMaxConcurrentShardRequests(int maxConcurrentShardRequests) {
+     */
+        this.indices = indices;
+ * is required. The search source is the different search options, including aggregations and such.
+        }
+            + scroll
+            + localClusterAlias
+     * The type of search to execute.
+                    "_shard_doc cannot be used with scroll. Use PIT + search_after instead.",
+        this.localClusterAlias = null;
+     */
+     * Sets the number of shard requests that should be executed concurrently on a single node. This value should be used as a
+        if (this == o) {
+    public ActionRequestValidationException validate() {
+        return scroll;
+    long getAbsoluteStartMillis() {
+            + indicesOptions
+            + Arrays.toString(indices)
+            throw new IllegalArgumentException("maxConcurrentShardRequests must be >= 1");
+    }
+            }
+        if (in.getVersion().onOrAfter(Version.V_2_7_0)) {
+    @Nullable
+            + ", cancelAfterTimeInterval="
+        return maxConcurrentShardRequests;
+ * @see Client#search(SearchRequest)
+    }
+    /**
+     * request. When created through {@link #subSearchRequest(SearchRequest, String[], String, long, boolean)}, this method returns
+    private SearchRequest(
+    @Override
+            if (scroll) {
+        out.writeOptionalBoolean(allowPartialSearchResults);
+    @Override
+        return source == null ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO
+ * {@link Requests#searchRequest(String...)}.
+            if (types.length > 0) {
+    public boolean equals(Object o) {
+        if (source != null && source.sorts() != null && !source.sorts().isEmpty()) {
+import org.opensearch.search.builder.PointInTimeBuilder;
+ * KIND, either express or implied.  See the License for the
+            scroll,

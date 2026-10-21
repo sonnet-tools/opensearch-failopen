@@ -1,489 +1,451 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations.pipeline;
-
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.common.xcontent.ParseFieldRegistry;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
-
-import java.io.IOException;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
-import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.BUCKETS_PATH;
-import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.FORMAT;
-import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.GAP_POLICY;
-
-/**
- * Aggregation Builder for moving_avg
- *
- * @opensearch.internal
- */
-public class MovAvgPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<MovAvgPipelineAggregationBuilder> {
-    public static final String NAME = "moving_avg";
-
-    static final ParseField MODEL = new ParseField("model");
-    private static final ParseField WINDOW = new ParseField("window");
-    public static final ParseField SETTINGS = new ParseField("settings");
-    private static final ParseField PREDICT = new ParseField("predict");
-    private static final ParseField MINIMIZE = new ParseField("minimize");
-    private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(MovAvgPipelineAggregationBuilder.class);
-
-    private String format;
-    private GapPolicy gapPolicy = GapPolicy.SKIP;
-    private int window = 5;
-    private MovAvgModel model = new SimpleModel();
-    private int predict = 0;
-    private Boolean minimize;
-
-    public MovAvgPipelineAggregationBuilder(String name, String bucketsPath) {
-        super(name, NAME, new String[] { bucketsPath });
+                    settings = parser.map();
     }
-
-    /**
-     * Read from a stream.
-     */
-    public MovAvgPipelineAggregationBuilder(StreamInput in) throws IOException {
-        super(in, NAME);
-        format = in.readOptionalString();
-        gapPolicy = GapPolicy.readFrom(in);
-        window = in.readVInt();
-        model = in.readNamedWriteable(MovAvgModel.class);
-        predict = in.readVInt();
-        minimize = in.readOptionalBoolean();
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeOptionalString(format);
-        gapPolicy.writeTo(out);
-        out.writeVInt(window);
-        out.writeNamedWriteable(model);
-        out.writeVInt(predict);
-        out.writeOptionalBoolean(minimize);
-    }
-
-    /**
-     * Sets the format to use on the output of this aggregation.
-     */
-    public MovAvgPipelineAggregationBuilder format(String format) {
-        if (format == null) {
-            throw new IllegalArgumentException("[format] must not be null: [" + name + "]");
-        }
-        this.format = format;
-        return this;
-    }
-
-    /**
-     * Gets the format to use on the output of this aggregation.
-     */
-    public String format() {
-        return format;
-    }
-
-    /**
-     * Sets the GapPolicy to use on the output of this aggregation.
-     */
-    public MovAvgPipelineAggregationBuilder gapPolicy(GapPolicy gapPolicy) {
-        if (gapPolicy == null) {
-            throw new IllegalArgumentException("[gapPolicy] must not be null: [" + name + "]");
-        }
-        this.gapPolicy = gapPolicy;
-        return this;
-    }
-
-    /**
-     * Gets the GapPolicy to use on the output of this aggregation.
-     */
-    public GapPolicy gapPolicy() {
-        return gapPolicy;
-    }
-
-    protected DocValueFormat formatter() {
-        if (format != null) {
-            return new DocValueFormat.Decimal(format);
-        } else {
-            return DocValueFormat.RAW;
-        }
-    }
-
-    /**
-     * Sets the window size for the moving average. This window will "slide"
-     * across the series, and the values inside that window will be used to
-     * calculate the moving avg value
-     *
-     * @param window
-     *            Size of window
-     */
-    public MovAvgPipelineAggregationBuilder window(int window) {
-        if (window <= 0) {
-            throw new IllegalArgumentException("[window] must be a positive integer: [" + name + "]");
-        }
-        // If we have a model we can validate the window now
-        if (model != null) {
-            model.validate(window, name);
-        }
-        this.window = window;
-        return this;
-    }
-
-    /**
-     * Gets the window size for the moving average. This window will "slide"
-     * across the series, and the values inside that window will be used to
-     * calculate the moving avg value
-     */
-    public int window() {
-        return window;
-    }
-
-    /**
-     * Sets a MovAvgModel for the Moving Average. The model is used to
-     * define what type of moving average you want to use on the series
-     *
-     * @param model
-     *            A MovAvgModel which has been prepopulated with settings
-     */
-    public MovAvgPipelineAggregationBuilder modelBuilder(MovAvgModelBuilder model) {
-        if (model == null) {
-            throw new IllegalArgumentException("[model] must not be null: [" + name + "]");
-        }
-        this.model = model.build();
-        return this;
-    }
-
-    /**
-     * Sets a MovAvgModel for the Moving Average. The model is used to
-     * define what type of moving average you want to use on the series
-     *
-     * @param model
-     *            A MovAvgModel which has been prepopulated with settings
-     */
-    public MovAvgPipelineAggregationBuilder model(MovAvgModel model) {
-        if (model == null) {
-            throw new IllegalArgumentException("[model] must not be null: [" + name + "]");
-        }
-        this.model = model;
-        return this;
-    }
-
-    /**
-     * Gets a MovAvgModel for the Moving Average. The model is used to
-     * define what type of moving average you want to use on the series
-     */
-    public MovAvgModel model() {
-        return model;
-    }
-
-    /**
-     * Sets the number of predictions that should be returned. Each
-     * prediction will be spaced at the intervals specified in the
-     * histogram. E.g "predict: 2" will return two new buckets at the end of
-     * the histogram with the predicted values.
-     *
-     * @param predict
-     *            Number of predictions to make
-     */
-    public MovAvgPipelineAggregationBuilder predict(int predict) {
-        if (predict <= 0) {
-            throw new IllegalArgumentException("predict must be greater than 0. Found [" + predict + "] in [" + name + "]");
-        }
-        this.predict = predict;
-        return this;
-    }
-
-    /**
-     * Gets the number of predictions that should be returned. Each
-     * prediction will be spaced at the intervals specified in the
-     * histogram. E.g "predict: 2" will return two new buckets at the end of
-     * the histogram with the predicted values.
-     */
-    public int predict() {
-        return predict;
-    }
-
-    /**
-     * Sets whether the model should be fit to the data using a cost
+                            "["
      * minimizing algorithm.
-     *
-     * @param minimize
-     *            If the model should be fit to the underlying data
+                } else {
+ * license agreements. See the NOTICE file distributed with
+    protected void doWriteTo(StreamOutput out) throws IOException {
+    /**
+        if (format != null) {
      */
+                    minimize = parser.booleanValue();
+     *
+                                + currentFieldName
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+    static final ParseField MODEL = new ParseField("model");
+        return factory;
+        out.writeVInt(window);
+        return this;
+    private static final ParseField PREDICT = new ParseField("predict");
+                }
+                    );
+                    format = parser.text();
+        }
+            "The moving_avg aggregation has been deprecated in favor of the moving_fn aggregation."
+    }
+                                + "] in ["
+    }
+        out.writeOptionalBoolean(minimize);
+                parser.getDeprecationHandler()
+            factory.predict(predict);
+    }
+import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.BUCKETS_PATH;
+            throw new IllegalArgumentException("[model] must not be null: [" + name + "]");
+     * calculate the moving avg value
+            throw new IllegalArgumentException("predict must be greater than 0. Found [" + predict + "] in [" + name + "]");
+                    throw new ParsingException(
+    }
+        out.writeOptionalString(format);
+                                + predict
+                        parser.getTokenLocation(),
+        if (this == obj) return true;
+     * define what type of moving average you want to use on the series
+        gapPolicy.writeTo(out);
+        XContentParser parser
+ * this work for additional information regarding copyright
+            && Objects.equals(model, other.model)
+     */
+            throw new IllegalArgumentException("[format] must not be null: [" + name + "]");
+    }
+            return;
+    }
+            MovAvgModel movAvgModel;
+        this.model = model.build();
+                    parser.getTokenLocation(),
+                    + "] for movingAvg aggregation ["
+                    bucketsPaths = paths.toArray(new String[0]);
+ * the Apache License, Version 2.0 (the "License"); you may
     public MovAvgPipelineAggregationBuilder minimize(boolean minimize) {
         this.minimize = minimize;
-        return this;
-    }
-
-    /**
-     * Gets whether the model should be fit to the data using a cost
-     * minimizing algorithm.
-     */
-    public Boolean minimize() {
-        return minimize;
-    }
-
-    @Override
-    protected PipelineAggregator createInternal(Map<String, Object> metadata) {
-        // If the user doesn't set a preference for cost minimization, ask
-        // what the model prefers
-        boolean minimize = this.minimize == null ? model.minimizeByDefault() : this.minimize;
-        return new MovAvgPipelineAggregator(name, bucketsPaths, formatter(), gapPolicy, window, predict, model, minimize, metadata);
-    }
-
-    @Override
-    protected void validate(ValidationContext context) {
-        if (minimize != null && minimize && !model.canBeMinimized()) {
-            // If the user asks to minimize, but this model doesn't support
-            // it, throw exception
-            context.addValidationError("The [" + model + "] model cannot be minimized for aggregation [" + name + "]");
-        }
-        if (bucketsPaths.length != 1) {
-            context.addBucketPathValidationError("must contain a single entry for aggregation [" + name + "]");
-            return;
-        }
-        // Validate any model-specific window requirements
-        model.validate(window, name);
-        context.validateParentAggSequentiallyOrdered(NAME, name);
-    }
-
-    @Override
-    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
-        if (format != null) {
-            builder.field(FORMAT.getPreferredName(), format);
-        }
-        builder.field(GAP_POLICY.getPreferredName(), gapPolicy.getName());
-        model.toXContent(builder, params);
-        builder.field(WINDOW.getPreferredName(), window);
-        if (predict > 0) {
-            builder.field(PREDICT.getPreferredName(), predict);
-        }
-        if (minimize != null) {
-            builder.field(MINIMIZE.getPreferredName(), minimize);
-        }
-        return builder;
-    }
-
-    public static MovAvgPipelineAggregationBuilder parse(
-        ParseFieldRegistry<MovAvgModel.AbstractModelParser> movingAverageMdelParserRegistry,
-        String pipelineAggregatorName,
-        XContentParser parser
-    ) throws IOException {
-        XContentParser.Token token;
-        String currentFieldName = null;
-        String[] bucketsPaths = null;
-        String format = null;
-
-        GapPolicy gapPolicy = null;
-        Integer window = null;
-        Map<String, Object> settings = null;
-        String model = null;
-        Integer predict = null;
-        Boolean minimize = null;
-
-        DEPRECATION_LOGGER.deprecate(
-            "moving_avg_aggregation",
-            "The moving_avg aggregation has been deprecated in favor of the moving_fn aggregation."
-        );
-
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            if (token == XContentParser.Token.FIELD_NAME) {
-                currentFieldName = parser.currentName();
-            } else if (token == XContentParser.Token.VALUE_NUMBER) {
-                if (WINDOW.match(currentFieldName, parser.getDeprecationHandler())) {
-                    window = parser.intValue();
-                    if (window <= 0) {
-                        throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "["
-                                + currentFieldName
-                                + "] value must be a positive, "
-                                + "non-zero integer.  Value supplied was ["
-                                + predict
-                                + "] in ["
-                                + pipelineAggregatorName
-                                + "]."
-                        );
-                    }
-                } else if (PREDICT.match(currentFieldName, parser.getDeprecationHandler())) {
-                    predict = parser.intValue();
-                    if (predict <= 0) {
-                        throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "["
-                                + currentFieldName
-                                + "] value must be a positive integer."
-                                + "  Value supplied was ["
-                                + predict
-                                + "] in ["
-                                + pipelineAggregatorName
-                                + "]."
-                        );
-                    }
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else if (token == XContentParser.Token.VALUE_STRING) {
-                if (FORMAT.match(currentFieldName, parser.getDeprecationHandler())) {
-                    format = parser.text();
-                } else if (BUCKETS_PATH.match(currentFieldName, parser.getDeprecationHandler())) {
-                    bucketsPaths = new String[] { parser.text() };
-                } else if (GAP_POLICY.match(currentFieldName, parser.getDeprecationHandler())) {
-                    gapPolicy = GapPolicy.parse(parser.text(), parser.getTokenLocation());
-                } else if (MODEL.match(currentFieldName, parser.getDeprecationHandler())) {
-                    model = parser.text();
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else if (token == XContentParser.Token.START_ARRAY) {
-                if (BUCKETS_PATH.match(currentFieldName, parser.getDeprecationHandler())) {
-                    List<String> paths = new ArrayList<>();
-                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                        String path = parser.text();
-                        paths.add(path);
-                    }
-                    bucketsPaths = paths.toArray(new String[0]);
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else if (token == XContentParser.Token.START_OBJECT) {
-                if (SETTINGS.match(currentFieldName, parser.getDeprecationHandler())) {
-                    settings = parser.map();
-                } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
                 if (MINIMIZE.match(currentFieldName, parser.getDeprecationHandler())) {
-                    minimize = parser.booleanValue();
-                } else {
-                    throw new ParsingException(
+    }
+    }
+import java.util.List;
+ */
+        String format = null;
+     * Sets the GapPolicy to use on the output of this aggregation.
                         parser.getTokenLocation(),
-                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
-                    );
-                }
-            } else {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "Unexpected token " + token + " in [" + pipelineAggregatorName + "]."
-                );
-            }
+     * histogram. E.g "predict: 2" will return two new buckets at the end of
+                    while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+    public int hashCode() {
+     *
+ * ownership. Elasticsearch licenses this file to you under
+    ) throws IOException {
         }
-
+     */
+        if (gapPolicy == null) {
+    private static final DeprecationLogger DEPRECATION_LOGGER = DeprecationLogger.getLogger(MovAvgPipelineAggregationBuilder.class);
         if (bucketsPaths == null) {
+        return Objects.equals(format, other.format)
+import org.opensearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
+     * prediction will be spaced at the intervals specified in the
+}
+            throw new IllegalArgumentException("[model] must not be null: [" + name + "]");
+            if (token == XContentParser.Token.FIELD_NAME) {
+    public static MovAvgPipelineAggregationBuilder parse(
+                                + "non-zero integer.  Value supplied was ["
+     *            A MovAvgModel which has been prepopulated with settings
+                currentFieldName = parser.currentName();
+    public MovAvgModel model() {
+     * Sets the number of predictions that should be returned. Each
+        String[] bucketsPaths = null;
+                            "["
+        if (super.equals(obj) == false) return false;
+/*
+import org.opensearch.core.common.ParsingException;
+            // it, throw exception
+                model,
+                            parser.getTokenLocation(),
+    public MovAvgPipelineAggregationBuilder window(int window) {
             throw new ParsingException(
-                parser.getTokenLocation(),
+                    );
+        if (minimize != null && minimize && !model.canBeMinimized()) {
+ * Aggregation Builder for moving_avg
+    public int predict() {
+     * the histogram with the predicted values.
+                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
+        if (predict <= 0) {
+    protected DocValueFormat formatter() {
+/*
+        model.toXContent(builder, params);
+        }
                 "Missing required field ["
-                    + BUCKETS_PATH.getPreferredName()
-                    + "] for movingAvg aggregation ["
-                    + pipelineAggregatorName
-                    + "]"
-            );
+            } catch (ParseException exception) {
+     */
+        if (model == null) {
+                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
+     * prediction will be spaced at the intervals specified in the
+     */
+    /**
+                } else if (MODEL.match(currentFieldName, parser.getDeprecationHandler())) {
         }
-
-        MovAvgPipelineAggregationBuilder factory = new MovAvgPipelineAggregationBuilder(pipelineAggregatorName, bucketsPaths[0]);
-        if (format != null) {
-            factory.format(format);
-        }
-        if (gapPolicy != null) {
+                        );
+        // If we have a model we can validate the window now
+    }
+     *
+    protected PipelineAggregator createInternal(Map<String, Object> metadata) {
+                } else {
+        return NAME;
+import org.opensearch.search.DocValueFormat;
+        return format;
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.core.common.io.stream.StreamInput;
+     * Gets a MovAvgModel for the Moving Average. The model is used to
+     */
+                    if (window <= 0) {
+        out.writeVInt(predict);
+     * minimizing algorithm.
+        String currentFieldName = null;
+import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.GAP_POLICY;
+        this.format = format;
+                    if (predict <= 0) {
             factory.gapPolicy(gapPolicy);
+        if (format == null) {
+            throw new IllegalArgumentException("[gapPolicy] must not be null: [" + name + "]");
+    /**
+            } else if (token == XContentParser.Token.START_OBJECT) {
+            // If the user asks to minimize, but this model doesn't support
+            && Objects.equals(window, other.window)
         }
-        if (window != null) {
-            factory.window(window);
+                        paths.add(path);
+     * @param window
+    @Override
+ * software distributed under the License is distributed on an
+     * Gets the number of predictions that should be returned. Each
+                );
+    private static final ParseField WINDOW = new ParseField("window");
+    }
+    /**
+        this.model = model;
+    private String format;
+                        String path = parser.text();
+    }
+     */
+        model = in.readNamedWriteable(MovAvgModel.class);
+                        parser.getTokenLocation(),
+            );
+        context.validateParentAggSequentiallyOrdered(NAME, name);
+        if (model == null) {
+        }
+                parser.getTokenLocation(),
+            factory.format(format);
+    }
+                if (SETTINGS.match(currentFieldName, parser.getDeprecationHandler())) {
+        if (model != null) {
+        return builder;
+                if (FORMAT.match(currentFieldName, parser.getDeprecationHandler())) {
+        return Objects.hash(super.hashCode(), format, gapPolicy, window, model, predict, minimize);
+        String pipelineAggregatorName,
+                    + BUCKETS_PATH.getPreferredName()
+            factory.minimize(minimize);
+    @Override
+        } else {
+                        throw new ParsingException(
+ * KIND, either express or implied.  See the License for the
+    /**
+        }
+            } else if (token == XContentParser.Token.START_ARRAY) {
+                parser.getTokenLocation(),
+     * Sets a MovAvgModel for the Moving Average. The model is used to
+                                + "] in ["
+                } else {
+                }
+                                + "] value must be a positive integer."
+        return minimize;
+     * the histogram with the predicted values.
+     *            A MovAvgModel which has been prepopulated with settings
+                } else {
+        this.window = window;
+    public MovAvgPipelineAggregationBuilder gapPolicy(GapPolicy gapPolicy) {
+    private MovAvgModel model = new SimpleModel();
+     */
+     * define what type of moving average you want to use on the series
+    private Boolean minimize;
+     * Gets the window size for the moving average. This window will "slide"
+        // If the user doesn't set a preference for cost minimization, ask
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.xcontent.ParseFieldRegistry;
+                                + currentFieldName
+                                + pipelineAggregatorName
+            && Objects.equals(predict, other.predict)
+                    bucketsPaths = new String[] { parser.text() };
         }
         if (predict != null) {
-            factory.predict(predict);
         }
-        if (model != null) {
-            MovAvgModel.AbstractModelParser modelParser = movingAverageMdelParserRegistry.lookup(
-                model,
-                parser.getTokenLocation(),
-                parser.getDeprecationHandler()
-            );
-            MovAvgModel movAvgModel;
-            try {
-                movAvgModel = modelParser.parse(settings, pipelineAggregatorName, factory.window());
-            } catch (ParseException exception) {
-                throw new ParsingException(parser.getTokenLocation(), "Could not parse settings for model [" + model + "].", exception);
-            }
-            factory.model(movAvgModel);
+        Integer window = null;
+            } else if (token == XContentParser.Token.VALUE_STRING) {
+    /**
+    }
+    public static final ParseField SETTINGS = new ParseField("settings");
+     * Sets whether the model should be fit to the data using a cost
+        XContentParser.Token token;
+ * compatible open source license.
+                                + "]."
+        MovAvgPipelineAggregationBuilder factory = new MovAvgPipelineAggregationBuilder(pipelineAggregatorName, bucketsPaths[0]);
+    public static final String NAME = "moving_avg";
+ * SPDX-License-Identifier: Apache-2.0
+ * @opensearch.internal
+     * Read from a stream.
+        Map<String, Object> settings = null;
+    }
+     * Gets the format to use on the output of this aggregation.
+    /**
+        Boolean minimize = null;
+    /**
+            return new DocValueFormat.Decimal(format);
+                    throw new ParsingException(
+            context.addValidationError("The [" + model + "] model cannot be minimized for aggregation [" + name + "]");
         }
+        if (format != null) {
+                    );
+ * You may obtain a copy of the License at
+    @Override
+        return new MovAvgPipelineAggregator(name, bucketsPaths, formatter(), gapPolicy, window, predict, model, minimize, metadata);
+            builder.field(FORMAT.getPreferredName(), format);
+     */
+        return this;
+                if (WINDOW.match(currentFieldName, parser.getDeprecationHandler())) {
         if (minimize != null) {
-            factory.minimize(minimize);
-        }
-        return factory;
     }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), format, gapPolicy, window, model, predict, minimize);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (super.equals(obj) == false) return false;
-        MovAvgPipelineAggregationBuilder other = (MovAvgPipelineAggregationBuilder) obj;
-        return Objects.equals(format, other.format)
-            && Objects.equals(gapPolicy, other.gapPolicy)
-            && Objects.equals(window, other.window)
-            && Objects.equals(model, other.model)
-            && Objects.equals(predict, other.predict)
+                    );
             && Objects.equals(minimize, other.minimize);
+        boolean minimize = this.minimize == null ? model.minimizeByDefault() : this.minimize;
     }
-
+                    + "]"
+        builder.field(WINDOW.getPreferredName(), window);
+        predict = in.readVInt();
+    public MovAvgPipelineAggregationBuilder format(String format) {
+     */
+                    }
+    public GapPolicy gapPolicy() {
+ */
+        }
+        }
+     * Sets a MovAvgModel for the Moving Average. The model is used to
+    }
+        window = in.readVInt();
+    }
+                if (BUCKETS_PATH.match(currentFieldName, parser.getDeprecationHandler())) {
+                    window = parser.intValue();
+ *
+                } else if (BUCKETS_PATH.match(currentFieldName, parser.getDeprecationHandler())) {
+                    throw new ParsingException(
+                            parser.getTokenLocation(),
+    /**
+        GapPolicy gapPolicy = null;
+        builder.field(GAP_POLICY.getPreferredName(), gapPolicy.getName());
+     */
+    /**
+                throw new ParsingException(
+            model.validate(window, name);
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.logging.DeprecationLogger;
+        minimize = in.readOptionalBoolean();
+    public Boolean minimize() {
+        }
+        if (gapPolicy != null) {
+            } else if (token == XContentParser.Token.VALUE_NUMBER) {
+/*
+    /**
+ *
+                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
+     * Gets the GapPolicy to use on the output of this aggregation.
+        return this;
+                    gapPolicy = GapPolicy.parse(parser.text(), parser.getTokenLocation());
+            } else if (token == XContentParser.Token.VALUE_BOOLEAN) {
+            factory.window(window);
+                    predict = parser.intValue();
+                    throw new ParsingException(
+                } else if (GAP_POLICY.match(currentFieldName, parser.getDeprecationHandler())) {
+    /**
+     * across the series, and the values inside that window will be used to
+                    throw new ParsingException(
+    public MovAvgPipelineAggregationBuilder(String name, String bucketsPath) {
+    public MovAvgPipelineAggregationBuilder(StreamInput in) throws IOException {
+                        );
+        }
+     */
+        if (window != null) {
+     * Gets whether the model should be fit to the data using a cost
+            "moving_avg_aggregation",
+        this.gapPolicy = gapPolicy;
     @Override
-    public String getWriteableName() {
-        return NAME;
+                                + pipelineAggregatorName
+import org.opensearch.core.xcontent.XContentBuilder;
+        String model = null;
+ *
+            }
+            builder.field(PREDICT.getPreferredName(), predict);
+        format = in.readOptionalString();
+        this.predict = predict;
+    /**
+     *            If the model should be fit to the underlying data
+    @Override
+import java.text.ParseException;
+    @Override
+     * @param model
+        MovAvgPipelineAggregationBuilder other = (MovAvgPipelineAggregationBuilder) obj;
+import java.io.IOException;
+                } else if (PREDICT.match(currentFieldName, parser.getDeprecationHandler())) {
+        return this;
+import org.opensearch.core.xcontent.XContentParser;
+    public MovAvgPipelineAggregationBuilder modelBuilder(MovAvgModelBuilder model) {
+     *
+        // Validate any model-specific window requirements
     }
-}
+            }
+        super(name, NAME, new String[] { bucketsPath });
+     * histogram. E.g "predict: 2" will return two new buckets at the end of
+            throw new IllegalArgumentException("[window] must be a positive integer: [" + name + "]");
+    }
+     * @param minimize
+        }
+     * across the series, and the values inside that window will be used to
+                        parser.getTokenLocation(),
+    public boolean equals(Object obj) {
+            factory.model(movAvgModel);
+                }
+     * Sets the window size for the moving average. This window will "slide"
+ * specific language governing permissions and limitations
+        );
+                    model = parser.text();
+                                + "]."
+                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
+                        parser.getTokenLocation(),
+        return this;
+                        "Unknown key for a " + token + " in [" + pipelineAggregatorName + "]: [" + currentFieldName + "]."
+     * calculate the moving avg value
+import org.opensearch.core.common.io.stream.StreamOutput;
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    /**
+    }
+        return this;
+/**
+            && Objects.equals(gapPolicy, other.gapPolicy)
+import static org.opensearch.search.aggregations.pipeline.PipelineAggregator.Parser.FORMAT;
+                movAvgModel = modelParser.parse(settings, pipelineAggregatorName, factory.window());
+                }
+        Integer predict = null;
+     * @param predict
+     *
+    @Override
+        return predict;
+                    }
+     *            Number of predictions to make
+        return window;
+        if (predict > 0) {
+ */
+                                + "] value must be a positive, "
+            return DocValueFormat.RAW;
+    public MovAvgPipelineAggregationBuilder predict(int predict) {
+        out.writeNamedWriteable(model);
+                                + "  Value supplied was ["
+ * The OpenSearch Contributors require contributions made to
+ *
+    private int window = 5;
+package org.opensearch.search.aggregations.pipeline;
+    }
+        }
+                } else {
+        // what the model prefers
+        if (model != null) {
+        }
+        if (window <= 0) {
+ * not use this file except in compliance with the License.
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                                + predict
+                    "Unexpected token " + token + " in [" + pipelineAggregatorName + "]."
+                throw new ParsingException(parser.getTokenLocation(), "Could not parse settings for model [" + model + "].", exception);
+    public String format() {
+        if (obj == null || getClass() != obj.getClass()) return false;
+public class MovAvgPipelineAggregationBuilder extends AbstractPipelineAggregationBuilder<MovAvgPipelineAggregationBuilder> {
+        if (minimize != null) {
+                    List<String> paths = new ArrayList<>();
+import java.util.Objects;
+                    + pipelineAggregatorName
+    private static final ParseField MINIMIZE = new ParseField("minimize");
+    public MovAvgPipelineAggregationBuilder model(MovAvgModel model) {
+                }
+    public String getWriteableName() {
+                    }
+            );
+     * define what type of moving average you want to use on the series
+     * @param model
+        }
+ * GitHub history for details.
+ * under the License.
+            } else {
+import java.util.ArrayList;
+        return model;
+    private GapPolicy gapPolicy = GapPolicy.SKIP;
+        model.validate(window, name);
+            context.addBucketPathValidationError("must contain a single entry for aggregation [" + name + "]");
+    public int window() {
+    }
+import java.util.Map;
+        if (format != null) {
+        return this;
+     *            Size of window
+        }
+import org.opensearch.core.ParseField;
+        }
+        gapPolicy = GapPolicy.readFrom(in);
+     */
+        if (bucketsPaths.length != 1) {
+    protected XContentBuilder internalXContent(XContentBuilder builder, Params params) throws IOException {
+        return gapPolicy;
+    protected void validate(ValidationContext context) {
+ * Licensed to Elasticsearch under one or more contributor
+ */
+        super(in, NAME);
+            try {
+            builder.field(MINIMIZE.getPreferredName(), minimize);
+    private int predict = 0;
+                        throw new ParsingException(
+                    );
+            MovAvgModel.AbstractModelParser modelParser = movingAverageMdelParserRegistry.lookup(
+     */
+        DEPRECATION_LOGGER.deprecate(
+     * Sets the format to use on the output of this aggregation.
+        ParseFieldRegistry<MovAvgModel.AbstractModelParser> movingAverageMdelParserRegistry,

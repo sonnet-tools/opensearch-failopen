@@ -1,206 +1,187 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.nativebridge.spi;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
-
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
-import java.lang.management.ManagementFactory;
-
-/**
- * JMX MBean for on-demand jemalloc heap profiling.
- * <p>
- * Registered as {@code org.opensearch.native:type=HeapProfiler} in the platform MBean server.
- * The CLI tool {@code bin/opensearch-heap-prof} connects via JMX Attach API to invoke these
- * operations — no REST API or cluster settings required.
- * <p>
- * This is the native equivalent of using jcmd for JVM heap dumps.
- */
-public class NativeHeapProfiler implements NativeHeapProfilerMBean {
-
-    private static final Logger logger = LogManager.getLogger(NativeHeapProfiler.class);
-    public static final String MBEAN_NAME = "org.opensearch.native:type=HeapProfiler";
-
-    private static final MethodHandle ACTIVATE;
-    private static final MethodHandle DEACTIVATE;
-    private static final MethodHandle DUMP;
-    private static final MethodHandle RESET;
-    private static final boolean NATIVE_AVAILABLE;
-
-    static {
-        MethodHandle activate = null;
-        MethodHandle deactivate = null;
-        MethodHandle dump = null;
-        MethodHandle reset = null;
-        boolean available = false;
-        try {
-            SymbolLookup lookup = NativeLibraryLoader.symbolLookup();
-            Linker linker = Linker.nativeLinker();
-
-            FunctionDescriptor voidToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG);
-            FunctionDescriptor ptrToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
-            FunctionDescriptor longToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
-
-            activate = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_activate").orElseThrow(), voidToLong);
-            deactivate = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_deactivate").orElseThrow(), voidToLong);
-            dump = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_dump").orElseThrow(), ptrToLong);
-            reset = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_reset").orElseThrow(), longToLong);
-            available = true;
-        } catch (Throwable t) {
-            logger.warn("Native heap profiling unavailable — native library not loaded or missing symbols", t);
-        }
-        ACTIVATE = activate;
-        DEACTIVATE = deactivate;
-        DUMP = dump;
         RESET = reset;
-        NATIVE_AVAILABLE = available;
-    }
-
-    private volatile boolean active = false;
-
-    /**
-     * Registers this MBean in the platform MBean server.
-     * Called once during NativeBridgeModule initialization.
-     */
-    public static void register() {
-        try {
-            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-            ObjectName name = new ObjectName(MBEAN_NAME);
-            if (!mbs.isRegistered(name)) {
-                mbs.registerMBean(new NativeHeapProfiler(), name);
-                logger.info("Native heap profiler MBean registered: {}", MBEAN_NAME);
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to register native heap profiler MBean", e);
-        }
-    }
-
-    @Override
     public void activate() {
-        if (!NATIVE_AVAILABLE) {
-            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
         }
-        try {
+        }
             long rc = (long) ACTIVATE.invokeExact();
-            NativeLibraryLoader.checkResult(rc);
-            active = true;
-            logger.info("jemalloc heap profiling activated");
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to activate heap profiling", t);
-        }
-    }
-
-    @Override
-    public void deactivate() {
-        if (!NATIVE_AVAILABLE) {
             throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
-        }
+ *
         try {
-            long rc = (long) DEACTIVATE.invokeExact();
-            NativeLibraryLoader.checkResult(rc);
-            active = false;
-            logger.info("jemalloc heap profiling deactivated");
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to deactivate heap profiling", t);
+import java.lang.foreign.Linker;
+            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
+        if (!NATIVE_AVAILABLE) {
+package org.opensearch.nativebridge.spi;
+            throw new IllegalArgumentException("lg_prof_sample must be between 0 and 30");
+import java.lang.management.ManagementFactory;
+            deactivate = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_deactivate").orElseThrow(), voidToLong);
         }
+            logger.warn("Native heap profiling unavailable — native library not loaded or missing symbols", t);
     }
-
-    /** Allowed dump directories. Defaults to data dir only. Configurable via system property. */
-    private static volatile java.util.List<String> allowedDumpDirs = java.util.List.of();
-
-    /**
-     * Sets the allowed directories for heap dumps. Called during module initialization.
-     */
-    public static void setAllowedDumpDirs(java.util.List<String> dirs) {
-        allowedDumpDirs = java.util.List.copyOf(dirs);
-    }
-
-    @Override
-    public String dump(String path) {
-        if (path == null || path.isEmpty()) {
-            throw new IllegalArgumentException("Dump path must not be empty");
-        }
-        if (path.contains("..")) {
-            throw new IllegalArgumentException("Path traversal (..) not allowed: " + path);
-        }
-        if (!path.startsWith("/")) {
-            throw new IllegalArgumentException("Dump path must be absolute: " + path);
-        }
-        // Resolve symlinks in parent directory to prevent symlink-based escapes
-        java.nio.file.Path filePath = java.nio.file.Path.of(path);
-        java.nio.file.Path parentDir = filePath.getParent();
-        if (parentDir == null || !java.nio.file.Files.isDirectory(parentDir)) {
-            throw new IllegalArgumentException("Parent directory does not exist: " + path);
-        }
-        String resolvedPath;
-        try {
-            java.nio.file.Path realParent = parentDir.toRealPath();
-            resolvedPath = realParent.resolve(filePath.getFileName()).toString();
-        } catch (java.io.IOException e) {
-            throw new IllegalArgumentException("Cannot resolve path: " + path, e);
-        }
-        // Validate resolved path against allowed directories
-        boolean allowed = false;
-        for (String dir : allowedDumpDirs) {
-            if (resolvedPath.startsWith(dir + "/") || resolvedPath.equals(dir)) {
-                allowed = true;
-                break;
             }
-        }
-        if (!allowed) {
-            throw new IllegalArgumentException(
                 "Dump path [" + path + "] (resolved: [" + resolvedPath + "]) not under allowed directories: " + allowedDumpDirs
+    public static void setAllowedDumpDirs(java.util.List<String> dirs) {
+            logger.info("jemalloc heap profiling activated");
+        }
+            activate = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_activate").orElseThrow(), voidToLong);
+ */
+            logger.warn("Failed to register native heap profiler MBean", e);
+        return active;
+        }
+    public boolean isActive() {
+    }
+            Linker linker = Linker.nativeLinker();
+        // Resolve symlinks in parent directory to prevent symlink-based escapes
+        MethodHandle dump = null;
+        for (String dir : allowedDumpDirs) {
+     * Registers this MBean in the platform MBean server.
+    /** Allowed dump directories. Defaults to data dir only. Configurable via system property. */
+            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
+ * SPDX-License-Identifier: Apache-2.0
             );
         }
-        if (!NATIVE_AVAILABLE) {
-            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
-        }
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment cPath = arena.allocateFrom(resolvedPath);
-            long rc = (long) DUMP.invokeExact(cPath);
-            NativeLibraryLoader.checkResult(rc);
-            logger.info("jemalloc heap profile dumped to {}", resolvedPath);
-            return resolvedPath;
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to dump heap profile to " + resolvedPath, t);
-        }
-    }
-
-    @Override
-    public void reset(int lgSample) {
-        if (lgSample < 0 || lgSample > 30) {
-            throw new IllegalArgumentException("lg_prof_sample must be between 0 and 30");
-        }
-        if (!NATIVE_AVAILABLE) {
-            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
-        }
+public class NativeHeapProfiler implements NativeHeapProfilerMBean {
         try {
-            long rc = (long) RESET.invokeExact((long) lgSample);
-            NativeLibraryLoader.checkResult(rc);
-            logger.info("jemalloc profiling reset with lg_prof_sample={}", lgSample);
-        } catch (Throwable t) {
-            throw new RuntimeException("Failed to reset profiling", t);
+        MethodHandle reset = null;
+import org.apache.logging.log4j.LogManager;
+        MethodHandle deactivate = null;
+            MemorySegment cPath = arena.allocateFrom(resolvedPath);
         }
     }
-
+            active = false;
     @Override
-    public boolean isActive() {
-        return active;
+            }
+            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+            logger.info("jemalloc heap profile dumped to {}", resolvedPath);
+        }
+import javax.management.MBeanServer;
+        boolean available = false;
+ * This is the native equivalent of using jcmd for JVM heap dumps.
+            NativeLibraryLoader.checkResult(rc);
+        MethodHandle activate = null;
+            throw new IllegalArgumentException("Cannot resolve path: " + path, e);
+ * The OpenSearch Contributors require contributions made to
+            SymbolLookup lookup = NativeLibraryLoader.symbolLookup();
+    public void deactivate() {
+            if (!mbs.isRegistered(name)) {
+        if (!allowed) {
+        try (Arena arena = Arena.ofConfined()) {
+import org.apache.logging.log4j.Logger;
+    @Override
+ * Registered as {@code org.opensearch.native:type=HeapProfiler} in the platform MBean server.
+            available = true;
     }
+        }
+    @Override
+        if (lgSample < 0 || lgSample > 30) {
+import java.lang.invoke.MethodHandle;
+            java.nio.file.Path realParent = parentDir.toRealPath();
+            throw new RuntimeException("Failed to activate heap profiling", t);
+            NativeLibraryLoader.checkResult(rc);
+            throw new IllegalArgumentException(
+            FunctionDescriptor longToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG);
+ * compatible open source license.
+        NATIVE_AVAILABLE = available;
 }
+        }
+ * The CLI tool {@code bin/opensearch-heap-prof} connects via JMX Attach API to invoke these
+    }
+        }
+        }
+        } catch (Throwable t) {
+        try {
+        try {
+    }
+import java.lang.foreign.SymbolLookup;
+        try {
+import java.lang.foreign.ValueLayout;
+            throw new IllegalArgumentException("Dump path must be absolute: " + path);
+ * <p>
+            long rc = (long) RESET.invokeExact((long) lgSample);
+    private volatile boolean active = false;
+        if (!NATIVE_AVAILABLE) {
+        } catch (Throwable t) {
+    private static volatile java.util.List<String> allowedDumpDirs = java.util.List.of();
+            NativeLibraryLoader.checkResult(rc);
+            long rc = (long) DUMP.invokeExact(cPath);
+        if (parentDir == null || !java.nio.file.Files.isDirectory(parentDir)) {
+    @Override
+            resolvedPath = realParent.resolve(filePath.getFileName()).toString();
+        if (path == null || path.isEmpty()) {
+    @Override
+        }
+            throw new RuntimeException("Native heap profiling unavailable — native library not loaded");
+            throw new IllegalArgumentException("Parent directory does not exist: " + path);
+    private static final MethodHandle ACTIVATE;
+    private static final Logger logger = LogManager.getLogger(NativeHeapProfiler.class);
+        if (!path.startsWith("/")) {
+            logger.info("jemalloc heap profiling deactivated");
+        DEACTIVATE = deactivate;
+        DUMP = dump;
+        } catch (Throwable t) {
+            logger.info("jemalloc profiling reset with lg_prof_sample={}", lgSample);
+     */
+    private static final MethodHandle RESET;
+            throw new RuntimeException("Failed to reset profiling", t);
+            ObjectName name = new ObjectName(MBEAN_NAME);
+    /**
+ * <p>
+            return resolvedPath;
+            throw new RuntimeException("Failed to deactivate heap profiling", t);
+     * Called once during NativeBridgeModule initialization.
+        // Validate resolved path against allowed directories
+        boolean allowed = false;
+        }
+        ACTIVATE = activate;
+            active = true;
+/*
+            throw new RuntimeException("Failed to dump heap profile to " + resolvedPath, t);
+import java.lang.foreign.FunctionDescriptor;
+    private static final MethodHandle DEACTIVATE;
+            throw new IllegalArgumentException("Path traversal (..) not allowed: " + path);
+import java.lang.foreign.Arena;
+        if (path.contains("..")) {
+    private static final boolean NATIVE_AVAILABLE;
+ */
+    public static final String MBEAN_NAME = "org.opensearch.native:type=HeapProfiler";
+    public void reset(int lgSample) {
+        if (!NATIVE_AVAILABLE) {
+        } catch (Exception e) {
+ * operations — no REST API or cluster settings required.
+        allowedDumpDirs = java.util.List.copyOf(dirs);
+        } catch (Throwable t) {
+    private static final MethodHandle DUMP;
+    static {
+                mbs.registerMBean(new NativeHeapProfiler(), name);
+            throw new IllegalArgumentException("Dump path must not be empty");
+        }
+        if (!NATIVE_AVAILABLE) {
+        }
+    public String dump(String path) {
+    }
+    /**
+ * JMX MBean for on-demand jemalloc heap profiling.
+ * this file be licensed under the Apache-2.0 license or a
+                allowed = true;
+    }
+        java.nio.file.Path filePath = java.nio.file.Path.of(path);
+        java.nio.file.Path parentDir = filePath.getParent();
+     * Sets the allowed directories for heap dumps. Called during module initialization.
+            NativeLibraryLoader.checkResult(rc);
+import javax.management.ObjectName;
+        } catch (Throwable t) {
+            dump = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_dump").orElseThrow(), ptrToLong);
+        String resolvedPath;
+        }
+            reset = linker.downcallHandle(lookup.find("native_jemalloc_heap_prof_reset").orElseThrow(), longToLong);
+    public static void register() {
+        try {
+            if (resolvedPath.startsWith(dir + "/") || resolvedPath.equals(dir)) {
+        } catch (java.io.IOException e) {
+            FunctionDescriptor voidToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG);
+import java.lang.foreign.MemorySegment;
+     */
+            long rc = (long) DEACTIVATE.invokeExact();
+/**
+                logger.info("Native heap profiler MBean registered: {}", MBEAN_NAME);
+            FunctionDescriptor ptrToLong = FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS);
+                break;
+        }

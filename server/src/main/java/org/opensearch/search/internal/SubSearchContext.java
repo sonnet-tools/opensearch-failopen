@@ -1,380 +1,313 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.internal;
-
-import org.apache.lucene.search.Query;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.index.query.ParsedQuery;
-import org.opensearch.search.aggregations.SearchContextAggregations;
-import org.opensearch.search.collapse.CollapseContext;
-import org.opensearch.search.fetch.FetchSearchResult;
-import org.opensearch.search.fetch.StoredFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
-import org.opensearch.search.fetch.subphase.FetchFieldsContext;
-import org.opensearch.search.fetch.subphase.FetchSourceContext;
-import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
-import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.search.sort.SortAndFormats;
-import org.opensearch.search.suggest.SuggestionSearchContext;
-
-import java.util.List;
-
-/**
- * Context for a sub search phase
- *
- * @opensearch.internal
- */
-public class SubSearchContext extends FilteredSearchContext {
-
-    // By default return 3 hits per bucket. A higher default would make the response really large by default, since
-    // the to hits are returned per bucket.
     private static final int DEFAULT_SIZE = 3;
-
-    private int from;
-    private int size = DEFAULT_SIZE;
-    private SortAndFormats sort;
-    private ParsedQuery parsedQuery;
-    private Query query;
-
-    private final FetchSearchResult fetchSearchResult;
-    private final QuerySearchResult querySearchResult;
-
-    private int[] docIdsToLoad;
-    private int docsIdsToLoadFrom;
-    private int docsIdsToLoadSize;
-
-    private StoredFieldsContext storedFields;
-    private ScriptFieldsContext scriptFields;
-    private FetchSourceContext fetchSourceContext;
-    private FetchDocValuesContext docValuesContext;
-    private FetchFieldsContext fetchFieldsContext;
-    private SearchHighlightContext highlight;
-
-    private boolean explain;
-    private boolean trackScores;
-
-    private boolean includeNamedQueriesScore;
-    private boolean version;
-    private boolean seqNoAndPrimaryTerm;
-
-    public SubSearchContext(SearchContext context) {
-        super(context);
-        this.fetchSearchResult = new FetchSearchResult();
-        this.querySearchResult = new QuerySearchResult();
-    }
-
-    @Override
-    protected void doClose() {}
-
-    @Override
-    public void preProcess(boolean rewrite) {}
-
-    @Override
-    public Query buildFilteredQuery(Query query) {
-        throw new UnsupportedOperationException("this context should be read only");
-    }
-
-    @Override
-    public SearchContext aggregations(SearchContextAggregations aggregations) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public SearchHighlightContext highlight() {
-        return highlight;
-    }
-
-    @Override
-    public void highlight(SearchHighlightContext highlight) {
-        this.highlight = highlight;
-    }
-
-    @Override
-    public void suggest(SuggestionSearchContext suggest) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public boolean hasScriptFields() {
-        return scriptFields != null;
-    }
-
-    @Override
-    public ScriptFieldsContext scriptFields() {
-        if (scriptFields == null) {
-            scriptFields = new ScriptFieldsContext();
-        }
-        return this.scriptFields;
-    }
-
-    @Override
-    public boolean sourceRequested() {
-        return fetchSourceContext != null && fetchSourceContext.fetchSource();
-    }
-
-    @Override
-    public boolean hasFetchSourceContext() {
-        return fetchSourceContext != null;
-    }
-
-    @Override
-    public FetchSourceContext fetchSourceContext() {
-        return fetchSourceContext;
-    }
-
-    @Override
-    public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
-        this.fetchSourceContext = fetchSourceContext;
-        return this;
-    }
-
-    @Override
-    public FetchDocValuesContext docValuesContext() {
-        return docValuesContext;
-    }
-
-    @Override
-    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {
-        this.docValuesContext = docValuesContext;
-        return this;
-    }
-
-    @Override
-    public FetchFieldsContext fetchFieldsContext() {
-        return fetchFieldsContext;
-    }
-
-    @Override
-    public SearchContext fetchFieldsContext(FetchFieldsContext fetchFieldsContext) {
-        this.fetchFieldsContext = fetchFieldsContext;
-        return this;
-    }
-
-    @Override
-    public void timeout(TimeValue timeout) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public void terminateAfter(int terminateAfter) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public SearchContext minimumScore(float minimumScore) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public SearchContext sort(SortAndFormats sort) {
-        this.sort = sort;
-        return this;
-    }
-
-    @Override
-    public SortAndFormats sort() {
-        return sort;
-    }
-
-    @Override
-    public SearchContext parsedQuery(ParsedQuery parsedQuery) {
-        this.parsedQuery = parsedQuery;
-        if (parsedQuery != null) {
-            this.query = parsedQuery.query();
-        }
-        return this;
-    }
-
-    @Override
-    public ParsedQuery parsedQuery() {
-        return parsedQuery;
-    }
-
-    @Override
-    public Query query() {
-        return query;
-    }
-
-    @Override
-    public SearchContext trackScores(boolean trackScores) {
         this.trackScores = trackScores;
-        return this;
+        return storedFields != null && storedFields.fieldNames() != null;
+    public void groupStats(List<String> groupStats) {
     }
-
-    @Override
-    public boolean trackScores() {
-        return trackScores;
-    }
-
-    @Override
-    public SearchContext includeNamedQueriesScore(boolean includeNamedQueriesScore) {
         this.includeNamedQueriesScore = includeNamedQueriesScore;
+ * under the License.
         return this;
     }
-
-    @Override
-    public boolean includeNamedQueriesScore() {
-        return includeNamedQueriesScore;
+ * compatible open source license.
+import org.opensearch.search.fetch.subphase.ScriptFieldsContext;
+        return this;
     }
-
-    @Override
-    public SearchContext parsedPostFilter(ParsedQuery postFilter) {
-        throw new UnsupportedOperationException("Not supported");
     }
-
-    @Override
-    public int from() {
-        return from;
     }
-
+import org.opensearch.search.collapse.CollapseContext;
+    public void preProcess(boolean rewrite) {}
+ */
+    @Override
+    private boolean version;
+        return storedFields != null && storedFields.fetchFields();
+    @Override
+    @Override
+    @Override
+    }
+        return trackScores;
     @Override
     public SearchContext from(int from) {
-        this.from = from;
-        return this;
-    }
-
-    @Override
-    public int size() {
-        return size;
-    }
-
-    @Override
-    public SearchContext size(int size) {
-        this.size = size;
-        return this;
-    }
-
-    @Override
-    public boolean hasStoredFields() {
-        return storedFields != null && storedFields.fieldNames() != null;
-    }
-
-    @Override
-    public boolean hasStoredFieldsContext() {
-        return storedFields != null;
-    }
-
-    @Override
-    public boolean storedFieldsRequested() {
-        return storedFields != null && storedFields.fetchFields();
-    }
-
-    @Override
-    public StoredFieldsContext storedFieldsContext() {
-        return storedFields;
-    }
-
-    @Override
-    public SearchContext storedFieldsContext(StoredFieldsContext storedFieldsContext) {
-        this.storedFields = storedFieldsContext;
-        return this;
-    }
-
-    @Override
-    public boolean explain() {
-        return explain;
-    }
-
-    @Override
-    public void explain(boolean explain) {
-        this.explain = explain;
-    }
-
-    @Override
-    public void groupStats(List<String> groupStats) {
-        throw new UnsupportedOperationException("Not supported");
-    }
-
-    @Override
-    public boolean version() {
-        return version;
-    }
-
-    @Override
-    public void version(boolean version) {
-        this.version = version;
-    }
-
-    @Override
-    public boolean seqNoAndPrimaryTerm() {
-        return seqNoAndPrimaryTerm;
-    }
-
-    @Override
-    public void seqNoAndPrimaryTerm(boolean seqNoAndPrimaryTerm) {
-        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
-    }
-
-    @Override
-    public int[] docIdsToLoad() {
-        return docIdsToLoad;
-    }
-
-    @Override
-    public int docIdsToLoadFrom() {
-        return docsIdsToLoadFrom;
-    }
-
-    @Override
-    public int docIdsToLoadSize() {
-        return docsIdsToLoadSize;
-    }
-
-    @Override
     public SearchContext docIdsToLoad(int[] docIdsToLoad, int docsIdsToLoadFrom, int docsIdsToLoadSize) {
-        this.docIdsToLoad = docIdsToLoad;
-        this.docsIdsToLoadFrom = docsIdsToLoadFrom;
-        this.docsIdsToLoadSize = docsIdsToLoadSize;
-        return this;
+        return size;
+        if (parsedQuery != null) {
+        return docValuesContext;
+    public SortAndFormats sort() {
+    protected void doClose() {}
     }
-
-    @Override
-    public CollapseContext collapse() {
-        return null;
     }
-
+    public boolean sourceRequested() {
+    private FetchSourceContext fetchSourceContext;
+import org.opensearch.search.aggregations.SearchContextAggregations;
     @Override
-    public QuerySearchResult queryResult() {
-        return querySearchResult;
-    }
-
-    @Override
-    public FetchSearchResult fetchResult() {
-        return fetchSearchResult;
-    }
-
-    @Override
-    public long getRelativeTimeInMillis() {
-        throw new UnsupportedOperationException("Not supported");
+        this.from = from;
     }
 }
+    }
+    }
+ * KIND, either express or implied.  See the License for the
+        return query;
+        this.parsedQuery = parsedQuery;
+    public Query query() {
+import org.opensearch.search.fetch.FetchSearchResult;
+    @Override
+        this.storedFields = storedFieldsContext;
+    @Override
+    @Override
+        this.seqNoAndPrimaryTerm = seqNoAndPrimaryTerm;
+    public FetchDocValuesContext docValuesContext() {
+    @Override
+ * software distributed under the License is distributed on an
+        return this;
+    private ScriptFieldsContext scriptFields;
+    @Override
+        return docIdsToLoad;
+    public int size() {
+import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
+        this.fetchFieldsContext = fetchFieldsContext;
+    @Override
+    public void timeout(TimeValue timeout) {
+        return querySearchResult;
+    public SearchContext fetchFieldsContext(FetchFieldsContext fetchFieldsContext) {
+        return fetchSourceContext;
+    @Override
+ * license agreements. See the NOTICE file distributed with
+    }
+    public FetchSearchResult fetchResult() {
+    public void version(boolean version) {
+        return fetchSearchResult;
+        }
+    @Override
+        this.explain = explain;
+ * Modifications Copyright OpenSearch Contributors. See
+    public SearchContext sort(SortAndFormats sort) {
+import org.opensearch.common.unit.TimeValue;
+    @Override
+    public SearchContext minimumScore(float minimumScore) {
+    public SearchContext includeNamedQueriesScore(boolean includeNamedQueriesScore) {
+ * this work for additional information regarding copyright
+    }
+    }
+    }
+    @Override
+    @Override
+        return fetchFieldsContext;
+    @Override
+    }
+    public QuerySearchResult queryResult() {
+    }
+        return docsIdsToLoadSize;
+    @Override
+    }
+        this.docValuesContext = docValuesContext;
+    public int docIdsToLoadSize() {
+    private StoredFieldsContext storedFields;
+ *
+    public boolean hasScriptFields() {
+        throw new UnsupportedOperationException("Not supported");
+        throw new UnsupportedOperationException("Not supported");
+    }
+        this.sort = sort;
+    public FetchFieldsContext fetchFieldsContext() {
+    private boolean explain;
+        this.size = size;
+    }
+    }
+    public int docIdsToLoadFrom() {
+    }
+    }
+        return this;
+    }
+    private final FetchSearchResult fetchSearchResult;
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
+    public boolean seqNoAndPrimaryTerm() {
+    public void explain(boolean explain) {
+    @Override
+        return this;
+    @Override
+    @Override
+    }
+    }
+ * The OpenSearch Contributors require contributions made to
+    public boolean includeNamedQueriesScore() {
+            scriptFields = new ScriptFieldsContext();
+ * specific language governing permissions and limitations
+        return this;
+ *
+    }
+    public SearchContext parsedQuery(ParsedQuery parsedQuery) {
+        throw new UnsupportedOperationException("Not supported");
+    @Override
+        throw new UnsupportedOperationException("this context should be read only");
+        return includeNamedQueriesScore;
+ * this file be licensed under the Apache-2.0 license or a
+    }
+    public boolean version() {
+        throw new UnsupportedOperationException("Not supported");
+ * SPDX-License-Identifier: Apache-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    private boolean includeNamedQueriesScore;
+public class SubSearchContext extends FilteredSearchContext {
+    }
+ * Unless required by applicable law or agreed to in writing,
+        this.querySearchResult = new QuerySearchResult();
+        this.docIdsToLoad = docIdsToLoad;
+    public long getRelativeTimeInMillis() {
+    public SearchContext fetchSourceContext(FetchSourceContext fetchSourceContext) {
+ */
+        return fetchSourceContext != null;
+    }
+    private FetchDocValuesContext docValuesContext;
+    }
+    public FetchSourceContext fetchSourceContext() {
+        this.fetchSearchResult = new FetchSearchResult();
+    @Override
+import org.apache.lucene.search.Query;
+import org.opensearch.index.query.ParsedQuery;
+    private int size = DEFAULT_SIZE;
+    private int docsIdsToLoadFrom;
+    }
+        return highlight;
+    public SearchHighlightContext highlight() {
+    private Query query;
+    public SearchContext trackScores(boolean trackScores) {
+package org.opensearch.search.internal;
+    @Override
+    @Override
+    private SortAndFormats sort;
+    }
+        return this;
+    @Override
+    @Override
+    @Override
+    }
+        return null;
+        this.version = version;
+    @Override
+ * ownership. Elasticsearch licenses this file to you under
+    }
+        throw new UnsupportedOperationException("Not supported");
+    }
+    @Override
+    @Override
+    @Override
+ * Context for a sub search phase
+        super(context);
+    @Override
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    @Override
+        throw new UnsupportedOperationException("Not supported");
+    }
+    }
+    public SearchContext parsedPostFilter(ParsedQuery postFilter) {
+        this.docsIdsToLoadFrom = docsIdsToLoadFrom;
+    public SearchContext docValuesContext(FetchDocValuesContext docValuesContext) {
+    }
+ */
+    public void suggest(SuggestionSearchContext suggest) {
+ * GitHub history for details.
+    public boolean hasFetchSourceContext() {
+    @Override
+    private final QuerySearchResult querySearchResult;
+    @Override
+    }
+    }
+    private boolean trackScores;
+    // the to hits are returned per bucket.
+        return this;
+    public int[] docIdsToLoad() {
+    @Override
+        return this;
+import org.opensearch.search.sort.SortAndFormats;
+    @Override
+    @Override
+        return explain;
+        return version;
+    public SearchContext size(int size) {
+    public ParsedQuery parsedQuery() {
+    private SearchHighlightContext highlight;
+/**
+        return storedFields;
+    }
+    public boolean explain() {
+ * the Apache License, Version 2.0 (the "License"); you may
+        return parsedQuery;
+    private FetchFieldsContext fetchFieldsContext;
+    public boolean storedFieldsRequested() {
+    private int[] docIdsToLoad;
+    }
+/*
+    public boolean trackScores() {
+    @Override
+    public SubSearchContext(SearchContext context) {
+        return this.scriptFields;
+        return this;
+ *
+    }
+        return docsIdsToLoadFrom;
+    }
+        }
+        this.docsIdsToLoadSize = docsIdsToLoadSize;
+    public CollapseContext collapse() {
+        return scriptFields != null;
+    }
+    @Override
+    @Override
+import org.opensearch.search.fetch.subphase.FetchDocValuesContext;
+    @Override
+ */
+    @Override
+ *
+    }
+    public void highlight(SearchHighlightContext highlight) {
+ * You may obtain a copy of the License at
+    public SearchContext storedFieldsContext(StoredFieldsContext storedFieldsContext) {
+import org.opensearch.search.fetch.subphase.FetchFieldsContext;
+    private int from;
+import org.opensearch.search.fetch.StoredFieldsContext;
+        if (scriptFields == null) {
+        return fetchSourceContext != null && fetchSourceContext.fetchSource();
+ * not use this file except in compliance with the License.
+    @Override
+    @Override
+import java.util.List;
+    public void seqNoAndPrimaryTerm(boolean seqNoAndPrimaryTerm) {
+/*
+    // By default return 3 hits per bucket. A higher default would make the response really large by default, since
+        return storedFields != null;
+    @Override
+    public int from() {
+        return sort;
+        return from;
+    public StoredFieldsContext storedFieldsContext() {
+    @Override
+import org.opensearch.search.suggest.SuggestionSearchContext;
+    }
+    @Override
+    public boolean hasStoredFields() {
+        throw new UnsupportedOperationException("Not supported");
+ * Licensed to Elasticsearch under one or more contributor
+    @Override
+    private int docsIdsToLoadSize;
+    public Query buildFilteredQuery(Query query) {
+    }
+    @Override
+    private boolean seqNoAndPrimaryTerm;
+    public boolean hasStoredFieldsContext() {
+ * @opensearch.internal
+    }
+        return seqNoAndPrimaryTerm;
+    @Override
+    public void terminateAfter(int terminateAfter) {
+    public ScriptFieldsContext scriptFields() {
+        this.highlight = highlight;
+    public SearchContext aggregations(SearchContextAggregations aggregations) {
+            this.query = parsedQuery.query();
+        return this;
+    }
+    }
+    @Override
+        throw new UnsupportedOperationException("Not supported");
+/*
+    private ParsedQuery parsedQuery;
+    }
+        this.fetchSourceContext = fetchSourceContext;

@@ -1,623 +1,579 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.health;
-
-import org.opensearch.Version;
-import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
-import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.opensearch.action.admin.cluster.health.TransportClusterHealthAction;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.IndicesOptions;
-import org.opensearch.action.support.PlainActionFuture;
-import org.opensearch.cluster.ClusterName;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.node.DiscoveryNodes;
-import org.opensearch.cluster.routing.IndexRoutingTable;
-import org.opensearch.cluster.routing.IndexShardRoutingTable;
-import org.opensearch.cluster.routing.RecoverySource;
-import org.opensearch.cluster.routing.RoutingTable;
-import org.opensearch.cluster.routing.RoutingTableGenerator;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.routing.UnassignedInfo;
-import org.opensearch.cluster.routing.allocation.AllocationService;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.UUIDs;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.util.set.Sets;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.gateway.TestGatewayAllocator;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-
-import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.CLUSTER;
-import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.INDICES;
-import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.SHARDS;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.opensearch.test.ClusterServiceUtils.setState;
-import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
-
-public class ClusterStateHealthTests extends OpenSearchTestCase {
-    private final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(
-        new ThreadContext(Settings.EMPTY)
-    );
-
-    private static ThreadPool threadPool;
-
-    private ClusterService clusterService;
-    private TransportService transportService;
-
-    @BeforeClass
-    public static void setupThreadPool() {
-        threadPool = new TestThreadPool("ClusterStateHealthTests");
-    }
-
-    @Override
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        clusterService = createClusterService(threadPool);
-        CapturingTransport transport = new CapturingTransport();
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            x -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
-        );
-        transportService.start();
-        transportService.acceptIncomingRequests();
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        clusterService.close();
-        transportService.close();
-    }
-
-    @AfterClass
-    public static void terminateThreadPool() {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;
-    }
-
-    public void testClusterHealthWaitsForClusterStateApplication() throws InterruptedException, ExecutionException {
-        final CountDownLatch applyLatch = new CountDownLatch(1);
-        final CountDownLatch listenerCalled = new CountDownLatch(1);
-
-        setState(
-            clusterService,
-            ClusterState.builder(clusterService.state())
-                .nodes(DiscoveryNodes.builder(clusterService.state().nodes()).clusterManagerNodeId(null))
-                .build()
-        );
-
-        clusterService.addStateApplier(event -> {
-            listenerCalled.countDown();
-            try {
-                applyLatch.await();
-            } catch (InterruptedException e) {
-                logger.debug("interrupted", e);
-            }
-        });
-
-        logger.info("--> submit task to restore cluster-manager");
-        ClusterState currentState = clusterService.getClusterApplierService().state();
-        clusterService.getClusterApplierService()
-            .onNewClusterState(
-                "restore cluster-manager",
-                () -> ClusterState.builder(currentState)
-                    .nodes(DiscoveryNodes.builder(currentState.nodes()).clusterManagerNodeId(currentState.nodes().getLocalNodeId()))
-                    .build(),
-                (source, e) -> {}
-            );
-
-        logger.info("--> waiting for listener to be called and cluster state being blocked");
-        listenerCalled.await();
-
-        TransportClusterHealthAction action = new TransportClusterHealthAction(
-            transportService,
-            clusterService,
-            threadPool,
-            new ActionFilters(new HashSet<>()),
-            indexNameExpressionResolver,
-            new AllocationService(null, new TestGatewayAllocator(), null, null, null),
-            null
-        );
-        PlainActionFuture<ClusterHealthResponse> listener = new PlainActionFuture<>();
-        action.execute(new ClusterHealthRequest().waitForGreenStatus(), listener);
-
-        assertFalse(listener.isDone());
-
-        logger.info("--> realising task to restore cluster-manager");
-        applyLatch.countDown();
-        listener.get();
-    }
-
-    public void testClusterHealth() throws IOException {
-        RoutingTableGenerator routingTableGenerator = new RoutingTableGenerator();
-        RoutingTableGenerator.ShardCounter counter = new RoutingTableGenerator.ShardCounter();
-        RoutingTable.Builder routingTable = RoutingTable.builder();
-        Metadata.Builder metadata = Metadata.builder();
-        for (int i = randomInt(4); i >= 0; i--) {
-            int numberOfShards = randomInt(3) + 1;
-            int numberOfReplicas = randomInt(4);
-            IndexMetadata indexMetadata = IndexMetadata.builder("test_" + Integer.toString(i))
-                .settings(settings(Version.CURRENT))
-                .numberOfShards(numberOfShards)
-                .numberOfReplicas(numberOfReplicas)
-                .build();
-            IndexRoutingTable indexRoutingTable = routingTableGenerator.genIndexRoutingTable(indexMetadata, counter);
-            metadata.put(indexMetadata, true);
-            routingTable.add(indexRoutingTable);
-        }
-        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
-            .metadata(metadata)
-            .routingTable(routingTable.build())
-            .nodes(clusterService.state().nodes())
-            .build();
-        String[] concreteIndices = indexNameExpressionResolver.concreteIndexNames(
-            clusterState,
-            IndicesOptions.strictExpand(),
-            (String[]) null
-        );
-        ClusterStateHealth clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices);
-        logger.info("cluster status: {}, expected {}", clusterStateHealth.getStatus(), counter.status());
-        clusterStateHealth = maybeSerialize(clusterStateHealth);
-        assertThat(
-            clusterStateHealth.hasDiscoveredClusterManager(),
-            equalTo(clusterService.state().nodes().getClusterManagerNodeId() != null)
-        );
-        assertClusterHealth(clusterStateHealth, counter, SHARDS);
-        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, ClusterHealthRequest.Level.CLUSTER);
-        assertClusterHealth(clusterStateHealth, counter, CLUSTER);
-        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, INDICES);
-        assertClusterHealth(clusterStateHealth, counter, INDICES);
-        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, SHARDS);
-        assertClusterHealth(clusterStateHealth, counter, SHARDS);
-    }
-
-    public void testClusterHealthOnIndexCreation() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        final List<ClusterState> clusterStates = simulateIndexCreationStates(indexName, false);
-        for (int i = 0; i < clusterStates.size(); i++) {
-            // make sure cluster health is always YELLOW, up until the last state where it should be GREEN
-            final ClusterState clusterState = clusterStates.get(i);
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            if (i < clusterStates.size() - 1) {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-            } else {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
-            }
-        }
-    }
-
-    public void testClusterHealthOnIndexCreationWithFailedAllocations() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        final List<ClusterState> clusterStates = simulateIndexCreationStates(indexName, true);
-        for (int i = 0; i < clusterStates.size(); i++) {
-            // make sure cluster health is YELLOW up until the final cluster state, which contains primary shard
-            // failed allocations that should make the cluster health RED
-            final ClusterState clusterState = clusterStates.get(i);
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            if (i < clusterStates.size() - 1) {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-            } else {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
-            }
-        }
-    }
-
-    public void testClusterHealthOnClusterRecovery() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, false, false);
-        for (int i = 0; i < clusterStates.size(); i++) {
-            // make sure cluster health is YELLOW up until the final cluster state, when it turns GREEN
-            final ClusterState clusterState = clusterStates.get(i);
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            if (i < clusterStates.size() - 1) {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-            } else {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
-            }
-        }
-    }
-
-    public void testClusterHealthOnClusterRecoveryWithFailures() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, false, true);
-        for (int i = 0; i < clusterStates.size(); i++) {
-            // make sure cluster health is YELLOW up until the final cluster state, which contains primary shard
-            // failed allocations that should make the cluster health RED
-            final ClusterState clusterState = clusterStates.get(i);
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            if (i < clusterStates.size() - 1) {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-            } else {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
-            }
-        }
-    }
-
-    public void testClusterHealthOnClusterRecoveryWithPreviousAllocationIds() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, true, false);
-        for (int i = 0; i < clusterStates.size(); i++) {
-            // because there were previous allocation ids, we should be RED until the primaries are started,
-            // then move to YELLOW, and the last state should be GREEN when all shards have been started
-            final ClusterState clusterState = clusterStates.get(i);
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            if (i < clusterStates.size() - 1) {
-                // if the inactive primaries are due solely to recovery (not failed allocation or previously being allocated),
-                // then cluster health is YELLOW, otherwise RED
-                if (primaryInactiveDueToRecovery(indexName, clusterState)) {
-                    assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-                } else {
-                    assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
-                }
-            } else {
-                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
-            }
-        }
-    }
-
-    public void testClusterHealthOnClusterRecoveryWithPreviousAllocationIdsAndAllocationFailures() {
-        final String indexName = "test-idx";
-        final String[] indices = new String[] { indexName };
-        for (final ClusterState clusterState : simulateClusterRecoveryStates(indexName, true, true)) {
-            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
-            // if the inactive primaries are due solely to recovery (not failed allocation or previously being allocated)
-            // then cluster health is YELLOW, otherwise RED
-            if (primaryInactiveDueToRecovery(indexName, clusterState)) {
-                assertThat("clusterState is:\n" + clusterState, health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
-            } else {
-                assertThat("clusterState is:\n" + clusterState, health.getStatus(), equalTo(ClusterHealthStatus.RED));
-            }
-        }
-    }
-
-    ClusterStateHealth maybeSerialize(ClusterStateHealth clusterStateHealth) throws IOException {
-        if (randomBoolean()) {
-            BytesStreamOutput out = new BytesStreamOutput();
-            clusterStateHealth.writeTo(out);
-            StreamInput in = out.bytes().streamInput();
-            clusterStateHealth = new ClusterStateHealth(in);
-        }
-        return clusterStateHealth;
-    }
-
-    private List<ClusterState> simulateIndexCreationStates(final String indexName, final boolean withPrimaryAllocationFailures) {
-        final int numberOfShards = randomIntBetween(1, 5);
-        final int numberOfReplicas = randomIntBetween(1, numberOfShards);
-        // initial index creation and new routing table info
-        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(settings(Version.CURRENT).put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()))
-            .numberOfShards(numberOfShards)
-            .numberOfReplicas(numberOfReplicas)
-            .build();
-        final Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
-        final RoutingTable routingTable = RoutingTable.builder().addAsNew(indexMetadata).build();
-
-        ClusterState clusterState = ClusterState.builder(new ClusterName("test_cluster"))
-            .metadata(metadata)
-            .routingTable(routingTable)
-            .build();
-        return generateClusterStates(clusterState, indexName, numberOfReplicas, withPrimaryAllocationFailures);
-    }
-
     private List<ClusterState> simulateClusterRecoveryStates(
-        final String indexName,
-        final boolean withPreviousAllocationIds,
-        final boolean withPrimaryAllocationFailures
-    ) {
-        final int numberOfShards = randomIntBetween(1, 5);
-        final int numberOfReplicas = randomIntBetween(1, numberOfShards);
-        // initial index creation and new routing table info
-        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
-            .settings(settings(Version.CURRENT).put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()))
-            .numberOfShards(numberOfShards)
-            .numberOfReplicas(numberOfReplicas)
-            .state(IndexMetadata.State.OPEN)
-            .build();
-        if (withPreviousAllocationIds) {
-            final IndexMetadata.Builder idxMetaWithAllocationIds = IndexMetadata.builder(indexMetadata);
-            boolean atLeastOne = false;
-            for (int i = 0; i < numberOfShards; i++) {
-                if (atLeastOne == false || randomBoolean()) {
-                    idxMetaWithAllocationIds.putInSyncAllocationIds(i, Sets.newHashSet(UUIDs.randomBase64UUID()));
-                    atLeastOne = true;
-                }
-            }
-            indexMetadata = idxMetaWithAllocationIds.build();
         }
-        final Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
-        final RoutingTable routingTable = RoutingTable.builder().addAsRecovery(indexMetadata).build();
-
-        ClusterState clusterState = ClusterState.builder(new ClusterName("test_cluster"))
-            .metadata(metadata)
-            .routingTable(routingTable)
-            .build();
-        return generateClusterStates(clusterState, indexName, numberOfReplicas, withPrimaryAllocationFailures);
     }
-
-    private List<ClusterState> generateClusterStates(
-        final ClusterState originalClusterState,
-        final String indexName,
-        final int numberOfReplicas,
-        final boolean withPrimaryAllocationFailures
-    ) {
-        // generate random node ids
-        final Set<String> nodeIds = new HashSet<>();
-        final int numNodes = randomIntBetween(numberOfReplicas + 1, 10);
-        for (int i = 0; i < numNodes; i++) {
-            nodeIds.add(randomAlphaOfLength(8));
+                .nodes(DiscoveryNodes.builder(clusterService.state().nodes()).clusterManagerNodeId(null))
+        for (int i = 0; i < clusterStates.size(); i++) {
         }
-
-        final List<ClusterState> clusterStates = new ArrayList<>();
-        clusterStates.add(originalClusterState);
+    @After
+import java.util.concurrent.TimeUnit;
+                Collection<ClusterIndexHealth> clusterIndexHealths = clusterStateHealth.getIndices().values();
+        for (int i = 0; i < clusterStates.size(); i++) {
+            .numberOfShards(numberOfShards)
+    }
+                } else {
+import org.opensearch.cluster.routing.RoutingTable;
+    public void testClusterHealthOnIndexCreationWithFailedAllocations() {
+                "restore cluster-manager",
+        for (final var shardRouting : clusterState.routingTable().index(indexName).shards().entrySet()) {
+        clusterStates.add(clusterState);
+        return generateClusterStates(clusterState, indexName, numberOfReplicas, withPrimaryAllocationFailures);
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+            metadata.put(indexMetadata, true);
+            x -> clusterService.localNode(),
+ *
+        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, false, true);
+ */
+/*
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
         ClusterState clusterState = originalClusterState;
-
-        // initialize primaries
-        RoutingTable routingTable = originalClusterState.routingTable();
         IndexRoutingTable indexRoutingTable = routingTable.index(indexName);
-        IndexRoutingTable.Builder newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        for (final var shardEntry : indexRoutingTable.getShards().values()) {
-            final IndexShardRoutingTable shardRoutingTable = shardEntry;
-            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary()) {
-                    newIndexRoutingTable.addShard(shardRouting.initialize(randomFrom(nodeIds), null, shardRouting.getExpectedShardSize()));
+                logger.debug("interrupted", e);
+        for (int i = 0; i < clusterStates.size(); i++) {
                 } else {
-                    newIndexRoutingTable.addShard(shardRouting);
-                }
-            }
-        }
-        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
-        clusterStates.add(clusterState);
-
-        // some primaries started
-        indexRoutingTable = routingTable.index(indexName);
-        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        Map<Integer, Set<String>> allocationIds = new HashMap<>();
-        for (var shardEntry : indexRoutingTable.getShards().values()) {
-            final IndexShardRoutingTable shardRoutingTable = shardEntry;
-            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary() && randomBoolean()) {
-                    final ShardRouting newShardRouting = shardRouting.moveToStarted();
-                    allocationIds.put(newShardRouting.getId(), Set.of(newShardRouting.allocationId().getId()));
-                    newIndexRoutingTable.addShard(newShardRouting);
-                } else {
-                    newIndexRoutingTable.addShard(shardRouting);
-                }
-            }
-        }
-        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-        final IndexMetadata.Builder idxMetaBuilder = IndexMetadata.builder(clusterState.metadata().index(indexName));
-        allocationIds.forEach(idxMetaBuilder::putInSyncAllocationIds);
-        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.metadata()).put(idxMetaBuilder);
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).metadata(metadataBuilder).build();
-        clusterStates.add(clusterState);
-
-        if (withPrimaryAllocationFailures) {
-            boolean alreadyFailedPrimary = false;
-            // some primaries failed to allocate
-            indexRoutingTable = routingTable.index(indexName);
-            newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-            for (final var shardEntry : indexRoutingTable.getShards().values()) {
-                final IndexShardRoutingTable shardRoutingTable = shardEntry;
-                for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                    if (shardRouting.primary() && (shardRouting.started() == false || alreadyFailedPrimary == false)) {
-                        newIndexRoutingTable.addShard(
-                            shardRouting.moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "unlucky shard"))
-                        );
-                        alreadyFailedPrimary = true;
-                    } else {
-                        newIndexRoutingTable.addShard(shardRouting);
-                    }
-                }
-            }
-            routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-            clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
-            return clusterStates;
-        }
-
-        // all primaries started
-        indexRoutingTable = routingTable.index(indexName);
-        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        allocationIds = new HashMap<>();
-        for (final var shardEntry : indexRoutingTable.getShards().values()) {
-            final IndexShardRoutingTable shardRoutingTable = shardEntry;
-            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary() && shardRouting.started() == false) {
-                    final ShardRouting newShardRouting = shardRouting.moveToStarted();
-                    allocationIds.put(newShardRouting.getId(), Set.of(newShardRouting.allocationId().getId()));
-                    newIndexRoutingTable.addShard(newShardRouting);
-                } else {
-                    newIndexRoutingTable.addShard(shardRouting);
-                }
-            }
-        }
-        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-        final IndexMetadata.Builder idxMetaBuilder2 = IndexMetadata.builder(clusterState.metadata().index(indexName));
-        allocationIds.forEach(idxMetaBuilder2::putInSyncAllocationIds);
-        metadataBuilder = Metadata.builder(clusterState.metadata()).put(idxMetaBuilder2);
-        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).metadata(metadataBuilder).build();
-        clusterStates.add(clusterState);
-
+            if (primaryShard.active() == false) {
+                (source, e) -> {}
         // initialize replicas
-        indexRoutingTable = routingTable.index(indexName);
-        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        for (final var shardEntry : indexRoutingTable.getShards().values()) {
-            final IndexShardRoutingTable shardRoutingTable = shardEntry;
-            final String primaryNodeId = shardRoutingTable.primaryShard().currentNodeId();
-            Set<String> allocatedNodes = new HashSet<>();
-            allocatedNodes.add(primaryNodeId);
             for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary() == false) {
-                    // give the replica a different node id than the primary
-                    String replicaNodeId = randomFrom(Sets.difference(nodeIds, allocatedNodes));
-                    newIndexRoutingTable.addShard(shardRouting.initialize(replicaNodeId, null, shardRouting.getExpectedShardSize()));
-                    allocatedNodes.add(replicaNodeId);
-                } else {
-                    newIndexRoutingTable.addShard(shardRouting);
-                }
-            }
-        }
-        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-        clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
-
+            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
+import java.util.HashMap;
+import org.opensearch.cluster.routing.UnassignedInfo;
+        Map<Integer, Set<String>> allocationIds = new HashMap<>();
+        threadPool = null;
+        TransportClusterHealthAction action = new TransportClusterHealthAction(
+        final String[] indices = new String[] { indexName };
+            } catch (InterruptedException e) {
+            clusterState,
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
+            final IndexShardRoutingTable shardRoutingTable = shardEntry;
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
+        RoutingTable routingTable = originalClusterState.routingTable();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
         // some replicas started
-        indexRoutingTable = routingTable.index(indexName);
-        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+            Collections.emptySet(),
+        clusterService = createClusterService(threadPool);
             final IndexShardRoutingTable shardRoutingTable = shardEntry;
-            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary() == false && randomBoolean()) {
-                    newIndexRoutingTable.addShard(shardRouting.moveToStarted());
-                } else {
-                    newIndexRoutingTable.addShard(shardRouting);
+import org.opensearch.action.support.IndicesOptions;
                 }
-            }
-        }
+                    } else {
+            final IndexShardRoutingTable shardRoutingTable = shardEntry;
         routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-        clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
-
-        // all replicas started
-        boolean replicaStateChanged = false;
-        indexRoutingTable = routingTable.index(indexName);
-        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
-        for (final var shardEntry : indexRoutingTable.getShards().values()) {
-            final IndexShardRoutingTable shardRoutingTable = shardEntry;
+        // initial index creation and new routing table info
+            }
+                }
+                    atLeastOne = true;
+import java.util.HashSet;
+        final String indexName,
+ * SPDX-License-Identifier: Apache-2.0
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
+    }
+        final CountDownLatch applyLatch = new CountDownLatch(1);
+        return clusterStateHealth;
+        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+        }
+                if (primaryInactiveDueToRecovery(indexName, clusterState)) {
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
             for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
-                if (shardRouting.primary() == false && shardRouting.started() == false) {
-                    newIndexRoutingTable.addShard(shardRouting.moveToStarted());
-                    replicaStateChanged = true;
+                    newIndexRoutingTable.addShard(shardRouting.initialize(replicaNodeId, null, shardRouting.getExpectedShardSize()));
+        indexRoutingTable = routingTable.index(indexName);
+        super.setUp();
+            // then cluster health is YELLOW, otherwise RED
+ * The OpenSearch Contributors require contributions made to
+    public void tearDown() throws Exception {
+public class ClusterStateHealthTests extends OpenSearchTestCase {
+                    allocationIds.put(newShardRouting.getId(), Set.of(newShardRouting.allocationId().getId()));
+    // (not because of allocation of existing shard or previously having allocation ids assigned)
+        final IndexMetadata.Builder idxMetaBuilder = IndexMetadata.builder(clusterState.metadata().index(indexName));
+import org.opensearch.test.gateway.TestGatewayAllocator;
+        metadataBuilder = Metadata.builder(clusterState.metadata()).put(idxMetaBuilder2);
+            (String[]) null
+            assertTrue(clusterStateHealth.getIndices().isEmpty());
+        assertThat(clusterStateHealth.getActiveShards(), equalTo(counter.active));
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).metadata(metadataBuilder).build();
+    public void testClusterHealthOnClusterRecoveryWithFailures() {
+            IndexMetadata indexMetadata = IndexMetadata.builder("test_" + Integer.toString(i))
+    }
+        assertThat(clusterStateHealth.getInitializingShards(), equalTo(counter.initializing));
+        );
+            // make sure cluster health is always YELLOW, up until the last state where it should be GREEN
+import org.opensearch.cluster.routing.ShardRouting;
+        return true;
+import org.opensearch.common.settings.Settings;
+        final String[] indices = new String[] { indexName };
+        if (randomBoolean()) {
+            boolean atLeastOne = false;
+    private List<ClusterState> simulateIndexCreationStates(final String indexName, final boolean withPrimaryAllocationFailures) {
+        threadPool = new TestThreadPool("ClusterStateHealthTests");
+    public static void terminateThreadPool() {
+import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.SHARDS;
+    private final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(
+            final IndexShardRoutingTable shardRoutingTable = shardEntry;
+            routingTable.add(indexRoutingTable);
+            .state(IndexMetadata.State.OPEN)
+        assertThat(clusterStateHealth.getUnassignedShards(), equalTo(counter.unassigned));
+        }
+        indexRoutingTable = routingTable.index(indexName);
+ * not use this file except in compliance with the License.
+            // make sure cluster health is YELLOW up until the final cluster state, which contains primary shard
+            }
+import org.opensearch.cluster.routing.IndexShardRoutingTable;
+        if (replicaStateChanged) {
+        final CountDownLatch listenerCalled = new CountDownLatch(1);
+        }
+import org.opensearch.Version;
+            clusterService,
+                final IndexShardRoutingTable shardRoutingTable = shardEntry;
+        assertThat(clusterStateHealth.getRelocatingShards(), equalTo(counter.relocating));
+            allocatedNodes.add(primaryNodeId);
+            .routingTable(routingTable)
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
+                }
+            final IndexShardRoutingTable shardRoutingTable = shardEntry;
+    ClusterStateHealth maybeSerialize(ClusterStateHealth clusterStateHealth) throws IOException {
+import org.opensearch.cluster.routing.RecoverySource;
+}
+import org.opensearch.transport.TransportService;
+        for (final ClusterState clusterState : simulateClusterRecoveryStates(indexName, true, true)) {
+        clusterStates.add(clusterState);
+        final String[] indices = new String[] { indexName };
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
+        clusterStates.add(clusterState);
+ * KIND, either express or implied.  See the License for the
                 } else {
+            final ClusterState clusterState = clusterStates.get(i);
+            .routingTable(routingTable)
+                        alreadyFailedPrimary = true;
+        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
+import org.junit.BeforeClass;
+        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, SHARDS);
+                    newIndexRoutingTable.addShard(shardRouting.moveToStarted());
+        // initial index creation and new routing table info
+        final int numNodes = randomIntBetween(numberOfReplicas + 1, 10);
+                    String replicaNodeId = randomFrom(Sets.difference(nodeIds, allocatedNodes));
+                applyLatch.await();
+        }
+            null,
+            ClusterState.builder(clusterService.state())
+        assertThat(clusterStateHealth.getActivePrimaryShards(), equalTo(counter.primaryActive));
+    }
+                        newIndexRoutingTable.addShard(
+            .nodes(clusterService.state().nodes())
+                    idxMetaWithAllocationIds.putInSyncAllocationIds(i, Sets.newHashSet(UUIDs.randomBase64UUID()));
+        final IndexMetadata indexMetadata = IndexMetadata.builder(indexName)
+            if (i < clusterStates.size() - 1) {
                     newIndexRoutingTable.addShard(shardRouting);
+            final ClusterState clusterState = clusterStates.get(i);
+import org.opensearch.cluster.routing.RoutingTableGenerator;
+    }
+            .numberOfReplicas(numberOfReplicas)
+                .build();
+        );
                 }
             }
+/*
+                    newIndexRoutingTable.addShard(shardRouting);
+        final Set<String> nodeIds = new HashSet<>();
+            .onNewClusterState(
+        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+ * Unless required by applicable law or agreed to in writing,
+        ClusterState clusterState = ClusterState.builder(new ClusterName("test_cluster"))
+    }
+            );
+import static org.hamcrest.Matchers.is;
+            newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+        );
+        ClusterState clusterState = ClusterState.builder(new ClusterName("test_cluster"))
+            BytesStreamOutput out = new BytesStreamOutput();
+        assertClusterHealth(clusterStateHealth, counter, CLUSTER);
+                } else {
+            final IndexMetadata.Builder idxMetaWithAllocationIds = IndexMetadata.builder(indexMetadata);
+        final Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
+            } else {
+        transportService.start();
         }
         // all of the replicas may have moved to started in the previous phase already
-        if (replicaStateChanged) {
-            routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
-            clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
-        }
-
-        return clusterStates;
-    }
-
+            final ClusterState clusterState = clusterStates.get(i);
+        final List<ClusterState> clusterStates = simulateIndexCreationStates(indexName, true);
+ */
+import static org.opensearch.test.ClusterServiceUtils.setState;
     // returns true if the inactive primaries in the index are only due to cluster recovery
-    // (not because of allocation of existing shard or previously having allocation ids assigned)
-    private boolean primaryInactiveDueToRecovery(final String indexName, final ClusterState clusterState) {
-        for (final var shardRouting : clusterState.routingTable().index(indexName).shards().entrySet()) {
-            final ShardRouting primaryShard = shardRouting.getValue().primaryShard();
-            if (primaryShard.active() == false) {
-                if (clusterState.metadata().index(indexName).inSyncAllocationIds(shardRouting.getKey()).isEmpty() == false) {
-                    return false;
-                }
-                if (primaryShard.recoverySource() != null
-                    && primaryShard.recoverySource().getType() == RecoverySource.Type.EXISTING_STORE) {
-                    return false;
-                }
-                if (primaryShard.unassignedInfo().getNumFailedAllocations() > 0) {
-                    return false;
-                }
-                if (primaryShard.unassignedInfo().getLastAllocationStatus() == UnassignedInfo.AllocationStatus.DECIDERS_NO) {
-                    return false;
-                }
-            }
-        }
-        return true;
+            indexMetadata = idxMetaWithAllocationIds.build();
+ * You may obtain a copy of the License at
+    private ClusterService clusterService;
+                } else {
+                    allocationIds.put(newShardRouting.getId(), Set.of(newShardRouting.allocationId().getId()));
+            if (i < clusterStates.size() - 1) {
+            // failed allocations that should make the cluster health RED
+        final String indexName = "test-idx";
+import org.opensearch.action.admin.cluster.health.TransportClusterHealthAction;
     }
-
-    private void assertClusterHealth(
-        ClusterStateHealth clusterStateHealth,
-        RoutingTableGenerator.ShardCounter counter,
-        ClusterHealthRequest.Level level
-    ) {
-        assertThat(clusterStateHealth.getStatus(), equalTo(counter.status()));
-        assertThat(clusterStateHealth.getActiveShards(), equalTo(counter.active));
-        assertThat(clusterStateHealth.getActivePrimaryShards(), equalTo(counter.primaryActive));
-        assertThat(clusterStateHealth.getInitializingShards(), equalTo(counter.initializing));
-        assertThat(clusterStateHealth.getRelocatingShards(), equalTo(counter.relocating));
-        assertThat(clusterStateHealth.getUnassignedShards(), equalTo(counter.unassigned));
-        assertThat(clusterStateHealth.getActiveShardsPercent(), is(allOf(greaterThanOrEqualTo(0.0), lessThanOrEqualTo(100.0))));
-        if (level.equals(INDICES) || level.equals(SHARDS)) {
-            assertTrue(clusterStateHealth.getIndices().size() > 0);
-            if (level.equals(SHARDS)) {
-                Collection<ClusterIndexHealth> clusterIndexHealths = clusterStateHealth.getIndices().values();
-                for (ClusterIndexHealth clusterIndexHealth : clusterIndexHealths) {
                     assertFalse(clusterIndexHealth.getShards().isEmpty());
+import static org.hamcrest.CoreMatchers.equalTo;
+        assertClusterHealth(clusterStateHealth, counter, SHARDS);
+        // some primaries started
+        logger.info("--> realising task to restore cluster-manager");
+import org.opensearch.cluster.metadata.IndexMetadata;
+package org.opensearch.cluster.health;
+        RoutingTableGenerator routingTableGenerator = new RoutingTableGenerator();
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
+        clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
+            // then move to YELLOW, and the last state should be GREEN when all shards have been started
+        if (level.equals(INDICES) || level.equals(SHARDS)) {
+    @Before
+        listener.get();
+    public void testClusterHealthWaitsForClusterStateApplication() throws InterruptedException, ExecutionException {
                 }
-            }
-        } else {
-            assertTrue(clusterStateHealth.getIndices().isEmpty());
+        final String[] indices = new String[] { indexName };
+        assertThat(
+                }
+        ClusterStateHealth clusterStateHealth,
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.GREEN));
+    ) {
+            } else {
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
+        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, INDICES);
+            .build();
+import java.util.Set;
+        final boolean withPreviousAllocationIds,
         }
+            threadPool,
+                    newIndexRoutingTable.addShard(shardRouting);
+            }
+import org.opensearch.threadpool.TestThreadPool;
+        allocationIds.forEach(idxMetaBuilder::putInSyncAllocationIds);
+        clusterService.getClusterApplierService()
+        indexRoutingTable = routingTable.index(indexName);
+import java.util.ArrayList;
+            }
+        }
+    public void testClusterHealthOnClusterRecoveryWithPreviousAllocationIds() {
+                    }
+    private List<ClusterState> generateClusterStates(
+        listenerCalled.await();
+                assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
+        clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices, ClusterHealthRequest.Level.CLUSTER);
+            null
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+ * this work for additional information regarding copyright
+                    assertThat(health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
+                }
+        );
+            .build();
+        final String indexName = "test-idx";
+import org.opensearch.cluster.ClusterName;
+            }
+            if (primaryInactiveDueToRecovery(indexName, clusterState)) {
+        RoutingTableGenerator.ShardCounter counter,
+            IndexRoutingTable indexRoutingTable = routingTableGenerator.genIndexRoutingTable(indexMetadata, counter);
+                    allocatedNodes.add(replicaNodeId);
+import org.opensearch.common.util.concurrent.ThreadContext;
+    @Override
+                    final ShardRouting newShardRouting = shardRouting.moveToStarted();
+        clusterState = ClusterState.builder(clusterState).routingTable(routingTable).metadata(metadataBuilder).build();
+    private boolean primaryInactiveDueToRecovery(final String indexName, final ClusterState clusterState) {
+                }
+            for (final var shardEntry : indexRoutingTable.getShards().values()) {
+    private void assertClusterHealth(
     }
-}
+        }
+            if (i < clusterStates.size() - 1) {
+ * ownership. Elasticsearch licenses this file to you under
+        final String indexName,
+        final RoutingTable routingTable = RoutingTable.builder().addAsRecovery(indexMetadata).build();
+import org.opensearch.action.admin.cluster.health.ClusterHealthResponse;
+            for (int i = 0; i < numberOfShards; i++) {
+            }
+            int numberOfReplicas = randomInt(4);
+import org.opensearch.cluster.routing.IndexRoutingTable;
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+                        newIndexRoutingTable.addShard(shardRouting);
+            equalTo(clusterService.state().nodes().getClusterManagerNodeId() != null)
+            NoopTracer.INSTANCE
+import org.junit.AfterClass;
+                .build()
+        new ThreadContext(Settings.EMPTY)
+        final String indexName = "test-idx";
+            } else {
+            clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
+        final int numberOfReplicas = randomIntBetween(1, numberOfShards);
+    }
+        final int numberOfReplicas,
+        transportService.close();
+            nodeIds.add(randomAlphaOfLength(8));
+                .numberOfShards(numberOfShards)
+            StreamInput in = out.bytes().streamInput();
+            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
+import java.io.IOException;
+            .settings(settings(Version.CURRENT).put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()))
+            }
+                }
+        // generate random node ids
+                } else {
+        } else {
+import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.INDICES;
+            routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+            final String primaryNodeId = shardRoutingTable.primaryShard().currentNodeId();
+            .routingTable(routingTable.build())
+ */
+        ClusterStateHealth clusterStateHealth = new ClusterStateHealth(clusterState, concreteIndices);
+        assertClusterHealth(clusterStateHealth, counter, SHARDS);
+                    && primaryShard.recoverySource().getType() == RecoverySource.Type.EXISTING_STORE) {
+            new ActionFilters(new HashSet<>()),
+import org.opensearch.cluster.routing.allocation.AllocationService;
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+ * specific language governing permissions and limitations
+        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+            } else {
+            final IndexShardRoutingTable shardRoutingTable = shardEntry;
+    ) {
+                }
+        }
+        clusterService.addStateApplier(event -> {
+        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+                    newIndexRoutingTable.addShard(shardRouting.initialize(randomFrom(nodeIds), null, shardRouting.getExpectedShardSize()));
+                if (shardRouting.primary() && randomBoolean()) {
+    @AfterClass
+        final int numberOfShards = randomIntBetween(1, 5);
+        final boolean withPrimaryAllocationFailures
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import org.junit.Before;
+        }
+                }
+        final String indexName = "test-idx";
+            final ClusterState clusterState = clusterStates.get(i);
+            // some primaries failed to allocate
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    public void testClusterHealth() throws IOException {
+            .metadata(metadata)
+        assertThat(clusterStateHealth.getActiveShardsPercent(), is(allOf(greaterThanOrEqualTo(0.0), lessThanOrEqualTo(100.0))));
+                // if the inactive primaries are due solely to recovery (not failed allocation or previously being allocated),
+        transportService = transport.createTransportService(
+        for (int i = 0; i < clusterStates.size(); i++) {
+            .build();
+                    assertThat(health.getStatus(), equalTo(ClusterHealthStatus.RED));
+            .numberOfShards(numberOfShards)
+import static org.opensearch.action.admin.cluster.health.ClusterHealthRequest.Level.CLUSTER;
+        routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+        logger.info("--> waiting for listener to be called and cluster state being blocked");
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+                    .build(),
+        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, false, false);
+ * the Apache License, Version 2.0 (the "License"); you may
+        logger.info("--> submit task to restore cluster-manager");
+        applyLatch.countDown();
+            } else {
+        indexRoutingTable = routingTable.index(indexName);
+                    newIndexRoutingTable.addShard(newShardRouting);
+        assertFalse(listener.isDone());
+        boolean replicaStateChanged = false;
+import org.opensearch.cluster.node.DiscoveryNodes;
+            clusterStateHealth.hasDiscoveredClusterManager(),
+        RoutingTable.Builder routingTable = RoutingTable.builder();
+import org.opensearch.test.transport.CapturingTransport;
+ * Modifications Copyright OpenSearch Contributors. See
+                if (atLeastOne == false || randomBoolean()) {
+        clusterService.close();
+ *
+        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+    public void testClusterHealthOnClusterRecoveryWithPreviousAllocationIdsAndAllocationFailures() {
+        ClusterState currentState = clusterService.getClusterApplierService().state();
+    ) {
+import org.opensearch.common.util.set.Sets;
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+                }
+        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+            Set<String> allocatedNodes = new HashSet<>();
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+import org.opensearch.core.common.io.stream.StreamInput;
+import java.util.List;
+        PlainActionFuture<ClusterHealthResponse> listener = new PlainActionFuture<>();
+ * GitHub history for details.
+        clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
+        ClusterHealthRequest.Level level
+        final String indexName = "test-idx";
+                if (shardRouting.primary() == false && shardRouting.started() == false) {
+                if (primaryShard.recoverySource() != null
+    }
+                    return false;
+import java.util.Collection;
+            if (i < clusterStates.size() - 1) {
+        assertThat(clusterStateHealth.getStatus(), equalTo(counter.status()));
+                if (primaryShard.unassignedInfo().getNumFailedAllocations() > 0) {
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+/*
+            try {
+            // because there were previous allocation ids, we should be RED until the primaries are started,
+            listenerCalled.countDown();
+        // initialize primaries
+        final List<ClusterState> clusterStates = simulateIndexCreationStates(indexName, false);
+import org.opensearch.action.support.PlainActionFuture;
+        Metadata.Builder metadata = Metadata.builder();
+                if (shardRouting.primary()) {
+                // then cluster health is YELLOW, otherwise RED
+        logger.info("cluster status: {}, expected {}", clusterStateHealth.getStatus(), counter.status());
+        Metadata.Builder metadataBuilder = Metadata.builder(clusterState.metadata()).put(idxMetaBuilder);
+                    return false;
+                if (shardRouting.primary() && shardRouting.started() == false) {
+            clusterStateHealth.writeTo(out);
+        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+        for (int i = randomInt(4); i >= 0; i--) {
+            if (level.equals(SHARDS)) {
+        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+            routingTable = RoutingTable.builder(routingTable).add(newIndexRoutingTable).build();
+        for (int i = 0; i < clusterStates.size(); i++) {
+import org.junit.After;
+            IndicesOptions.strictExpand(),
+            }
+                    return false;
+            // failed allocations that should make the cluster health RED
+        RoutingTableGenerator.ShardCounter counter = new RoutingTableGenerator.ShardCounter();
+import static org.hamcrest.CoreMatchers.allOf;
+    );
+        transportService.acceptIncomingRequests();
+        action.execute(new ClusterHealthRequest().waitForGreenStatus(), listener);
+            }
+                    newIndexRoutingTable.addShard(shardRouting);
+        setState(
+    }
+            }
+        if (withPreviousAllocationIds) {
+import org.opensearch.test.OpenSearchTestCase;
+    public void testClusterHealthOnClusterRecovery() {
+        final String indexName = "test-idx";
+                    .nodes(DiscoveryNodes.builder(currentState.nodes()).clusterManagerNodeId(currentState.nodes().getLocalNodeId()))
+                    newIndexRoutingTable.addShard(newShardRouting);
+        for (int i = 0; i < numNodes; i++) {
+            indexRoutingTable = routingTable.index(indexName);
+        }
+                    return false;
+            new AllocationService(null, new TestGatewayAllocator(), null, null, null),
+        });
+        super.tearDown();
+                assertThat("clusterState is:\n" + clusterState, health.getStatus(), equalTo(ClusterHealthStatus.RED));
+            int numberOfShards = randomInt(3) + 1;
+            indexNameExpressionResolver,
+            .numberOfReplicas(numberOfReplicas)
+                .settings(settings(Version.CURRENT))
+import java.util.concurrent.CountDownLatch;
+                    replicaStateChanged = true;
+    }
+            threadPool,
+import java.util.Map;
+        for (var shardEntry : indexRoutingTable.getShards().values()) {
+        final RoutingTable routingTable = RoutingTable.builder().addAsNew(indexMetadata).build();
+        IndexRoutingTable.Builder newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+            boolean alreadyFailedPrimary = false;
+        final String[] indices = new String[] { indexName };
+ * software distributed under the License is distributed on an
+import java.util.concurrent.ExecutionException;
+        final IndexMetadata.Builder idxMetaBuilder2 = IndexMetadata.builder(clusterState.metadata().index(indexName));
+    private static ThreadPool threadPool;
+import org.opensearch.threadpool.ThreadPool;
+        return clusterStates;
+                if (clusterState.metadata().index(indexName).inSyncAllocationIds(shardRouting.getKey()).isEmpty() == false) {
+        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+        final int numberOfShards = randomIntBetween(1, 5);
+            }
+            final ShardRouting primaryShard = shardRouting.getValue().primaryShard();
+                }
+        String[] concreteIndices = indexNameExpressionResolver.concreteIndexNames(
+                    newIndexRoutingTable.addShard(shardRouting);
+                .numberOfReplicas(numberOfReplicas)
+        newIndexRoutingTable = IndexRoutingTable.builder(indexRoutingTable.getIndex());
+import org.opensearch.cluster.service.ClusterService;
+        }
+        }
+                    newIndexRoutingTable.addShard(shardRouting.moveToStarted());
+            .build();
+ * compatible open source license.
+            clusterStateHealth = new ClusterStateHealth(in);
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.cluster.metadata.Metadata;
+    }
+        assertClusterHealth(clusterStateHealth, counter, INDICES);
+        final int numberOfReplicas = randomIntBetween(1, numberOfShards);
+                for (ClusterIndexHealth clusterIndexHealth : clusterIndexHealths) {
+        allocationIds.forEach(idxMetaBuilder2::putInSyncAllocationIds);
+        // all replicas started
+            .build();
+        final Metadata metadata = Metadata.builder().put(indexMetadata, true).build();
+        }
+    public void testClusterHealthOnIndexCreation() {
+            final ClusterState clusterState = clusterStates.get(i);
+        return generateClusterStates(clusterState, indexName, numberOfReplicas, withPrimaryAllocationFailures);
+                assertThat("clusterState is:\n" + clusterState, health.getStatus(), equalTo(ClusterHealthStatus.YELLOW));
+ * this file be licensed under the Apache-2.0 license or a
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+        CapturingTransport transport = new CapturingTransport();
+        for (final var shardEntry : indexRoutingTable.getShards().values()) {
+import org.opensearch.cluster.ClusterState;
+            }
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+                        );
+            } else {
+    private TransportService transportService;
+    public void setUp() throws Exception {
+    }
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+                if (shardRouting.primary() == false && randomBoolean()) {
+            .metadata(metadata)
+ *
+            transportService,
+    public static void setupThreadPool() {
+        if (withPrimaryAllocationFailures) {
+            assertTrue(clusterStateHealth.getIndices().size() > 0);
+            }
+        ClusterState clusterState = ClusterState.builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY))
+import org.opensearch.common.UUIDs;
+        }
+        final String[] indices = new String[] { indexName };
+            .settings(settings(Version.CURRENT).put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID()))
+    @BeforeClass
+        final List<ClusterState> clusterStates = simulateClusterRecoveryStates(indexName, true, false);
+            }
+                () -> ClusterState.builder(currentState)
+                    // give the replica a different node id than the primary
+import org.opensearch.action.admin.cluster.health.ClusterHealthRequest;
+            // make sure cluster health is YELLOW up until the final cluster state, which contains primary shard
+            clusterService.getSettings(),
+        indexRoutingTable = routingTable.index(indexName);
+        );
+            }
+                for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
+        clusterStateHealth = maybeSerialize(clusterStateHealth);
+                            shardRouting.moveToUnassigned(new UnassignedInfo(UnassignedInfo.Reason.ALLOCATION_FAILED, "unlucky shard"))
+        final List<ClusterState> clusterStates = new ArrayList<>();
+import org.opensearch.action.support.ActionFilters;
+                } else {
+            return clusterStates;
+                    final ShardRouting newShardRouting = shardRouting.moveToStarted();
+            .metadata(metadata)
+    }
+            // make sure cluster health is YELLOW up until the final cluster state, when it turns GREEN
+            if (i < clusterStates.size() - 1) {
+        final boolean withPrimaryAllocationFailures
+            clusterService,
+                if (shardRouting.primary() == false) {
+            for (final ShardRouting shardRouting : shardRoutingTable.getShards()) {
+    }
+        clusterStates.add(originalClusterState);
+        }
+ * under the License.
+                    if (shardRouting.primary() && (shardRouting.started() == false || alreadyFailedPrimary == false)) {
+    }
+                    newIndexRoutingTable.addShard(shardRouting);
+                if (primaryShard.unassignedInfo().getLastAllocationStatus() == UnassignedInfo.AllocationStatus.DECIDERS_NO) {
+        allocationIds = new HashMap<>();
+            }
+            // if the inactive primaries are due solely to recovery (not failed allocation or previously being allocated)
+        // all primaries started
+        }
+                }
+        final ClusterState originalClusterState,
+            final ClusterStateHealth health = new ClusterStateHealth(clusterState, indices);
+        }
+            clusterStates.add(ClusterState.builder(clusterState).routingTable(routingTable).build());
+import java.util.Collections;

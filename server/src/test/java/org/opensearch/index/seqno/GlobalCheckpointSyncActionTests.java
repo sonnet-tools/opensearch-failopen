@@ -1,217 +1,190 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.seqno;
-
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ActionTestUtils;
-import org.opensearch.action.support.replication.ReplicationMode;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexService;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.telemetry.tracing.noop.NoopTracer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.transport.CapturingTransport;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.util.Collections;
-
+            transportService,
+    }
+    private GlobalCheckpointSyncAction createAction() {
 import static org.opensearch.index.remote.RemoteStoreTestsHelper.createIndexSettings;
-import static org.opensearch.test.ClusterServiceUtils.createClusterService;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-public class GlobalCheckpointSyncActionTests extends OpenSearchTestCase {
-
-    private ThreadPool threadPool;
-    private CapturingTransport transport;
+            indicesService,
     private ClusterService clusterService;
+import java.util.Collections;
+        }
+        when(indexShard.getTranslogDurability()).thenReturn(durability);
+import org.opensearch.test.transport.CapturingTransport;
+        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
+        final GlobalCheckpointSyncAction action = createAction();
+    public void tearDown() throws Exception {
+import org.opensearch.threadpool.TestThreadPool;
     private TransportService transportService;
-    private ShardStateAction shardStateAction;
-
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool(getClass().getName());
-        transport = new CapturingTransport();
-        clusterService = createClusterService(threadPool);
-        transportService = transport.createTransportService(
-            clusterService.getSettings(),
-            threadPool,
-            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
-            boundAddress -> clusterService.localNode(),
-            null,
-            Collections.emptySet(),
-            NoopTracer.INSTANCE
+        }
+import org.opensearch.transport.TransportService;
+            shardStateAction,
         );
+        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.index.shard.IndexShard;
+import org.opensearch.action.support.replication.ReplicationMode;
+        when(indexShard.isRemoteTranslogEnabled()).thenReturn(false);
+ * this work for additional information regarding copyright
+ * KIND, either express or implied.  See the License for the
+            action.shardOperationOnReplica(
+        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
+    public void testMayBeSyncTranslogWithRemoteTranslog() throws Exception {
+    private ThreadPool threadPool;
+import org.opensearch.index.translog.Translog;
+        when(indexService.getShard(id)).thenReturn(indexShard);
+    public void testGetReplicationModeWithLocalTranslog() {
+        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
+                ActionTestUtils.assertNoFailureListener(r -> {})
+        } else {
+            transportService,
+            );
+        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
+            null,
+            IOUtils.close(transportService, clusterService, transport);
+            threadPool,
+        );
+            clusterService,
+    }
+ * not use this file except in compliance with the License.
+        if (randomBoolean() && globalCheckpoint != SequenceNumbers.NO_OPS_PERFORMED) {
+            NoopTracer.INSTANCE
+    }
+        if (randomBoolean()) {
+            verify(indexShard, never()).sync();
+            clusterService,
+        action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
+                Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED),
+            assert lastSyncedGlobalCheckpoint < globalCheckpoint;
+    public void testMayBeSyncTranslogWithLocalTranslog() throws Exception {
+ *
+        final IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.getTranslogDurability()).thenReturn(Translog.Durability.REQUEST);
+            action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
+        final GlobalCheckpointSyncAction action = createAction();
+import org.opensearch.action.support.ActionTestUtils;
+ * compatible open source license.
+        super.tearDown();
+                new GlobalCheckpointSyncAction.Request(indexShard.shardId()),
+            shardStateAction,
+        final Index index = new Index("index", "uuid");
+ * GitHub history for details.
+        );
+package org.opensearch.index.seqno;
+        verify(indexShard, never()).sync();
+        return new GlobalCheckpointSyncAction(
+import org.opensearch.common.settings.Settings;
+        transport = new CapturingTransport();
+import org.opensearch.telemetry.tracing.noop.NoopTracer;
+        final int id = randomIntBetween(0, 4);
+    public void testGetReplicationModeWithRemoteTranslog() {
         transportService.start();
-        transportService.acceptIncomingRequests();
+    public void testTranslogSyncAfterGlobalCheckpointSync() throws Exception {
+ * specific language governing permissions and limitations
         shardStateAction = new ShardStateAction(clusterService, transportService, null, null, threadPool);
     }
-
-    public void tearDown() throws Exception {
-        try {
-            IOUtils.close(transportService, clusterService, transport);
-        } finally {
-            terminate(threadPool);
-        }
-        super.tearDown();
-    }
-
-    public void testTranslogSyncAfterGlobalCheckpointSync() throws Exception {
-        final IndicesService indicesService = mock(IndicesService.class);
-
-        final Index index = new Index("index", "uuid");
-        final IndexService indexService = mock(IndexService.class);
-        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
-
-        final int id = randomIntBetween(0, 4);
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexService.getShard(id)).thenReturn(indexShard);
-
-        final ShardId shardId = new ShardId(index, id);
-        when(indexShard.shardId()).thenReturn(shardId);
-
+        final GlobalCheckpointSyncAction action = createAction();
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
         when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
-        final Translog.Durability durability = randomFrom(Translog.Durability.ASYNC, Translog.Durability.REQUEST);
-        when(indexShard.getTranslogDurability()).thenReturn(durability);
-
-        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
-        final long lastSyncedGlobalCheckpoint;
-        if (randomBoolean() && globalCheckpoint != SequenceNumbers.NO_OPS_PERFORMED) {
-            lastSyncedGlobalCheckpoint = randomIntBetween(
-                Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED),
+import org.opensearch.core.index.Index;
                 Math.toIntExact(globalCheckpoint) - 1
-            );
-            assert lastSyncedGlobalCheckpoint < globalCheckpoint;
-        } else {
-            lastSyncedGlobalCheckpoint = globalCheckpoint;
-        }
-
-        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
-        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(lastSyncedGlobalCheckpoint);
-
-        final GlobalCheckpointSyncAction action = new GlobalCheckpointSyncAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            indicesService,
-            threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet())
-        );
-        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
-        if (randomBoolean()) {
-            action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
-        } else {
-            action.shardOperationOnReplica(
-                new GlobalCheckpointSyncAction.Request(indexShard.shardId()),
-                indexShard,
-                ActionTestUtils.assertNoFailureListener(r -> {})
-            );
-        }
-
         if (durability == Translog.Durability.ASYNC || lastSyncedGlobalCheckpoint == globalCheckpoint) {
-            verify(indexShard, never()).sync();
-        } else {
-            verify(indexShard).sync();
+ * under the License.
+import org.opensearch.threadpool.ThreadPool;
+/*
+        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
         }
-    }
-
-    public void testGetReplicationModeWithRemoteTranslog() {
-        final GlobalCheckpointSyncAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
-        assertEquals(ReplicationMode.NO_REPLICATION, action.getReplicationMode(indexShard));
-    }
-
-    public void testGetReplicationModeWithLocalTranslog() {
-        final GlobalCheckpointSyncAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
-        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
-    }
-
-    private GlobalCheckpointSyncAction createAction() {
         final IndicesService indicesService = mock(IndicesService.class);
-        return new GlobalCheckpointSyncAction(
-            Settings.EMPTY,
-            transportService,
-            clusterService,
-            indicesService,
             threadPool,
-            shardStateAction,
-            new ActionFilters(Collections.emptySet())
-        );
-    }
-
-    public void testMayBeSyncTranslogWithRemoteTranslog() throws Exception {
-        final GlobalCheckpointSyncAction action = createAction();
+ * You may obtain a copy of the License at
         final IndexShard indexShard = mock(IndexShard.class);
+            TransportService.NOOP_TRANSPORT_INTERCEPTOR,
+                indexShard,
+        try {
+    }
+        super.setUp();
+ * SPDX-License-Identifier: Apache-2.0
+        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
+        when(indexShard.shardId()).thenReturn(shardId);
+            lastSyncedGlobalCheckpoint = randomIntBetween(
+            Settings.EMPTY,
+        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(lastSyncedGlobalCheckpoint);
+        } else {
+ * Licensed to Elasticsearch under one or more contributor
+        final GlobalCheckpointSyncAction action = createAction();
+import org.opensearch.indices.IndicesService;
+            lastSyncedGlobalCheckpoint = globalCheckpoint;
+/*
+        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
         when(indexShard.isRemoteTranslogEnabled()).thenReturn(true);
-        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
-        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
-        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
-        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(globalCheckpoint - 1);
+        } finally {
         when(indexShard.getTranslogDurability()).thenReturn(Translog.Durability.REQUEST);
+        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(globalCheckpoint - 1);
+ * software distributed under the License is distributed on an
+        }
+        clusterService = createClusterService(threadPool);
+        final GlobalCheckpointSyncAction action = new GlobalCheckpointSyncAction(
+            threadPool,
+    private CapturingTransport transport;
+import static org.mockito.Mockito.never;
+            verify(indexShard).sync();
+/*
+        final IndexService indexService = mock(IndexService.class);
+            clusterService.getSettings(),
+            Settings.EMPTY,
+import org.opensearch.test.OpenSearchTestCase;
+            boundAddress -> clusterService.localNode(),
+import org.opensearch.index.IndexService;
+            );
+public class GlobalCheckpointSyncActionTests extends OpenSearchTestCase {
+        action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
+        transportService.acceptIncomingRequests();
+ */
+        assertEquals(ReplicationMode.NO_REPLICATION, action.getReplicationMode(indexShard));
+ */
+import org.opensearch.cluster.action.shard.ShardStateAction;
+        transportService = transport.createTransportService(
+            new ActionFilters(Collections.emptySet())
+ *
         when(indexShard.indexSettings()).thenReturn(createIndexSettings(true));
-
-        action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
-        verify(indexShard, never()).sync();
-    }
-
-    public void testMayBeSyncTranslogWithLocalTranslog() throws Exception {
-        final GlobalCheckpointSyncAction action = createAction();
-        final IndexShard indexShard = mock(IndexShard.class);
-        when(indexShard.isRemoteTranslogEnabled()).thenReturn(false);
-        final GlobalCheckpointSyncAction.Request primaryRequest = new GlobalCheckpointSyncAction.Request(indexShard.shardId());
-        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
-        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
-        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(globalCheckpoint - 1);
-        when(indexShard.getTranslogDurability()).thenReturn(Translog.Durability.REQUEST);
+ *
+        assertEquals(ReplicationMode.FULL_REPLICATION, action.getReplicationMode(indexShard));
+    public void setUp() throws Exception {
+import org.opensearch.action.support.ActionFilters;
         when(indexShard.indexSettings()).thenReturn(createIndexSettings(false));
-
-        action.shardOperationOnPrimary(primaryRequest, indexShard, ActionTestUtils.assertNoFailureListener(r -> {}));
+        final IndexShard indexShard = mock(IndexShard.class);
+import org.opensearch.common.util.io.IOUtils;
+ */
+    private ShardStateAction shardStateAction;
         verify(indexShard).sync();
+import static org.mockito.Mockito.mock;
+        threadPool = new TestThreadPool(getClass().getName());
+        final ShardId shardId = new ShardId(index, id);
+        final Translog.Durability durability = randomFrom(Translog.Durability.ASYNC, Translog.Durability.REQUEST);
+ * Modifications Copyright OpenSearch Contributors. See
     }
-
+import static org.opensearch.test.ClusterServiceUtils.createClusterService;
+        final IndicesService indicesService = mock(IndicesService.class);
+import org.opensearch.cluster.service.ClusterService;
+import static org.mockito.Mockito.verify;
+import org.opensearch.core.index.shard.ShardId;
+            terminate(threadPool);
+        when(indicesService.indexServiceSafe(index)).thenReturn(indexService);
+            Collections.emptySet(),
+ * the Apache License, Version 2.0 (the "License"); you may
+        final IndexShard indexShard = mock(IndexShard.class);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+import static org.mockito.Mockito.when;
+    }
+        final IndexShard indexShard = mock(IndexShard.class);
 }
+            new ActionFilters(Collections.emptySet())
+        final long lastSyncedGlobalCheckpoint;
+ * Unless required by applicable law or agreed to in writing,
+            indicesService,
+        when(indexShard.getLastKnownGlobalCheckpoint()).thenReturn(globalCheckpoint);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        } else {
+ * license agreements. See the NOTICE file distributed with
+        final long globalCheckpoint = randomIntBetween(Math.toIntExact(SequenceNumbers.NO_OPS_PERFORMED), Integer.MAX_VALUE);
+ * ownership. Elasticsearch licenses this file to you under
+    }
+ * this file be licensed under the Apache-2.0 license or a
+        when(indexShard.getLastSyncedGlobalCheckpoint()).thenReturn(globalCheckpoint - 1);

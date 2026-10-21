@@ -1,566 +1,510 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
+            // enabling unexpected file size injection
+            String disruptedPath = randomFrom(paths).toString();
+                                    Thread.sleep(timeInMillis);
+            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
+import org.opensearch.test.junit.annotations.TestLogging;
+        final TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+            .put(FsHealthService.SLOW_PATH_LOGGING_THRESHOLD_SETTING.getKey(), slowLogThreshold + "ms")
+import java.nio.file.attribute.FileAttribute;
+                } else {
+            FsHealthService fsHealthService = new FsHealthService(
+                clusterSettings,
+        }
+            assertFalse(deterministicTaskQueue.hasRunnableTasks());
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+        long delayBetweenChecks = 100;
+        }
  * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
+            deterministicTaskQueue.runAllTasksInTimeOrder();
+        PathUtilsForTesting.installMock(fileSystem);
+            unexpectedLockFileSizeFileSystemProvider.injectUnexpectedFileSize.set(true);
+            fsHealthService.new FsHealthMonitor().run();
+                            long maxWaitTimeMillis = startTimeMillis + delay >= 0 ? startTimeMillis + delay : Long.MAX_VALUE;// long
+        FileSystemFsyncHungProvider disruptFileSystemProvider = new FileSystemFsyncHungProvider(
+            assertTrue(deterministicTaskQueue.hasDeferredTasks());
+            this.threadPool = threadPool;
+                    if (injectUnexpectedFileSize.get()) {
+            waitUntil(
+        }
+        FileSystemFsyncIOExceptionProvider disruptFsyncFileSystemProvider = new FileSystemFsyncIOExceptionProvider(fileSystem);
+                                }
+            disruptFileSystemProvider.injectIOException.set(false);
+            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
+    }
+                    throw new IOException("fake IOException");
+        Settings settings = Settings.builder().put(NODE_NAME_SETTING.getKey(), "node").build();
+ * Licensed to Elasticsearch under one or more contributor
+        PathUtilsForTesting.installMock(fileSystem);
+            fsHealthService.new FsHealthMonitor().run();
+        FileSystemIOExceptionProvider disruptFileSystemProvider = new FileSystemIOExceptionProvider(fileSystem);
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+                assertThat(deterministicTaskQueue.getCurrentTimeMillis() - startTimeMillis, is(refreshInterval * rescheduledCount));
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+            this.delay = delay;
+        } finally {
+            NodeEnvironment env = newNodeEnvironment()
+            return new FilterFileChannel(super.newFileChannel(path, options, attrs)) {
+                                try {
+        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+import org.opensearch.common.io.PathUtilsForTesting;
+    @Before
+                                                                                                                             // overflow
+                @Override
+    @TestLogging(value = "org.opensearch.monitor.fs:WARN", reason = "to ensure that we log on hung IO at WARN level")
+    public void testFailsHealthOnHungIOBeyondHealthyTimeout() throws Exception {
+        fileSystem = disruptFileSystemProvider.getFileSystem(null);
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+                                timeInMillis = Math.min(AWAIT_BUSY_THRESHOLD, timeInMillis * 2);
+                    return super.size();
+        } finally {
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                assert pathPrefix != null : "must set pathPrefix before starting disruptions";
+        PathUtilsForTesting.installMock(fileSystem);
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        long refreshInterval = 50; // ms
+                List.of()
+import org.opensearch.env.NodeEnvironment;
+import org.junit.Before;
+        public int getInjectedPathCount() {
+import java.nio.file.Path;
+                        assert pathPrefix != null : "must set pathPrefix before starting disruptions";
+                () -> fsHealthService.getHealth().getStatus() == HEALTHY,
+            super("disrupt_fs_health://", inner);
+import org.opensearch.test.OpenSearchTestCase;
+            assertBusy(() -> assertEquals(StatusInfo.Status.HEALTHY, fsHealthService.getHealth().getStatus()));
+        PathUtilsForTesting.installMock(fileSystem);
+                            return size;
+            assertBusy(mockAppender::assertAllExpectationsMatched);
+        AtomicBoolean injectIOException = new AtomicBoolean();
+            assertEquals(disruptedPathCount, disruptFileSystemProvider.getInjectedPathCount());
+            final Path additional = createTempDir();
+                () -> fsHealthService.getHealth().getStatus() == UNHEALTHY,
+            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
+            logger.info("--> Disrupt file system");
  * the Apache License, Version 2.0 (the "License"); you may
  * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.monitor.fs;
-
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.tests.mockfile.FilterFileChannel;
-import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
-import org.opensearch.cluster.coordination.DeterministicTaskQueue;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.io.PathUtilsForTesting;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.env.NodeEnvironment;
-import org.opensearch.monitor.StatusInfo;
-import org.opensearch.test.MockLogAppender;
-import org.opensearch.test.OpenSearchTestCase;
-import org.opensearch.test.junit.annotations.TestLogging;
-import org.opensearch.test.telemetry.TestInMemoryMetricsRegistry;
-import org.opensearch.threadpool.TestThreadPool;
-import org.opensearch.threadpool.ThreadPool;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.channels.FileChannel;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;
-import java.nio.file.OpenOption;
-import java.nio.file.Path;
-import java.nio.file.attribute.FileAttribute;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.opensearch.monitor.StatusInfo.Status.HEALTHY;
-import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
-import static org.opensearch.node.Node.NODE_NAME_SETTING;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-
-public class FsHealthServiceTests extends OpenSearchTestCase {
-
-    private DeterministicTaskQueue deterministicTaskQueue;
-    private TestInMemoryMetricsRegistry metricsRegistry;
-
-    @Before
-    public void createObjects() {
-        Settings settings = Settings.builder().put(NODE_NAME_SETTING.getKey(), "node").build();
-        deterministicTaskQueue = new DeterministicTaskQueue(settings, random());
-        metricsRegistry = new TestInMemoryMetricsRegistry();
-    }
-
-    public void testSchedulesHealthCheckAtRefreshIntervals() throws Exception {
-        long refreshInterval = randomLongBetween(1000, 12000);
-        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            FsHealthService fsHealthService = new FsHealthService(
-                settings,
-                clusterSettings,
-                deterministicTaskQueue.getThreadPool(),
-                env,
-                metricsRegistry
-            );
-            final long startTimeMillis = deterministicTaskQueue.getCurrentTimeMillis();
-            fsHealthService.doStart();
-            assertFalse(deterministicTaskQueue.hasRunnableTasks());
-            assertTrue(deterministicTaskQueue.hasDeferredTasks());
-            int rescheduledCount = 0;
-            for (int i = 1; i <= randomIntBetween(5, 10); i++) {
-                if (deterministicTaskQueue.hasRunnableTasks()) {
-                    deterministicTaskQueue.runRandomTask();
-                } else {
-                    assertThat(deterministicTaskQueue.getLatestDeferredExecutionTime(), is(refreshInterval * (rescheduledCount + 1)));
-                    deterministicTaskQueue.advanceTime();
-                    rescheduledCount++;
-                }
-                assertThat(deterministicTaskQueue.getCurrentTimeMillis() - startTimeMillis, is(refreshInterval * rescheduledCount));
-            }
-
-            fsHealthService.doStop();
-            deterministicTaskQueue.runAllTasksInTimeOrder();
-
-            assertFalse(deterministicTaskQueue.hasRunnableTasks());
-            assertFalse(deterministicTaskQueue.hasDeferredTasks());
-        }
-    }
-
-    public void testFailsHealthOnIOException() throws IOException {
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        FileSystemIOExceptionProvider disruptFileSystemProvider = new FileSystemIOExceptionProvider(fileSystem);
-        fileSystem = disruptFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final Settings settings = Settings.EMPTY;
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
-
-            // disrupt file system
-            disruptFileSystemProvider.restrictPathPrefix(""); // disrupt all paths
-            disruptFileSystemProvider.injectIOException.set(true);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
-            for (Path path : env.nodeDataPaths()) {
-                assertTrue(fsHealthService.getHealth().getInfo().contains(path.toString()));
-            }
-            assertEquals(env.nodeDataPaths().length, disruptFileSystemProvider.getInjectedPathCount());
-        } finally {
-            disruptFileSystemProvider.injectIOException.set(false);
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    @TestLogging(value = "org.opensearch.monitor.fs:WARN", reason = "to ensure that we log on hung IO at WARN level")
-    public void testLoggingOnHungIO() throws Exception {
-        long slowLogThreshold = randomLongBetween(100, 200);
-        final Settings settings = Settings.builder()
-            .put(FsHealthService.SLOW_PATH_LOGGING_THRESHOLD_SETTING.getKey(), slowLogThreshold + "ms")
-            .build();
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        FileSystemFsyncHungProvider disruptFileSystemProvider = new FileSystemFsyncHungProvider(
-            fileSystem,
             randomLongBetween(slowLogThreshold + 1, 400),
-            testThreadPool
-        );
-        fileSystem = disruptFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-
-        try (
-            MockLogAppender mockAppender = MockLogAppender.createForLoggers(LogManager.getLogger(FsHealthService.class));
-            NodeEnvironment env = newNodeEnvironment()
-        ) {
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            int counter = 0;
-            for (Path path : env.nodeDataPaths()) {
-                mockAppender.addExpectation(
-                    new MockLogAppender.SeenEventExpectation(
-                        "test" + ++counter,
-                        FsHealthService.class.getCanonicalName(),
-                        Level.WARN,
-                        "health check of [" + path + "] took [*ms] which is above the warn threshold*"
-                    )
-                );
-            }
-
-            // disrupt file system
-            disruptFileSystemProvider.injectIODelay.set(true);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(env.nodeDataPaths().length, disruptFileSystemProvider.getInjectedPathCount());
-            assertBusy(mockAppender::assertAllExpectationsMatched);
-        } finally {
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testFailsHealthOnHungIOBeyondHealthyTimeout() throws Exception {
-        long healthyTimeoutThreshold = randomLongBetween(1500, 2000);
-        long refreshInterval = randomLongBetween(500, 1000);
-        long slowLogThreshold = randomLongBetween(100, 200);
-        long delayBetweenChecks = 100;
-        final Settings settings = Settings.builder()
-            .put(FsHealthService.HEALTHY_TIMEOUT_SETTING.getKey(), healthyTimeoutThreshold + "ms")
-            .put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms")
-            .put(FsHealthService.SLOW_PATH_LOGGING_THRESHOLD_SETTING.getKey(), slowLogThreshold + "ms")
-            .put(ThreadPool.ESTIMATED_TIME_INTERVAL_SETTING.getKey(), 0)// we need to verify exact time
-            .build();
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        FileSystemFsyncHungProvider disruptFileSystemProvider = new FileSystemFsyncHungProvider(fileSystem, testThreadPool);
-        fileSystem = disruptFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            logger.info("--> Initial health status prior to the first monitor run");
-            StatusInfo fsHealth = fsHealthService.getHealth();
-            assertEquals(HEALTHY, fsHealth.getStatus());
-            assertEquals("health check passed", fsHealth.getInfo());
-            logger.info("--> First monitor run");
-            fsHealthService.new FsHealthMonitor().run();
-            fsHealth = fsHealthService.getHealth();
-            assertEquals(HEALTHY, fsHealth.getStatus());
-            assertEquals("health check passed", fsHealth.getInfo());
-            logger.info("--> Disrupt file system");
-            disruptFileSystemProvider.injectIODelay.set(true);
-            fsHealthService.doStart();
-            waitUntil(
-                () -> fsHealthService.getHealth().getStatus() == UNHEALTHY,
-                healthyTimeoutThreshold + (2 * refreshInterval),
-                TimeUnit.MILLISECONDS
-            );
-            fsHealth = fsHealthService.getHealth();
-            assertEquals(UNHEALTHY, fsHealth.getStatus());
-            assertEquals("healthy threshold breached", fsHealth.getInfo());
-            int disruptedPathCount = disruptFileSystemProvider.getInjectedPathCount();
-            assertThat(disruptedPathCount, equalTo(1));
-            logger.info("--> Fix file system disruption");
-            disruptFileSystemProvider.injectIODelay.set(false);
-            waitUntil(
-                () -> fsHealthService.getHealth().getStatus() == HEALTHY,
-                delayBetweenChecks + (4 * refreshInterval),
-                TimeUnit.MILLISECONDS
-            );
-            fsHealth = fsHealthService.getHealth();
-            assertEquals(HEALTHY, fsHealth.getStatus());
-            assertEquals("health check passed", fsHealth.getInfo());
-            assertEquals(disruptedPathCount, disruptFileSystemProvider.getInjectedPathCount());
-            fsHealthService.doStop();
-        } finally {
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testFailsHealthOnSinglePathFsyncFailure() throws IOException {
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        FileSystemFsyncIOExceptionProvider disruptFsyncFileSystemProvider = new FileSystemFsyncIOExceptionProvider(fileSystem);
-        fileSystem = disruptFsyncFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final Settings settings = Settings.EMPTY;
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            Path[] paths = env.nodeDataPaths();
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
-
-            // disrupt file system fsync on single path
-            disruptFsyncFileSystemProvider.injectIOException.set(true);
-            String disruptedPath = randomFrom(paths).toString();
-            disruptFsyncFileSystemProvider.restrictPathPrefix(disruptedPath);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
-            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed on [" + disruptedPath + "]"));
-            assertEquals(1, disruptFsyncFileSystemProvider.getInjectedPathCount());
-        } finally {
-            disruptFsyncFileSystemProvider.injectIOException.set(false);
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testFailsHealthOnSinglePathWriteFailure() throws IOException {
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        FileSystemIOExceptionProvider disruptWritesFileSystemProvider = new FileSystemIOExceptionProvider(fileSystem);
-        fileSystem = disruptWritesFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final Settings settings = Settings.EMPTY;
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            Path[] paths = env.nodeDataPaths();
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
-
-            // disrupt file system writes on single path
-            String disruptedPath = randomFrom(paths).toString();
-            disruptWritesFileSystemProvider.restrictPathPrefix(disruptedPath);
-            disruptWritesFileSystemProvider.injectIOException.set(true);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
-            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed on [" + disruptedPath + "]"));
-            assertEquals(1, disruptWritesFileSystemProvider.getInjectedPathCount());
-        } finally {
-            disruptWritesFileSystemProvider.injectIOException.set(false);
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testFailsHealthOnUnexpectedLockFileSize() throws IOException {
-        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
-        final Settings settings = Settings.EMPTY;
-        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        FileSystemUnexpectedLockFileSizeProvider unexpectedLockFileSizeFileSystemProvider = new FileSystemUnexpectedLockFileSizeProvider(
-            fileSystem,
-            1,
-            testThreadPool
-        );
-        fileSystem = unexpectedLockFileSizeFileSystemProvider.getFileSystem(null);
-        PathUtilsForTesting.installMock(fileSystem);
-        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
-
-            // enabling unexpected file size injection
-            unexpectedLockFileSizeFileSystemProvider.injectUnexpectedFileSize.set(true);
-
-            fsHealthService.new FsHealthMonitor().run();
-            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
-            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
-            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed due to broken node lock"));
-            assertEquals(1, unexpectedLockFileSizeFileSystemProvider.getInjectedPathCount());
-        } finally {
-            unexpectedLockFileSizeFileSystemProvider.injectUnexpectedFileSize.set(false);
-            PathUtilsForTesting.teardown();
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testNoAdditionalHealthPathsProbesOnlyDataPaths() throws Exception {
-        long refreshInterval = 50;
-        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
-        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            // Empty additional-paths list — the spill-directory-not-configured scenario.
-            FsHealthService fsHealthService = new FsHealthService(
-                settings,
-                clusterSettings,
-                testThreadPool,
-                env,
                 metricsRegistry,
-                List.of()
-            );
-            fsHealthService.doStart();
-            assertBusy(() -> assertEquals(StatusInfo.Status.HEALTHY, fsHealthService.getHealth().getStatus()));
-            fsHealthService.doStop();
-        } finally {
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    public void testAdditionalHealthPathProbedAndUnhealthyOnFailure() throws Exception {
-        long refreshInterval = 50; // ms
-        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
-        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        final TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
-        try (NodeEnvironment env = newNodeEnvironment()) {
-            final Path additional = createTempDir();
-            FsHealthService fsHealthService = new FsHealthService(
-                settings,
-                clusterSettings,
-                testThreadPool,
-                env,
-                metricsRegistry,
-                List.of(additional)
-            );
-            fsHealthService.doStart();
-            assertBusy(() -> assertEquals(StatusInfo.Status.HEALTHY, fsHealthService.getHealth().getStatus()));
-
-            // Make the additional path unwritable: replace the directory with a regular file.
-            IOUtils.rm(additional);
-            Files.write(additional, new byte[] { 0x00 });
-
-            assertBusy(() -> {
-                StatusInfo info = fsHealthService.getHealth();
-                assertEquals(StatusInfo.Status.UNHEALTHY, info.getStatus());
-                assertTrue(info.getInfo(), info.getInfo().contains(additional.toString()));
-            });
-            fsHealthService.doStop();
-        } finally {
-            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private static class FileSystemIOExceptionProvider extends FilterFileSystemProvider {
-
-        AtomicBoolean injectIOException = new AtomicBoolean();
-        AtomicInteger injectedPaths = new AtomicInteger();
-
-        private String pathPrefix;
-
-        FileSystemIOExceptionProvider(FileSystem inner) {
-            super("disrupt_fs_health://", inner);
-        }
-
-        public void restrictPathPrefix(String pathPrefix) {
-            this.pathPrefix = pathPrefix;
-        }
-
-        public int getInjectedPathCount() {
             return injectedPaths.get();
-        }
-
-        @Override
-        public OutputStream newOutputStream(Path path, OpenOption... options) throws IOException {
-            if (injectIOException.get()) {
-                assert pathPrefix != null : "must set pathPrefix before starting disruptions";
-                if (path.toString().startsWith(pathPrefix) && path.toString().endsWith(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
-                    injectedPaths.incrementAndGet();
-                    throw new IOException("fake IOException");
-                }
-            }
-            return super.newOutputStream(path, options);
-        }
-    }
-
-    private static class FileSystemFsyncIOExceptionProvider extends FilterFileSystemProvider {
-
-        AtomicBoolean injectIOException = new AtomicBoolean();
-        AtomicInteger injectedPaths = new AtomicInteger();
-
-        private String pathPrefix = null;
-
-        FileSystemFsyncIOExceptionProvider(FileSystem inner) {
-            super("disrupt_fs_health://", inner);
-        }
-
-        public void restrictPathPrefix(String pathPrefix) {
-            this.pathPrefix = pathPrefix;
-        }
-
-        public int getInjectedPathCount() {
-            return injectedPaths.get();
-        }
-
-        @Override
-        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
-            return new FilterFileChannel(super.newFileChannel(path, options, attrs)) {
-                @Override
-                public void force(boolean metaData) throws IOException {
-                    if (injectIOException.get()) {
-                        assert pathPrefix != null : "must set pathPrefix before starting disruptions";
-                        if (path.toString().startsWith(pathPrefix)
-                            && path.toString().endsWith(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
-                            injectedPaths.incrementAndGet();
+            assertEquals("health check passed", fsHealth.getInfo());
                             throw new IOException("fake IOException");
-                        }
-                    }
-                    super.force(metaData);
-                }
-            };
+public class FsHealthServiceTests extends OpenSearchTestCase {
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            disruptFileSystemProvider.injectIODelay.set(true);
+            fsHealthService.doStart();
+            assertEquals(UNHEALTHY, fsHealth.getStatus());
+import java.io.IOException;
+            testThreadPool
+import java.util.Set;
+            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed on [" + disruptedPath + "]"));
+import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.common.io.PathUtils;
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+                    if (injectIOException.get()) {
+                @Override
+        private final long size;
+            assertEquals("healthy threshold breached", fsHealth.getInfo());
+            .put(FsHealthService.SLOW_PATH_LOGGING_THRESHOLD_SETTING.getKey(), slowLogThreshold + "ms")
+            super("disrupt_fs_health://", inner);
+            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
+            fsHealth = fsHealthService.getHealth();
+            });
+            disruptFsyncFileSystemProvider.restrictPathPrefix(disruptedPath);
+            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
+                                } catch (InterruptedException e) {
+        }
+            if (injectIOException.get()) {
         }
     }
-
-    private static class FileSystemFsyncHungProvider extends FilterFileSystemProvider {
-
-        AtomicBoolean injectIODelay = new AtomicBoolean();
-        AtomicInteger injectedPaths = new AtomicInteger();
-
-        private final long delay;
-        private final ThreadPool threadPool;
-        private static final long AWAIT_BUSY_THRESHOLD = 100L;
-
-        FileSystemFsyncHungProvider(FileSystem inner, long delay, ThreadPool threadPool) {
-            super("disrupt_fs_health://", inner);
-            this.delay = delay;
-            this.threadPool = threadPool;
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            for (int i = 1; i <= randomIntBetween(5, 10); i++) {
         }
-
-        FileSystemFsyncHungProvider(FileSystem inner, ThreadPool threadPool) {
-            super("disrupt_fs_health://", inner);
-            this.threadPool = threadPool;
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+            fsHealth = fsHealthService.getHealth();
+        FileSystemUnexpectedLockFileSizeProvider unexpectedLockFileSizeFileSystemProvider = new FileSystemUnexpectedLockFileSizeProvider(
+import static org.opensearch.monitor.StatusInfo.Status.HEALTHY;
+            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
+    }
+            assertEquals(env.nodeDataPaths().length, disruptFileSystemProvider.getInjectedPathCount());
+ * compatible open source license.
+    }
+ * ownership. Elasticsearch licenses this file to you under
+        );
+            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed due to broken node lock"));
             this.delay = Long.MAX_VALUE;
+ * software distributed under the License is distributed on an
+        final Settings settings = Settings.EMPTY;
         }
-
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
+        AtomicInteger injectedPaths = new AtomicInteger();
+        fileSystem = disruptFileSystemProvider.getFileSystem(null);
+            // disrupt file system
         public int getInjectedPathCount() {
-            return injectedPaths.get();
         }
-
-        @Override
-        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+    public void testLoggingOnHungIO() throws Exception {
+ *
+        public void restrictPathPrefix(String pathPrefix) {
+        try (NodeEnvironment env = newNodeEnvironment()) {
+        long slowLogThreshold = randomLongBetween(100, 200);
+                        }
+                public long size() throws IOException {
+import org.opensearch.threadpool.ThreadPool;
+                public void force(boolean metaData) throws IOException {
+            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
+        fileSystem = disruptFsyncFileSystemProvider.getFileSystem(null);
+        FileSystemFsyncHungProvider(FileSystem inner, ThreadPool threadPool) {
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
+ * SPDX-License-Identifier: Apache-2.0
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            logger.info("--> Fix file system disruption");
+            disruptFsyncFileSystemProvider.injectIOException.set(false);
+        long refreshInterval = 50;
+                assertTrue(info.getInfo(), info.getInfo().contains(additional.toString()));
+            1,
+            fsHealthService.doStart();
+        PathUtilsForTesting.installMock(fileSystem);
+                settings,
+            fsHealthService.new FsHealthMonitor().run();
+                );
+                    deterministicTaskQueue.advanceTime();
+        public int getInjectedPathCount() {
+                            injectedPaths.incrementAndGet();
+/*
             return new FilterFileChannel(super.newFileChannel(path, options, attrs)) {
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.monitor.StatusInfo;
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+        AtomicBoolean injectIOException = new AtomicBoolean();
+import java.util.concurrent.atomic.AtomicInteger;
+            FsHealthService fsHealthService = new FsHealthService(
+                        if (path.toString().startsWith(pathPrefix)
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
+        @Override
+    public void testSchedulesHealthCheckAtRefreshIntervals() throws Exception {
+            logger.info("--> First monitor run");
+        }
+            PathUtilsForTesting.teardown();
+            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
+            fsHealthService.new FsHealthMonitor().run();
+            for (Path path : env.nodeDataPaths()) {
+                deterministicTaskQueue.getThreadPool(),
+                    }
+            Path[] paths = env.nodeDataPaths();
+    public void testAdditionalHealthPathProbedAndUnhealthyOnFailure() throws Exception {
+    private static class FileSystemIOExceptionProvider extends FilterFileSystemProvider {
+            this.size = size;
+                StatusInfo info = fsHealthService.getHealth();
+        private static final long AWAIT_BUSY_THRESHOLD = 100L;
+            fsHealthService.new FsHealthMonitor().run();
+        }
+                delayBetweenChecks + (4 * refreshInterval),
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
+        AtomicInteger injectedPaths = new AtomicInteger();
+            };
+    public void createObjects() {
+        }
+        FileSystemFsyncHungProvider(FileSystem inner, long delay, ThreadPool threadPool) {
+    }
+            );
+                }
+        } finally {
+                List.of(additional)
+    }
+import java.nio.channels.FileChannel;
+ *
+                            injectedPaths.incrementAndGet();
+        }
+ * Modifications Copyright OpenSearch Contributors. See
+            fsHealthService.doStop();
+            );
+            );
+            assertThat(disruptedPathCount, equalTo(1));
+        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
+            .build();
+                    }
+    }
+                }
+            };
+import static org.opensearch.node.Node.NODE_NAME_SETTING;
+                }
+            fileSystem,
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+                TimeUnit.MILLISECONDS
+    }
+                            && path.toString().endsWith(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
+                            } while (threadPool.relativeTimeInMillis() <= maxWaitTimeMillis && injectIODelay.get());
+        try (NodeEnvironment env = newNodeEnvironment()) {
+                            final long startTimeMillis = threadPool.relativeTimeInMillis();
+            fsHealthService.doStop();
+            assertEquals(HEALTHY, fsHealth.getStatus());
+import org.opensearch.common.settings.Settings;
+        metricsRegistry = new TestInMemoryMetricsRegistry();
+}
+        PathUtilsForTesting.installMock(fileSystem);
+import org.opensearch.cluster.coordination.DeterministicTaskQueue;
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+import java.nio.file.FileSystem;
+            assertBusy(() -> {
+                metricsRegistry
+                        }
+                                    throw new AssertionError(e);
+                env,
+            int rescheduledCount = 0;
+            return injectedPaths.get();
+        FileSystemUnexpectedLockFileSizeProvider(FileSystem inner, long size, ThreadPool threadPool) {
+                assertTrue(fsHealthService.getHealth().getInfo().contains(path.toString()));
+        public OutputStream newOutputStream(Path path, OpenOption... options) throws IOException {
+            .put(ThreadPool.ESTIMATED_TIME_INTERVAL_SETTING.getKey(), 0)// we need to verify exact time
+            PathUtilsForTesting.teardown();
+        }
+            super("disrupt_fs_health://", inner);
+    private DeterministicTaskQueue deterministicTaskQueue;
+        public void restrictPathPrefix(String pathPrefix) {
+            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
+                    assertThat(deterministicTaskQueue.getLatestDeferredExecutionTime(), is(refreshInterval * (rescheduledCount + 1)));
+            assertEquals(env.nodeDataPaths().length, disruptFileSystemProvider.getInjectedPathCount());
+            // Empty additional-paths list — the spill-directory-not-configured scenario.
+            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
+import org.apache.logging.log4j.LogManager;
+        FileSystemFsyncHungProvider disruptFileSystemProvider = new FileSystemFsyncHungProvider(fileSystem, testThreadPool);
+                    deterministicTaskQueue.runRandomTask();
+            }
+            // disrupt file system fsync on single path
+            FsHealthService fsHealthService = new FsHealthService(
+            Files.write(additional, new byte[] { 0x00 });
+                        FsHealthService.class.getCanonicalName(),
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+            .build();
+import java.nio.file.Files;
+            disruptFsyncFileSystemProvider.injectIOException.set(true);
+            for (Path path : env.nodeDataPaths()) {
+        try (
+import java.util.concurrent.TimeUnit;
+            assertFalse(deterministicTaskQueue.hasDeferredTasks());
+            fileSystem,
+            testThreadPool
+        } finally {
+        FileSystemIOExceptionProvider disruptWritesFileSystemProvider = new FileSystemIOExceptionProvider(fileSystem);
+        }
+        try (NodeEnvironment env = newNodeEnvironment()) {
+            assertEquals(HEALTHY, fsHealth.getStatus());
+import org.apache.lucene.tests.mockfile.FilterFileChannel;
+            );
+                    )
+        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
+        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
+        private String pathPrefix;
+ * under the License.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    private static class FileSystemUnexpectedLockFileSizeProvider extends FilterFileSystemProvider {
+        try (NodeEnvironment env = newNodeEnvironment()) {
+        @Override
+                            injectedPaths.incrementAndGet();
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+                clusterSettings,
+            disruptFileSystemProvider.injectIODelay.set(true);
+            assertFalse(deterministicTaskQueue.hasRunnableTasks());
+    }
+            fsHealthService.doStart();
+ * KIND, either express or implied.  See the License for the
+        final Settings settings = Settings.builder()
                 @Override
                 public void force(boolean metaData) throws IOException {
-                    if (injectIODelay.get()) {
-                        if (path.getFileName().toString().equals(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
-                            injectedPaths.incrementAndGet();
-                            final long startTimeMillis = threadPool.relativeTimeInMillis();
-                            long timeInMillis = 1;
-                            long maxWaitTimeMillis = startTimeMillis + delay >= 0 ? startTimeMillis + delay : Long.MAX_VALUE;// long
-                                                                                                                             // overflow
-                            do {
-                                try {
-                                    Thread.sleep(timeInMillis);
-                                } catch (InterruptedException e) {
-                                    throw new AssertionError(e);
-                                }
-                                timeInMillis = Math.min(AWAIT_BUSY_THRESHOLD, timeInMillis * 2);
-                            } while (threadPool.relativeTimeInMillis() <= maxWaitTimeMillis && injectIODelay.get());
-                        }
-                    }
                     super.force(metaData);
+        final Settings settings = Settings.EMPTY;
+        } finally {
+                testThreadPool,
+        );
+        private String pathPrefix = null;
+                testThreadPool,
+        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            return new FilterFileChannel(super.newFileChannel(path, options, attrs)) {
+            // Make the additional path unwritable: replace the directory with a regular file.
+        final Settings settings = Settings.EMPTY;
+            fsHealth = fsHealthService.getHealth();
+            PathUtilsForTesting.teardown();
                 }
-            };
-        }
-    }
-
-    private static class FileSystemUnexpectedLockFileSizeProvider extends FilterFileSystemProvider {
-
-        AtomicBoolean injectUnexpectedFileSize = new AtomicBoolean();
-        AtomicInteger injectedPaths = new AtomicInteger();
-
-        private final long size;
-        private final ThreadPool threadPool;
-
-        FileSystemUnexpectedLockFileSizeProvider(FileSystem inner, long size, ThreadPool threadPool) {
+        deterministicTaskQueue = new DeterministicTaskQueue(settings, random());
+                healthyTimeoutThreshold + (2 * refreshInterval),
+            IOUtils.rm(additional);
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+            waitUntil(
             super("disrupt_fs_health://", inner);
-            this.size = size;
+            assertEquals(HEALTHY, fsHealth.getStatus());
+            disruptFileSystemProvider.restrictPathPrefix(""); // disrupt all paths
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
+            }
+                metricsRegistry,
+    public void testNoAdditionalHealthPathsProbesOnlyDataPaths() throws Exception {
+        long refreshInterval = randomLongBetween(1000, 12000);
+        AtomicBoolean injectIODelay = new AtomicBoolean();
+                settings,
+package org.opensearch.monitor.fs;
+            final long startTimeMillis = deterministicTaskQueue.getCurrentTimeMillis();
+                    }
             this.threadPool = threadPool;
         }
-
+        long healthyTimeoutThreshold = randomLongBetween(1500, 2000);
+                    new MockLogAppender.SeenEventExpectation(
+            fsHealthService.new FsHealthMonitor().run();
+            fsHealthService.new FsHealthMonitor().run();
+            assertEquals(HEALTHY, fsHealthService.getHealth().getStatus());
+        } finally {
+            .put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms")
+    private static class FileSystemFsyncIOExceptionProvider extends FilterFileSystemProvider {
+import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
+        }
+                if (path.toString().startsWith(pathPrefix) && path.toString().endsWith(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
         public int getInjectedPathCount() {
-            return injectedPaths.get();
-        }
-
-        @Override
-        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
-            return new FilterFileChannel(super.newFileChannel(path, options, attrs)) {
-                @Override
-                public long size() throws IOException {
-                    if (injectUnexpectedFileSize.get()) {
-                        if (path.getFileName().toString().equals(NodeEnvironment.NODE_LOCK_FILENAME)) {
-                            injectedPaths.incrementAndGet();
-                            return size;
-                        }
-                    }
-                    return super.size();
-                }
-            };
-        }
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+            this.pathPrefix = pathPrefix;
+        private final ThreadPool threadPool;
+        final TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+        fileSystem = disruptFileSystemProvider.getFileSystem(null);
+ */
+            assertEquals("health check passed", fsHealth.getInfo());
+        FileSystem fileSystem = PathUtils.getDefaultFileSystem();
     }
-}
+        try (NodeEnvironment env = newNodeEnvironment()) {
+            }
+                }
+                assertEquals(StatusInfo.Status.UNHEALTHY, info.getStatus());
+        @Override
+            this.pathPrefix = pathPrefix;
+            return super.newOutputStream(path, options);
+        public FileChannel newFileChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+                            do {
+import static org.hamcrest.Matchers.equalTo;
+import java.util.concurrent.atomic.AtomicBoolean;
+                    super.force(metaData);
+                        Level.WARN,
+            assertEquals("health check passed", fsHealth.getInfo());
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
+        AtomicInteger injectedPaths = new AtomicInteger();
+            };
+            String disruptedPath = randomFrom(paths).toString();
+                env,
+            Path[] paths = env.nodeDataPaths();
+        FileSystemIOExceptionProvider(FileSystem inner) {
+    private static class FileSystemFsyncHungProvider extends FilterFileSystemProvider {
+        fileSystem = disruptWritesFileSystemProvider.getFileSystem(null);
+            assertEquals(1, disruptWritesFileSystemProvider.getInjectedPathCount());
+        final ClusterSettings clusterSettings = new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        }
+        }
+        }
+        private final ThreadPool threadPool;
+import org.apache.logging.log4j.Level;
+            fsHealthService.doStop();
+        try (NodeEnvironment env = newNodeEnvironment()) {
+                settings,
+            assertEquals(UNHEALTHY, fsHealthService.getHealth().getStatus());
+            fsHealthService.new FsHealthMonitor().run();
+            MockLogAppender mockAppender = MockLogAppender.createForLoggers(LogManager.getLogger(FsHealthService.class));
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+ *
+        }
+            PathUtilsForTesting.teardown();
+import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
+import org.opensearch.threadpool.TestThreadPool;
+            logger.info("--> Initial health status prior to the first monitor run");
+    }
+                        if (path.getFileName().toString().equals(NodeEnvironment.NODE_LOCK_FILENAME)) {
+            fsHealthService.new FsHealthMonitor().run();
+                        }
+/*
+        AtomicInteger injectedPaths = new AtomicInteger();
+        AtomicBoolean injectUnexpectedFileSize = new AtomicBoolean();
+ */
+            );
+            ThreadPool.terminate(testThreadPool, 500, TimeUnit.MILLISECONDS);
+                clusterSettings,
+            disruptWritesFileSystemProvider.restrictPathPrefix(disruptedPath);
+            fsHealthService.new FsHealthMonitor().run();
+                env,
+            return injectedPaths.get();
+import java.util.List;
+import static org.hamcrest.Matchers.is;
+            assertEquals(1, unexpectedLockFileSizeFileSystemProvider.getInjectedPathCount());
+        final Settings settings = Settings.builder()
+        long refreshInterval = randomLongBetween(500, 1000);
+/*
+        @Override
+            int counter = 0;
+            // disrupt file system
+ * specific language governing permissions and limitations
+            StatusInfo fsHealth = fsHealthService.getHealth();
+            disruptWritesFileSystemProvider.injectIOException.set(false);
+            disruptFileSystemProvider.injectIODelay.set(false);
+ */
+            PathUtilsForTesting.teardown();
+                TimeUnit.MILLISECONDS
+        final Settings settings = Settings.EMPTY;
+        try (NodeEnvironment env = newNodeEnvironment()) {
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+                        "health check of [" + path + "] took [*ms] which is above the warn threshold*"
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+    }
+    }
+                        "test" + ++counter,
+            int disruptedPathCount = disruptFileSystemProvider.getInjectedPathCount();
+import java.nio.file.OpenOption;
+                if (deterministicTaskQueue.hasRunnableTasks()) {
+        final Settings settings = Settings.builder().put(FsHealthService.REFRESH_INTERVAL_SETTING.getKey(), refreshInterval + "ms").build();
+                        if (path.getFileName().toString().equals(FsHealthService.FsHealthMonitor.TEMP_FILE_NAME)) {
+            return injectedPaths.get();
+        fileSystem = unexpectedLockFileSizeFileSystemProvider.getFileSystem(null);
+        }
+            disruptWritesFileSystemProvider.injectIOException.set(true);
+ * The OpenSearch Contributors require contributions made to
+            PathUtilsForTesting.teardown();
+import java.io.OutputStream;
+import org.opensearch.test.MockLogAppender;
+        long slowLogThreshold = randomLongBetween(100, 200);
+    public void testFailsHealthOnSinglePathWriteFailure() throws IOException {
+        } finally {
+            assertEquals(1, disruptFsyncFileSystemProvider.getInjectedPathCount());
+            }
+                    rescheduledCount++;
+    }
+            .put(FsHealthService.HEALTHY_TIMEOUT_SETTING.getKey(), healthyTimeoutThreshold + "ms")
+            FsHealthService fsHealthService = new FsHealthService(settings, clusterSettings, testThreadPool, env, metricsRegistry);
+            assertEquals("health check passed", fsHealthService.getHealth().getInfo());
+import org.opensearch.test.telemetry.TestInMemoryMetricsRegistry;
+        }
+        TestThreadPool testThreadPool = new TestThreadPool(getClass().getName(), settings);
+                    if (injectIODelay.get()) {
+    public void testFailsHealthOnUnexpectedLockFileSize() throws IOException {
+                    injectedPaths.incrementAndGet();
+    public void testFailsHealthOnSinglePathFsyncFailure() throws IOException {
+ * Unless required by applicable law or agreed to in writing,
+            fsHealthService.doStop();
+        ) {
+ * GitHub history for details.
+            disruptFileSystemProvider.injectIOException.set(true);
+            super("disrupt_fs_health://", inner);
+            assertBusy(() -> assertEquals(StatusInfo.Status.HEALTHY, fsHealthService.getHealth().getStatus()));
+        FileSystemFsyncIOExceptionProvider(FileSystem inner) {
+        }
+            unexpectedLockFileSizeFileSystemProvider.injectUnexpectedFileSize.set(false);
+        try (NodeEnvironment env = newNodeEnvironment()) {
+    public void testFailsHealthOnIOException() throws IOException {
+ * this file be licensed under the Apache-2.0 license or a
+ * this work for additional information regarding copyright
+ * You may obtain a copy of the License at
+                mockAppender.addExpectation(
+        private final long delay;
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            assertEquals(Integer.valueOf(1), metricsRegistry.getCounterStore().get("fsHealth.failure.count").getCounterValue());
+            assertThat(fsHealthService.getHealth().getInfo(), is("health check failed on [" + disruptedPath + "]"));
+        }
+        } finally {
+            this.threadPool = threadPool;
+    private TestInMemoryMetricsRegistry metricsRegistry;
+                            long timeInMillis = 1;
+        final ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+            // disrupt file system writes on single path
+            fsHealthService.doStart();

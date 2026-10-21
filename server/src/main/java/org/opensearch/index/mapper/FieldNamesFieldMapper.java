@@ -1,242 +1,200 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.apache.lucene.document.FieldType;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.search.Query;
-import org.opensearch.Version;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.logging.DeprecationLogger;
-import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.search.lookup.SearchLookup;
-
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-
-/**
- * A mapper that indexes the field names of a document under <code>_field_names</code>. This mapper is typically useful in order
- * to have fast <code>exists</code> and <code>missing</code> queries/filters.
- *
- * @opensearch.internal
- */
-public class FieldNamesFieldMapper extends MetadataFieldMapper {
-
-    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(FieldNamesFieldMapper.class);
-
-    public static final String NAME = "_field_names";
-
-    public static final String CONTENT_TYPE = "_field_names";
-
-    @Override
-    public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new Builder(indexVersionCreated).init(this);
-    }
-
-    /**
-     * Parameter defaults
-     *
-     * @opensearch.internal
-     */
-    public static class Defaults {
-        public static final String NAME = FieldNamesFieldMapper.NAME;
-
-        public static final Explicit<Boolean> ENABLED = new Explicit<>(true, false);
-        public static final FieldType FIELD_TYPE = new FieldType();
-
-        static {
-            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
             FIELD_TYPE.setTokenized(false);
+    }
+ * compatible open source license.
+        public FieldNamesFieldMapper build(BuilderContext context) {
+            );
+package org.opensearch.index.mapper;
+ * to have fast <code>exists</code> and <code>missing</code> queries/filters.
+ * Modifications Copyright OpenSearch Contributors. See
+        c -> new FieldNamesFieldMapper(Defaults.ENABLED, c.indexVersionCreated(), new FieldNamesFieldType(Defaults.ENABLED.value())),
+ */
+            this.enabled = enabled;
+public class FieldNamesFieldMapper extends MetadataFieldMapper {
+import org.opensearch.index.query.QueryShardContext;
+     * Parameter defaults
+     * @opensearch.internal
+     * Builder for the FieldNames field mapper
+        protected FieldTypeCapabilities.Capability searchCapability() {
+        }
+        }
+                    }
+                    @Override
+     * @opensearch.internal
+        this.indexVersionCreated = indexVersionCreated;
+                        endIndex = nextEndIndex(endIndex + 1);
+                    @Override
+                    }
+                deprecationLogger.deprecate("field_names_enabled_parameter", ENABLED_DEPRECATION_MESSAGE);
+    public ParametrizedFieldMapper.Builder getMergeBuilder() {
+    }
+        public static final FieldType FIELD_TYPE = new FieldType();
+        static {
+                "terms_query_on_field_names",
+                        }
+                    @Override
+/*
+    public static final class FieldNamesFieldType extends TermBasedFieldType {
+ * Unless required by applicable law or agreed to in writing,
+import java.util.Collections;
+        }
+        }
+                        return result;
+                        final String result = fullPath.substring(0, endIndex);
+ *    http://www.apache.org/licenses/LICENSE-2.0
+        c -> new Builder(c.indexVersionCreated())
+            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");
+ * The OpenSearch Contributors require contributions made to
+    public static class Defaults {
+                    public String next() {
+        }
+ * this file be licensed under the Apache-2.0 license or a
+    public static final String CONTENT_TYPE = "_field_names";
+import org.opensearch.common.logging.DeprecationLogger;
+ * the Apache License, Version 2.0 (the "License"); you may
+                    int endIndex = nextEndIndex(0);
+    private FieldNamesFieldMapper(Explicit<Boolean> enabled, Version indexVersionCreated, FieldNamesFieldType mappedFieldType) {
+        }
+            FieldNamesFieldType fieldNamesFieldType = new FieldNamesFieldType(enabled.getValue().value());
+        @Override
+                            index += 1;
+                        throw new UnsupportedOperationException();
+    }
+ * license agreements. See the NOTICE file distributed with
+                    private int nextEndIndex(int index) {
+        super(mappedFieldType);
+import org.opensearch.common.Explicit;
+ * KIND, either express or implied.  See the License for the
+    static class Builder extends MetadataFieldMapper.Builder {
+        @Override
+    }
+ */
+    }
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(FieldNamesFieldMapper.class);
+    @Override
+ */
+/**
             FIELD_TYPE.setStored(false);
-            FIELD_TYPE.setOmitNorms(true);
+                "terms query on the _field_names field is deprecated and will be removed, use exists query instead"
+        return (FieldNamesFieldType) super.fieldType();
+     */
+import org.apache.lucene.index.IndexOptions;
+ * ownership. Elasticsearch licenses this file to you under
+    }
+            public Iterator<String> iterator() {
+            this.indexVersionCreated = indexVersionCreated;
+/*
+     *
+ * SPDX-License-Identifier: Apache-2.0
+            super(Defaults.NAME);
+        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
+    );
+        public static final Explicit<Boolean> ENABLED = new Explicit<>(true, false);
+                };
+ * A mapper that indexes the field names of a document under <code>_field_names</code>. This mapper is typically useful in order
+        };
+            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
+    private final Version indexVersionCreated;
+ * under the License.
+ * Licensed to Elasticsearch under one or more contributor
+        public Query termQuery(Object value, QueryShardContext context) {
+        public Query existsQuery(QueryShardContext context) {
+                        return index;
+            super(Defaults.NAME, true, false, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
+        @Override
+    }
+ * not use this file except in compliance with the License.
+ * this work for additional information regarding copyright
+     * Field type for FieldNames field mapper
+ *
+            return CONTENT_TYPE;
+        this.enabled = enabled;
+                return new Iterator<String>() {
             FIELD_TYPE.freeze();
         }
-    }
-
-    private static FieldNamesFieldMapper toType(FieldMapper in) {
-        return (FieldNamesFieldMapper) in;
-    }
-
-    public static final String ENABLED_DEPRECATION_MESSAGE =
-        "Disabling _field_names is not necessary because it no longer carries a large index overhead. Support for the `enabled` "
-            + "setting will be removed in a future major version. Please remove it from your mappings and templates.";
-
-    /**
-     * Builder for the FieldNames field mapper
-     *
-     * @opensearch.internal
-     */
-    static class Builder extends MetadataFieldMapper.Builder {
-
-        private final Parameter<Explicit<Boolean>> enabled = updateableBoolParam(
-            "enabled",
-            m -> toType(m).enabled,
-            Defaults.ENABLED.value()
-        );
-
-        private final Version indexVersionCreated;
-
         Builder(Version indexVersionCreated) {
-            super(Defaults.NAME);
-            this.indexVersionCreated = indexVersionCreated;
+        "Disabling _field_names is not necessary because it no longer carries a large index overhead. Support for the `enabled` "
+            m -> toType(m).enabled,
+            + "setting will be removed in a future major version. Please remove it from your mappings and templates.";
+            Defaults.ENABLED.value()
+    private static FieldNamesFieldMapper toType(FieldMapper in) {
+        @Override
+import org.apache.lucene.document.FieldType;
+import java.util.List;
+/*
+    }
+            return Collections.singletonList(enabled);
+            throw new UnsupportedOperationException("Cannot run exists query on _field_names");
+                    public void remove() {
         }
-
+ * GitHub history for details.
+}
+import java.util.Iterator;
+        public static final String NAME = FieldNamesFieldMapper.NAME;
+ * You may obtain a copy of the License at
+     *
+     *
+        return new Iterable<String>() {
+            return super.termQuery(value, context);
+    /**
         @Override
         protected List<Parameter<?>> getParameters() {
-            return Collections.singletonList(enabled);
-        }
-
-        @Override
-        public FieldNamesFieldMapper build(BuilderContext context) {
-            if (enabled.getValue().explicit()) {
-                deprecationLogger.deprecate("field_names_enabled_parameter", ENABLED_DEPRECATION_MESSAGE);
-            }
-            FieldNamesFieldType fieldNamesFieldType = new FieldNamesFieldType(enabled.getValue().value());
-            return new FieldNamesFieldMapper(enabled.getValue(), indexVersionCreated, fieldNamesFieldType);
-        }
-    }
-
-    public static final TypeParser PARSER = new ConfigurableTypeParser(
-        c -> new FieldNamesFieldMapper(Defaults.ENABLED, c.indexVersionCreated(), new FieldNamesFieldType(Defaults.ENABLED.value())),
-        c -> new Builder(c.indexVersionCreated())
-    );
-
-    /**
-     * Field type for FieldNames field mapper
-     *
-     * @opensearch.internal
-     */
-    public static final class FieldNamesFieldType extends TermBasedFieldType {
-
-        private final boolean enabled;
-
-        public FieldNamesFieldType(boolean enabled) {
-            super(Defaults.NAME, true, false, false, TextSearchInfo.SIMPLE_MATCH_ONLY, Collections.emptyMap());
-            this.enabled = enabled;
-        }
-
-        @Override
-        public String typeName() {
-            return CONTENT_TYPE;
-        }
-
+        return CONTENT_TYPE;
         public boolean isEnabled() {
-            return enabled;
+            @Override
+            }
+    public static final String NAME = "_field_names";
+     */
+ *
+            FIELD_TYPE.setIndexOptions(IndexOptions.DOCS);
+    private final Explicit<Boolean> enabled;
+        public String typeName() {
+import org.opensearch.Version;
+import org.opensearch.search.lookup.SearchLookup;
+    /**
+     */
+                    public boolean hasNext() {
+    /**
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    public static final TypeParser PARSER = new ConfigurableTypeParser(
+ *
+        return new Builder(indexVersionCreated).init(this);
+                    }
+            deprecationLogger.deprecate(
+            return new FieldNamesFieldMapper(enabled.getValue(), indexVersionCreated, fieldNamesFieldType);
+        return (FieldNamesFieldMapper) in;
+    protected String contentType() {
         }
-
         @Override
-        public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup lookup, String format) {
-            throw new UnsupportedOperationException("Cannot fetch values for internal field [" + name() + "].");
-        }
-
-        @Override
-        public Query existsQuery(QueryShardContext context) {
-            throw new UnsupportedOperationException("Cannot run exists query on _field_names");
-        }
-
-        @Override
-        public Query termQuery(Object value, QueryShardContext context) {
+                        return endIndex <= fullPath.length();
             if (isEnabled() == false) {
+     * @opensearch.internal
+        public FieldNamesFieldType(boolean enabled) {
                 throw new IllegalStateException("Cannot run [exists] queries if the [_field_names] field is disabled");
             }
-            deprecationLogger.deprecate(
-                "terms_query_on_field_names",
-                "terms query on the _field_names field is deprecated and will be removed, use exists query instead"
-            );
-            return super.termQuery(value, context);
-        }
-
+            FIELD_TYPE.setOmitNorms(true);
+    public static final String ENABLED_DEPRECATION_MESSAGE =
+ */
+        );
+            }
+ * @opensearch.internal
+import org.apache.lucene.search.Query;
         @Override
-        protected FieldTypeCapabilities.Capability searchCapability() {
-            return FieldTypeCapabilities.Capability.FULL_TEXT_SEARCH;
+    @Override
+ * specific language governing permissions and limitations
         }
-    }
-
-    private final Explicit<Boolean> enabled;
-    private final Version indexVersionCreated;
-
-    private FieldNamesFieldMapper(Explicit<Boolean> enabled, Version indexVersionCreated, FieldNamesFieldType mappedFieldType) {
-        super(mappedFieldType);
-        this.enabled = enabled;
-        this.indexVersionCreated = indexVersionCreated;
-    }
-
+                        while (index < fullPath.length() && fullPath.charAt(index) != '.') {
+    static Iterable<String> extractFieldNames(final String fullPath) {
+        }
+        private final boolean enabled;
+ * software distributed under the License is distributed on an
+import org.opensearch.index.engine.dataformat.FieldTypeCapabilities;
+            "enabled",
+        private final Parameter<Explicit<Boolean>> enabled = updateableBoolParam(
+            return enabled;
+            if (enabled.getValue().explicit()) {
+                    }
     @Override
     public FieldNamesFieldType fieldType() {
-        return (FieldNamesFieldType) super.fieldType();
-    }
-
-    static Iterable<String> extractFieldNames(final String fullPath) {
-        return new Iterable<String>() {
-            @Override
-            public Iterator<String> iterator() {
-                return new Iterator<String>() {
-                    int endIndex = nextEndIndex(0);
-
-                    private int nextEndIndex(int index) {
-                        while (index < fullPath.length() && fullPath.charAt(index) != '.') {
-                            index += 1;
-                        }
-                        return index;
-                    }
-
-                    @Override
-                    public boolean hasNext() {
-                        return endIndex <= fullPath.length();
-                    }
-
-                    @Override
-                    public String next() {
-                        final String result = fullPath.substring(0, endIndex);
-                        endIndex = nextEndIndex(endIndex + 1);
-                        return result;
-                    }
-
-                    @Override
-                    public void remove() {
-                        throw new UnsupportedOperationException();
-                    }
-
-                };
-            }
-        };
-    }
-
-    @Override
-    protected String contentType() {
-        return CONTENT_TYPE;
-    }
-
-}
+        private final Version indexVersionCreated;

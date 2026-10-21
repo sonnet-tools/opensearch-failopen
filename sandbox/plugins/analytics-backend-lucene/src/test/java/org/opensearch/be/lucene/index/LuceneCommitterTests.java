@@ -1,250 +1,226 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
+            builder.toString(),
+            committer.commit(new Committer.CommitInput(Map.<String, String>of().entrySet(), null));
  * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.be.lucene.index;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.store.NIOFSDirectory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.apache.lucene.util.Version;
 import org.opensearch.be.lucene.LucenePlugin;
-import org.opensearch.be.lucene.stats.LuceneShardStatsTracker;
-import org.opensearch.be.lucene.stats.LuceneStatsProvider;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.codec.CodecService;
-import org.opensearch.index.engine.CommitStats;
-import org.opensearch.index.engine.EngineConfig;
-import org.opensearch.index.engine.EngineConfigFactory;
-import org.opensearch.index.engine.exec.commit.Committer;
-import org.opensearch.index.engine.exec.commit.CommitterConfig;
-import org.opensearch.index.seqno.RetentionLeases;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.store.Store;
-import org.opensearch.index.translog.InternalTranslogFactory;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogConfig;
-import org.opensearch.plugin.stats.DataFormatStatsProviderRegistry;
-import org.opensearch.plugins.EnginePlugin;
-import org.opensearch.plugins.PluginsService;
-import org.opensearch.test.DummyShardLock;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-
+            null,
+            } catch (Throwable ignored) {
+import org.apache.lucene.index.IndexWriter;
+        expectThrows(IllegalStateException.class, committer::getIndexWriter);
+import org.apache.lucene.store.NIOFSDirectory;
+    @SuppressWarnings("unchecked")
+ * SPDX-License-Identifier: Apache-2.0
+        config.engineConfig().getStore().close();
+    private static long readCounter(LuceneShardStatsTracker tracker, String fieldName) throws IOException {
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-/**
- * Tests for {@link LuceneCommitter}.
- */
-public class LuceneCommitterTests extends OpenSearchTestCase {
-
-    private CommitterConfig createCommitterConfig() throws IOException {
-        Path baseDir = createTempDir();
-        ShardId shardId = new ShardId("test", "_na_", 0);
-        Path dataPath = baseDir.resolve(shardId.getIndex().getUUID()).resolve(Integer.toString(shardId.id()));
-        Files.createDirectories(dataPath);
-        Path translogPath = dataPath.resolve("translog");
-        Files.createDirectories(translogPath);
-        String translogUUID = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, 1L);
-        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", Settings.EMPTY);
-        Store store = new Store(shardId, indexSettings, new NIOFSDirectory(dataPath), new DummyShardLock(shardId));
-        store.createEmpty(Version.LATEST, translogUUID);
-        PluginsService mockPluginsService = mock(PluginsService.class);
-        when(mockPluginsService.filterPlugins(EnginePlugin.class)).thenReturn(List.of(new LucenePlugin()));
-
-        EngineConfig engineConfig = new EngineConfigFactory(mockPluginsService, indexSettings).newEngineConfig(
-            shardId,
+            }
             null,
-            indexSettings,
-            null,
-            store,
-            null,
+import org.apache.lucene.util.Version;
             new MockAnalyzer(random()),
+        CommitterConfig settings = createCommitterConfig();
+        try {
+     * <p>Setup: register a {@link LuceneStatsProvider} + tracker against the shard's id
+import org.opensearch.common.util.BigArrays;
+            // Sanity baseline: both counters at zero before the failure.
+import org.opensearch.plugins.PluginsService;
+import java.util.Collections;
+        committer.close();
+            IndexWriter writer = committer.getIndexWriter();
+import org.opensearch.index.engine.EngineConfig;
+            committer.getIndexWriter().close();
+     * underlying {@link IndexWriter} directly (without going through {@code committer.close()})
+                return ((Number) map.get(fieldName)).longValue();
+        provider.register(shardId, tracker);
+            config.engineConfig().getStore().close();
+        when(mockPluginsService.filterPlugins(EnginePlugin.class)).thenReturn(List.of(new LucenePlugin()));
+import org.opensearch.common.settings.Settings;
             null,
+        LuceneStatsProvider provider = new LuceneStatsProvider();
+            Map<String, String> readBack = committer.getLastCommittedData();
+            assertTrue(committer.getLastCommittedData().isEmpty());
+        Path translogPath = dataPath.resolve("translog");
+import java.util.Map;
             new CodecService(null, indexSettings, LogManager.getLogger(getClass()), List.of()),
+        LuceneCommitter committer = new LuceneCommitter(settings);
+            settings.engineConfig().getStore().close();
+        String translogUUID = Translog.createEmptyTranslog(translogPath, SequenceNumbers.NO_OPS_PERFORMED, shardId, 1L);
+    }
+            CommitStats stats = committer.getCommitStats();
+                // committer.close() may complain because IndexWriter is already closed
+    }
+import org.opensearch.index.engine.CommitStats;
+        throw new AssertionError("field not found: " + fieldName);
+            provider.unregister(shardId);
+            // commit() will pass; but indexWriter.commit() will throw AlreadyClosedException.
+            // remains false (we did NOT call committer.close()) so ensureOpen() inside
             null,
+ */
+        }
+import org.opensearch.index.codec.CodecService;
+import org.opensearch.index.seqno.RetentionLeases;
+        EngineConfig engineConfig = new EngineConfigFactory(mockPluginsService, indexSettings).newEngineConfig(
+        }
+import org.opensearch.index.engine.EngineConfigFactory;
+        LuceneCommitter committer = new LuceneCommitter(settings);
+        Store store = new Store(shardId, indexSettings, new NIOFSDirectory(dataPath), new DummyShardLock(shardId));
             null,
+        assertNotNull(committer.getIndexWriter());
+        } finally {
+            if (section instanceof Map<?, ?> map && map.containsKey(fieldName)) {
             null,
-            new TranslogConfig(shardId, translogPath, indexSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false),
-            TimeValue.timeValueMinutes(5),
+            settings.engineConfig().getStore().close();
+            assertEquals("commit_failures must be 1 after one failed commit", 1L, readCounter(tracker, "commit_failures"));
+            committer.close();
+     * (the class doesn't expose getters; this is the same surface end users observe).
             null,
+        LuceneCommitter committer = new LuceneCommitter(settings);
+ * this file be licensed under the Apache-2.0 license or a
+            () -> committer.commit(new Committer.CommitInput(Map.of("key", "value").entrySet(), null))
+        CommitterConfig settings = createCommitterConfig();
+            assertEquals("value2", readBack.get("key2"));
+ */
             null,
-            null,
-            null,
-            null,
-            () -> new RetentionLeases(0, 0, Collections.emptyList()),
-            null,
-            null,
-            false,
-            () -> Boolean.TRUE,
+    }
             new InternalTranslogFactory(),
             null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
-        return new CommitterConfig(engineConfig, () -> {});
-    }
-
-    public void testConstructorOpensIndexWriter() throws IOException {
-        CommitterConfig settings = createCommitterConfig();
-        LuceneCommitter committer = new LuceneCommitter(settings);
-        try {
-            IndexWriter writer = committer.getIndexWriter();
-            assertNotNull(writer);
-            assertTrue(writer.isOpen());
-        } finally {
-            committer.close();
-            settings.engineConfig().getStore().close();
-        }
-    }
-
-    public void testCloseReleasesIndexWriter() throws IOException {
-        CommitterConfig settings = createCommitterConfig();
-        LuceneCommitter committer = new LuceneCommitter(settings);
-        assertNotNull(committer.getIndexWriter());
-
-        committer.close();
-        expectThrows(IllegalStateException.class, committer::getIndexWriter);
-        settings.engineConfig().getStore().close();
-    }
-
-    public void testCommitRoundTrip() throws IOException {
-        CommitterConfig settings = createCommitterConfig();
-        LuceneCommitter committer = new LuceneCommitter(settings);
-        try {
-            long genBeforeCommit = committer.getCommitStats().getGeneration();
-            Map<String, String> commitData = Map.of("key1", "value1", "key2", "value2", "_snapshot_", "serialized-data");
-            committer.commit(new Committer.CommitInput(commitData.entrySet(), null));
-
-            Map<String, String> readBack = committer.getLastCommittedData();
-
-            assertEquals("value1", readBack.get("key1"));
-            assertEquals("value2", readBack.get("key2"));
-            assertEquals("serialized-data", readBack.get("_snapshot_"));
-
-            CommitStats stats = committer.getCommitStats();
-            assertEquals(genBeforeCommit + 1, stats.getGeneration());
-            assertEquals(readBack, stats.getUserData());
-        } finally {
-            committer.close();
-            settings.engineConfig().getStore().close();
-        }
-    }
-
-    public void testCommitWithEmptyData() throws IOException {
-        CommitterConfig settings = createCommitterConfig();
-        LuceneCommitter committer = new LuceneCommitter(settings);
-        try {
-            committer.commit(new Committer.CommitInput(Map.<String, String>of().entrySet(), null));
-            assertTrue(committer.getLastCommittedData().isEmpty());
-        } finally {
-            committer.close();
-            settings.engineConfig().getStore().close();
-        }
-    }
-
-    public void testCommitAfterCloseThrows() throws IOException {
-        CommitterConfig config = createCommitterConfig();
-        LuceneCommitter committer = new LuceneCommitter(config);
-        committer.close();
-
-        expectThrows(
-            IllegalStateException.class,
-            () -> committer.commit(new Committer.CommitInput(Map.of("key", "value").entrySet(), null))
-        );
-        config.engineConfig().getStore().close();
-    }
-
-    /**
-     * Verifies that {@code lucene.commit.commit_failures} increments when {@code commit()}
-     * throws, and {@code commit_total} does NOT increment for the failed attempt.
-     *
-     * <p>Setup: register a {@link LuceneStatsProvider} + tracker against the shard's id
-     * so {@link LuceneCommitter#commit} can reach them via the global registry. Close the
-     * underlying {@link IndexWriter} directly (without going through {@code committer.close()})
-     * — this leaves {@code LuceneCommitter.isClosed=false} so {@code ensureOpen()} still
-     * passes, but the next {@code indexWriter.commit()} throws {@code AlreadyClosedException}.
-     * That {@code Throwable} lands in our catch block, which sets {@code threw=true} and
-     * (in the finally) increments {@code commit_failures} instead of {@code commit_total}.
-     *
-     * <p>We read counter values by rendering {@code LuceneShardStats#toXContent} to JSON
-     * (the class doesn't expose getters; this is the same surface end users observe).
      */
-    public void testCommitFailureIncrementsCommitFailuresCounter() throws IOException {
-        LuceneStatsProvider provider = new LuceneStatsProvider();
-        DataFormatStatsProviderRegistry.INSTANCE.register(provider);
-
-        CommitterConfig config = createCommitterConfig();
-        ShardId shardId = config.engineConfig().getShardId();
-        LuceneShardStatsTracker tracker = new LuceneShardStatsTracker();
-        provider.register(shardId, tracker);
-
-        LuceneCommitter committer = new LuceneCommitter(config);
-        try {
-            // Sanity baseline: both counters at zero before the failure.
-            assertEquals("baseline commit_total", 0L, readCounter(tracker, "commit_total"));
-            assertEquals("baseline commit_failures", 0L, readCounter(tracker, "commit_failures"));
-
-            // Force the IndexWriter into a closed state. The committer's own isClosed flag
-            // remains false (we did NOT call committer.close()) so ensureOpen() inside
-            // commit() will pass; but indexWriter.commit() will throw AlreadyClosedException.
-            committer.getIndexWriter().close();
-
-            expectThrows(Throwable.class, () -> committer.commit(new Committer.CommitInput(Map.<String, String>of().entrySet(), null)));
-
-            // Contract: commit_failures incremented by exactly 1, commit_total still 0.
-            assertEquals("commit_failures must be 1 after one failed commit", 1L, readCounter(tracker, "commit_failures"));
-            assertEquals("commit_total must still be 0 (failed attempt does not count)", 0L, readCounter(tracker, "commit_total"));
+            false,
+package org.opensearch.be.lucene.index;
+            new TranslogConfig(shardId, translogPath, indexSettings, BigArrays.NON_RECYCLING_INSTANCE, "", false),
+     * (in the finally) increments {@code commit_failures} instead of {@code commit_total}.
+     * That {@code Throwable} lands in our catch block, which sets {@code threw=true} and
         } finally {
-            provider.unregister(shardId);
-            try {
-                committer.close();
-            } catch (Throwable ignored) {
-                // committer.close() may complain because IndexWriter is already closed
-            }
-            config.engineConfig().getStore().close();
-        }
+import static org.mockito.Mockito.when;
+     * Verifies that {@code lucene.commit.commit_failures} increments when {@code commit()}
     }
-
-    /** Reads a single counter from a tracker by rendering its snapshot to JSON. */
-    @SuppressWarnings("unchecked")
-    private static long readCounter(LuceneShardStatsTracker tracker, String fieldName) throws IOException {
-        var builder = org.opensearch.common.xcontent.XContentFactory.jsonBuilder().startObject();
-        tracker.stats().toXContent(builder, org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS);
-        builder.endObject();
-        Map<String, Object> parsed = org.opensearch.common.xcontent.XContentHelper.convertToMap(
-            org.opensearch.common.xcontent.json.JsonXContent.jsonXContent,
-            builder.toString(),
-            true
-        );
-        // The field lives one level deep (e.g., parsed.commit.commit_failures).
+            assertEquals("commit_total must still be 0 (failed attempt does not count)", 0L, readCounter(tracker, "commit_total"));
+            () -> Boolean.TRUE,
         for (Object section : parsed.values()) {
-            if (section instanceof Map<?, ?> map && map.containsKey(fieldName)) {
-                return ((Number) map.get(fieldName)).longValue();
-            }
-        }
-        throw new AssertionError("field not found: " + fieldName);
+            assertNotNull(writer);
+            Map<String, String> commitData = Map.of("key1", "value1", "key2", "value2", "_snapshot_", "serialized-data");
+        committer.close();
+            TimeValue.timeValueMinutes(5),
+            () -> new RetentionLeases(0, 0, Collections.emptyList()),
+    /** Reads a single counter from a tracker by rendering its snapshot to JSON. */
+            shardId,
+        tracker.stats().toXContent(builder, org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS);
+import org.opensearch.index.IndexSettings;
+     *
     }
+            null,
+            settings.engineConfig().getStore().close();
+        CommitterConfig settings = createCommitterConfig();
+            IllegalStateException.class,
+ * compatible open source license.
+        try {
+            assertEquals(readBack, stats.getUserData());
+            org.opensearch.common.xcontent.json.JsonXContent.jsonXContent,
+            null,
+        CommitterConfig config = createCommitterConfig();
+        LuceneCommitter committer = new LuceneCommitter(config);
+        LuceneShardStatsTracker tracker = new LuceneShardStatsTracker();
+import org.apache.lucene.tests.analysis.MockAnalyzer;
+            expectThrows(Throwable.class, () -> committer.commit(new Committer.CommitInput(Map.<String, String>of().entrySet(), null)));
+            // Contract: commit_failures incremented by exactly 1, commit_total still 0.
+public class LuceneCommitterTests extends OpenSearchTestCase {
+import static org.mockito.Mockito.mock;
+        Path dataPath = baseDir.resolve(shardId.getIndex().getUUID()).resolve(Integer.toString(shardId.id()));
+            null,
+import org.opensearch.test.IndexSettingsModule;
+            assertEquals(genBeforeCommit + 1, stats.getGeneration());
+        try {
+    public void testCommitWithEmptyData() throws IOException {
+            committer.commit(new Committer.CommitInput(commitData.entrySet(), null));
+        }
+            assertEquals("serialized-data", readBack.get("_snapshot_"));
+    }
+        } finally {
+            null,
+            indexSettings,
+        }
+        ShardId shardId = config.engineConfig().getShardId();
+            assertEquals("baseline commit_failures", 0L, readCounter(tracker, "commit_failures"));
+import org.opensearch.plugin.stats.DataFormatStatsProviderRegistry;
+import org.opensearch.test.OpenSearchTestCase;
+            null,
+    public void testCommitRoundTrip() throws IOException {
+            null,
+            try {
+        ShardId shardId = new ShardId("test", "_na_", 0);
+        settings.engineConfig().getStore().close();
+import org.opensearch.common.unit.TimeValue;
+            assertTrue(writer.isOpen());
+        );
+     * so {@link LuceneCommitter#commit} can reach them via the global registry. Close the
+            null,
+     * passes, but the next {@code indexWriter.commit()} throws {@code AlreadyClosedException}.
+    public void testCommitFailureIncrementsCommitFailuresCounter() throws IOException {
+import org.opensearch.index.store.Store;
+        PluginsService mockPluginsService = mock(PluginsService.class);
+            assertEquals("value1", readBack.get("key1"));
+            assertEquals("baseline commit_total", 0L, readCounter(tracker, "commit_total"));
+import org.opensearch.index.seqno.SequenceNumbers;
+        DataFormatStatsProviderRegistry.INSTANCE.register(provider);
+    /**
+     * throws, and {@code commit_total} does NOT increment for the failed attempt.
+import org.opensearch.index.engine.exec.commit.Committer;
+import org.opensearch.index.engine.exec.commit.CommitterConfig;
+        );
+     * — this leaves {@code LuceneCommitter.isClosed=false} so {@code ensureOpen()} still
+        builder.endObject();
+        CommitterConfig settings = createCommitterConfig();
+            null,
+        var builder = org.opensearch.common.xcontent.XContentFactory.jsonBuilder().startObject();
+        try {
+            }
+import org.opensearch.index.translog.TranslogConfig;
+        Path baseDir = createTempDir();
+        // The field lives one level deep (e.g., parsed.commit.commit_failures).
+import java.util.List;
+import org.opensearch.index.translog.Translog;
+            null
+            long genBeforeCommit = committer.getCommitStats().getGeneration();
+        store.createEmpty(Version.LATEST, translogUUID);
+                committer.close();
+        LuceneCommitter committer = new LuceneCommitter(settings);
+/*
+     *
+import java.nio.file.Path;
+import org.opensearch.test.DummyShardLock;
+        LuceneCommitter committer = new LuceneCommitter(config);
+            true
+            committer.close();
+            null,
+            committer.close();
+            null,
+        expectThrows(
+ *
+        } finally {
+    }
+    }
+        }
+        Files.createDirectories(dataPath);
+import org.opensearch.be.lucene.stats.LuceneShardStatsTracker;
+import org.opensearch.be.lucene.stats.LuceneStatsProvider;
+        CommitterConfig config = createCommitterConfig();
 }
+import java.nio.file.Files;
+            store,
+    public void testCommitAfterCloseThrows() throws IOException {
+        return new CommitterConfig(engineConfig, () -> {});
+            null,
+            null,
+import org.opensearch.index.translog.InternalTranslogFactory;
+        );
+import org.opensearch.plugins.EnginePlugin;
+    public void testConstructorOpensIndexWriter() throws IOException {
+    private CommitterConfig createCommitterConfig() throws IOException {
+        Files.createDirectories(translogPath);
+        Map<String, Object> parsed = org.opensearch.common.xcontent.XContentHelper.convertToMap(
+            // Force the IndexWriter into a closed state. The committer's own isClosed flag
+ * Tests for {@link LuceneCommitter}.
+     * <p>We read counter values by rendering {@code LuceneShardStats#toXContent} to JSON
+import org.apache.logging.log4j.LogManager;
+        IndexSettings indexSettings = IndexSettingsModule.newIndexSettings("test", Settings.EMPTY);
+    public void testCloseReleasesIndexWriter() throws IOException {
+import org.opensearch.core.index.shard.ShardId;
+/**

@@ -1,246 +1,204 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.rule.storage;
-
-import org.apache.commons.collections4.trie.PatriciaTrie;
-import org.opensearch.rule.MatchLabel;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-public class AttributeValueStoreTests extends OpenSearchTestCase {
-
-    AttributeValueStore<String, String> subjectUnderTest;
-    final static String ALPHA_NUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-        subjectUnderTest = new DefaultAttributeValueStore<>(new PatriciaTrie<>());
-    }
-
-    private Set<String> extractFeatureValues(List<MatchLabel<String>> labels) {
-        return labels.stream().map(MatchLabel::getFeatureValue).collect(Collectors.toSet());
-    }
-
-    public void testPut() {
-        subjectUnderTest.put("foo", "bar");
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("bar"));
-
-        subjectUnderTest.put("foo", "sing");
-        assertEquals(2, subjectUnderTest.getMatches("foo").size());
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("sing"));
-    }
-
-    public void testRemove() {
-        subjectUnderTest.put("foo", "bar");
-        subjectUnderTest.remove("foo", "bar");
-        assertEquals(0, subjectUnderTest.size());
-        assertTrue(subjectUnderTest.getMatches("foo").isEmpty());
-    }
-
-    public void testGet() {
-        subjectUnderTest.put("foo", "bar");
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("bar"));
-
-        subjectUnderTest.put("foo", "sing");
-        assertEquals(2, subjectUnderTest.getMatches("foo").size());
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("sing"));
-    }
-
-    public void testGetWhenNoProperPrefixIsPresent() {
-        subjectUnderTest.put("foo", "bar");
-        subjectUnderTest.put("foodip", "sing");
-
-        assertTrue(subjectUnderTest.getMatches("foxtail").isEmpty());
-
-        // A wildcard value "fox*" prefix-matches the request "foxtail".
-        subjectUnderTest.put("fox*", "lucy");
-        assertFalse(subjectUnderTest.getMatches("foxtail").isEmpty());
-    }
-
-    public void testExactValueDoesNotPrefixMatch() {
-        // A value stored without a trailing wildcard is matched exactly, not as a prefix.
-        subjectUnderTest.put("fox", "lucy");
-        assertTrue(subjectUnderTest.getMatches("foxtail").isEmpty());
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("fox")).contains("lucy"));
-    }
-
-    public void testWildcardValuePrefixMatches() {
-        // A value stored with a trailing wildcard matches both the exact stem and longer values.
-        subjectUnderTest.put("fox*", "lucy");
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("fox")).contains("lucy"));
-        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foxtail")).contains("lucy"));
-        assertTrue(subjectUnderTest.getMatches("fo").isEmpty());
-    }
-
-    public void testWildcardRequestKeyMatchesWildcardValueOnce() {
-        // A request key that is itself a wildcard expression ("fox*") must match a stored "fox*" value
-        // only once (via the prefix branch), not additionally via an exact match, to avoid inflating score.
-        subjectUnderTest.put("fox*", "lucy");
-        List<MatchLabel<String>> matches = subjectUnderTest.getMatches("fox*");
-        assertEquals(1, matches.size());
-        assertEquals("lucy", matches.get(0).getFeatureValue());
-        // Stem "fox" (length 3) over request "fox*" (length 4) scores 0.75; without the exact-branch guard the
-        // exact hit on "fox*" would add a second 1.0 match and the caller's score summation would inflate it.
-        assertEquals(0.75f, matches.get(0).getMatchScore(), 0.0f);
-
-        // A wildcard request key must not exact-match a non-wildcard stored value of the same stem.
-        subjectUnderTest.put("fox", "exact");
-        assertEquals(Set.of("lucy"), extractFeatureValues(subjectUnderTest.getMatches("fox*")));
-    }
-
-    public void testExactAndWildcardValuesWithSameStemAreDistinct() {
-        // "fox" (exact) and "fox*" (prefix) are stored under distinct keys and matched independently.
-        subjectUnderTest.put("fox", "exact");
-        subjectUnderTest.put("fox*", "prefix");
-
-        // Request "fox" matches the exact value (score 1.0) and the wildcard stem (score 1.0).
-        assertEquals(Set.of("exact", "prefix"), extractFeatureValues(subjectUnderTest.getMatches("fox")));
-        // A longer request matches only the wildcard value.
-        assertEquals(Set.of("prefix"), extractFeatureValues(subjectUnderTest.getMatches("foxtail")));
-    }
-
-    public void testEmptyKeyValueMatchesEveryRequestAsNoConstraint() {
-        // Values stored under the empty key represent "no constraint" and must match any request key at score 0.
-        // This pins the explicit empty-key lookup in getMatches; without it, unconstrained-attribute rules stop matching.
-        subjectUnderTest.put("", "no_constraint");
-
-        List<MatchLabel<String>> matches = subjectUnderTest.getMatches("anything");
-        assertEquals(1, matches.size());
-        assertEquals("no_constraint", matches.get(0).getFeatureValue());
-        assertEquals(0f, matches.get(0).getMatchScore(), 0.0f);
+        }
         assertEquals(Set.of("no_constraint"), extractFeatureValues(subjectUnderTest.getMatches("")));
-    }
-
+            @Override
     public void testBareWildcardValueMatchesEveryNonEmptyRequest() {
-        // A bare "*" value (valid per RuleValidator) is reached via the shrinking-prefix loop at the empty prefix,
-        // so it matches every non-empty request key at score 0, but does not match an empty request key.
-        subjectUnderTest.put("*", "catch_all");
-
-        assertEquals(Set.of("catch_all"), extractFeatureValues(subjectUnderTest.getMatches("anything")));
-        assertEquals(0f, subjectUnderTest.getMatches("anything").get(0).getMatchScore(), 0.0f);
-        assertTrue(subjectUnderTest.getMatches("").isEmpty());
+        subjectUnderTest.put("fox", "lucy");
+            readerThreads.get(i).start();
     }
-
-    public void testClear() {
-        subjectUnderTest.put("foo", "bar");
-        subjectUnderTest.clear();
+        assertTrue(result.isEmpty());
+            }
+        }
+    }
+    public void testGetWhenNoProperPrefixIsPresent() {
+        List<MatchLabel<String>> exactMatches = store.getExactMatch("foo");
+    }
+            } catch (InterruptedException ignored) {}
+ * compatible open source license.
+        public void run() {
+    public static String generateRandom(int maxLength) {
+/*
+    private Set<String> extractFeatureValues(List<MatchLabel<String>> labels) {
+        subjectUnderTest.put("foo", "sing");
+                    subjectUnderTest.getMatches(key);
+    public void testPut() {
+        private final List<String> toWriteKeys;
+import java.util.Set;
+    public void testGet() {
+        assertTrue(subjectUnderTest.getMatches("foxtail").isEmpty());
+        return labels.stream().map(MatchLabel::getFeatureValue).collect(Collectors.toSet());
+        store.remove("foo", "bar");
+        subjectUnderTest.put("fox", "exact");
+        private final List<String> toReadKeys;
+        assertEquals(Set.of("exact", "prefix"), extractFeatureValues(subjectUnderTest.getMatches("fox")));
+    AttributeValueStore<String, String> subjectUnderTest;
+        class DummyStore implements AttributeValueStore<String, String> {
+            try {
+    public void testExactValueDoesNotPrefixMatch() {
+        assertTrue(subjectUnderTest.getMatches("fo").isEmpty());
+        subjectUnderTest = new DefaultAttributeValueStore<>(new PatriciaTrie<>());
+        StringBuilder sb = new StringBuilder(length);
+            boolean removeCalled = false;
+        assertTrue(subjectUnderTest.getMatches("foo").isEmpty());
+        @Override
+                }
+        // Stem "fox" (length 3) over request "fox*" (length 4) scores 0.75; without the exact-branch guard the
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("bar"));
+        for (int i = 0; i < 100; i++) {
+            sb.append(ALPHA_NUMERIC.charAt(random().nextInt(ALPHA_NUMERIC.length())));
+        subjectUnderTest.put("fox*", "lucy");
+        subjectUnderTest.put("fox", "exact");
+        // A wildcard request key must not exact-match a non-wildcard stored value of the same stem.
+        assertEquals(Set.of("lucy"), extractFeatureValues(subjectUnderTest.getMatches("fox*")));
         assertEquals(0, subjectUnderTest.size());
+        for (int i = 0; i < 10; i++) {
+ * this file be licensed under the Apache-2.0 license or a
+            readerThreads.add(new AttributeValueStoreReader(subjectUnderTest, randomStrings));
+        assertEquals(2, subjectUnderTest.getMatches("foo").size());
+        subjectUnderTest.put("foo", "bar");
+        assertEquals(0.75f, matches.get(0).getMatchScore(), 0.0f);
+}
+        subjectUnderTest.put("foo", "sing");
+    private static class AttributeValueStoreWriter extends Thread {
+    public void testExactAndWildcardValuesWithSameStemAreDistinct() {
+        assertEquals(1, matches.size());
+        subjectUnderTest.put("foo", "bar");
+    }
+                return 0;
+        List<Thread> writerThreads = new ArrayList<>();
+    }
+        List<MatchLabel<String>> matches = subjectUnderTest.getMatches("anything");
+        assertNotNull(exactMatches);
+public class AttributeValueStoreTests extends OpenSearchTestCase {
+        assertEquals(0f, subjectUnderTest.getMatches("anything").get(0).getMatchScore(), 0.0f);
+        }
+        List<MatchLabel<String>> matches = subjectUnderTest.getMatches("fox*");
+                    subjectUnderTest.put(key, key);
+        assertEquals("no_constraint", matches.get(0).getFeatureValue());
+        }
+import org.apache.commons.collections4.trie.PatriciaTrie;
+        assertEquals(Set.of("prefix"), extractFeatureValues(subjectUnderTest.getMatches("foxtail")));
+            try {
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("fox")).contains("lucy"));
+    public void testClear() {
+        // Values stored under the empty key represent "no constraint" and must match any request key at score 0.
+    }
+    public void testConcurrentUpdatesAndReads() {
+            writerThreads.add(new AttributeValueStoreWriter(subjectUnderTest, randomStrings));
+    }
+        assertTrue(subjectUnderTest.getMatches("foxtail").isEmpty());
+                return Optional.empty();
+import java.util.List;
+    private static class AttributeValueStoreReader extends Thread {
+            public void remove(String key) {
+        super.setUp();
+            @Override
+        subjectUnderTest.put("foodip", "sing");
+    public void setUp() throws Exception {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    }
+import org.opensearch.rule.MatchLabel;
+    public void testWildcardRequestKeyMatchesWildcardValueOnce() {
+ * The OpenSearch Contributors require contributions made to
+                for (String key : toReadKeys) {
+        assertTrue(subjectUnderTest.getMatches("").isEmpty());
+        return sb.toString();
+        // This pins the explicit empty-key lookup in getMatches; without it, unconstrained-attribute rules stop matching.
+import java.util.Optional;
+        // Request "fox" matches the exact value (score 1.0) and the wildcard stem (score 1.0).
+        }
+            public void put(String key, String value) {}
+        assertNotNull(result);
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("bar"));
+        subjectUnderTest.put("fox*", "lucy");
+        // A value stored with a trailing wildcard matches both the exact stem and longer values.
+        List<Thread> readerThreads = new ArrayList<>();
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("fox")).contains("lucy"));
+            randomStrings.add(generateRandom(20));
+        final List<String> randomStrings = new ArrayList<>();
+            }
+        subjectUnderTest.put("foo", "bar");
+                removeCalled = true;
+        assertEquals(0, subjectUnderTest.size());
+            public Optional<String> get(String key) {
+    public void testRemove() {
+        DummyStore store = new DummyStore();
+        @Override
+        assertEquals("lucy", matches.get(0).getFeatureValue());
+                for (String key : toWriteKeys) {
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("sing"));
+ *
+import java.util.stream.Collectors;
+    }
+            this.toWriteKeys = toWriteKeys;
+            @Override
+            writerThreads.get(i).start();
+        assertTrue(store.removeCalled);
+            public int size() {
+        // only once (via the prefix branch), not additionally via an exact match, to avoid inflating score.
+import org.opensearch.test.OpenSearchTestCase;
+import java.util.ArrayList;
+            @Override
+    }
+        private final AttributeValueStore<String, String> subjectUnderTest;
+            }
+        assertEquals(Set.of("catch_all"), extractFeatureValues(subjectUnderTest.getMatches("anything")));
+        subjectUnderTest.put("foo", "bar");
+            this.subjectUnderTest = subjectUnderTest;
+        subjectUnderTest.put("foo", "bar");
+        subjectUnderTest.put("fox*", "prefix");
         assertTrue(subjectUnderTest.getMatches("foo").isEmpty());
     }
-
-    public void testConcurrentUpdatesAndReads() {
-        final List<String> randomStrings = new ArrayList<>();
-        for (int i = 0; i < 100; i++) {
-            randomStrings.add(generateRandom(20));
-        }
-        List<Thread> readerThreads = new ArrayList<>();
-        List<Thread> writerThreads = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
-            readerThreads.add(new AttributeValueStoreReader(subjectUnderTest, randomStrings));
-            writerThreads.add(new AttributeValueStoreWriter(subjectUnderTest, randomStrings));
-        }
-
-        for (int i = 0; i < 10; i++) {
-            readerThreads.get(i).start();
-            writerThreads.get(i).start();
-        }
     }
-
-    public static String generateRandom(int maxLength) {
-        int length = random().nextInt(maxLength) + 1;
-        StringBuilder sb = new StringBuilder(length);
-        for (int i = 0; i < length; i++) {
-            sb.append(ALPHA_NUMERIC.charAt(random().nextInt(ALPHA_NUMERIC.length())));
-        }
-        return sb.toString();
-    }
-
-    private static class AttributeValueStoreReader extends Thread {
-        private final AttributeValueStore<String, String> subjectUnderTest;
-        private final List<String> toReadKeys;
-
-        AttributeValueStoreReader(AttributeValueStore<String, String> subjectUnderTest, List<String> toReadKeys) {
-            this.subjectUnderTest = subjectUnderTest;
-            this.toReadKeys = toReadKeys;
-        }
-
-        @Override
+        List<MatchLabel<String>> result = store.getMatches("foo");
+            } catch (InterruptedException e) {}
+        assertTrue(exactMatches.isEmpty());
+    public void testEmptyKeyValueMatchesEveryRequestAsNoConstraint() {
         public void run() {
-            try {
+        // A longer request matches only the wildcard value.
+        // "fox" (exact) and "fox*" (prefix) are stored under distinct keys and matched independently.
+        assertEquals(1, matches.size());
                 Thread.sleep(random().nextInt(100));
-                for (String key : toReadKeys) {
-                    subjectUnderTest.getMatches(key);
+        // A wildcard value "fox*" prefix-matches the request "foxtail".
+        }
+        // A bare "*" value (valid per RuleValidator) is reached via the shrinking-prefix loop at the empty prefix,
+    }
+        for (int i = 0; i < length; i++) {
+package org.opensearch.rule.storage;
+        AttributeValueStoreReader(AttributeValueStore<String, String> subjectUnderTest, List<String> toReadKeys) {
+            this.toReadKeys = toReadKeys;
+    @Override
+    }
+            @Override
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foxtail")).contains("lucy"));
+    public void testWildcardValuePrefixMatches() {
                 }
-            } catch (InterruptedException ignored) {}
+        private final AttributeValueStore<String, String> subjectUnderTest;
+        assertEquals(0f, matches.get(0).getMatchScore(), 0.0f);
         }
     }
-
-    private static class AttributeValueStoreWriter extends Thread {
-        private final AttributeValueStore<String, String> subjectUnderTest;
-        private final List<String> toWriteKeys;
-
+ */
         AttributeValueStoreWriter(AttributeValueStore<String, String> subjectUnderTest, List<String> toWriteKeys) {
             this.subjectUnderTest = subjectUnderTest;
-            this.toWriteKeys = toWriteKeys;
-        }
-
-        @Override
-        public void run() {
-            try {
-                Thread.sleep(random().nextInt(100));
-                for (String key : toWriteKeys) {
-                    subjectUnderTest.put(key, key);
-                }
-            } catch (InterruptedException e) {}
-        }
+        // so it matches every non-empty request key at score 0, but does not match an empty request key.
+        subjectUnderTest.clear();
+        int length = random().nextInt(maxLength) + 1;
     }
-
     public void testDefaultMethods() {
-        class DummyStore implements AttributeValueStore<String, String> {
-            boolean removeCalled = false;
-
-            @Override
-            public void put(String key, String value) {}
-
-            @Override
-            public void remove(String key) {
-                removeCalled = true;
-            }
-
-            @Override
-            public Optional<String> get(String key) {
-                return Optional.empty();
-            }
-
-            @Override
-            public void clear() {}
-
-            @Override
-            public int size() {
-                return 0;
-            }
+        // A value stored without a trailing wildcard is matched exactly, not as a prefix.
         }
-
-        DummyStore store = new DummyStore();
-        store.remove("foo", "bar");
-        assertTrue(store.removeCalled);
-        List<MatchLabel<String>> result = store.getMatches("foo");
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-        List<MatchLabel<String>> exactMatches = store.getExactMatch("foo");
-        assertNotNull(exactMatches);
-        assertTrue(exactMatches.isEmpty());
+    final static String ALPHA_NUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        subjectUnderTest.put("", "no_constraint");
+        subjectUnderTest.remove("foo", "bar");
+        assertFalse(subjectUnderTest.getMatches("foxtail").isEmpty());
+        subjectUnderTest.put("*", "catch_all");
+        assertTrue(extractFeatureValues(subjectUnderTest.getMatches("foo")).contains("sing"));
+        subjectUnderTest.put("fox*", "lucy");
+        }
+        assertEquals(2, subjectUnderTest.getMatches("foo").size());
+            public void clear() {}
+        for (int i = 0; i < 10; i++) {
+        // exact hit on "fox*" would add a second 1.0 match and the caller's score summation would inflate it.
+        // A request key that is itself a wildcard expression ("fox*") must match a stored "fox*" value
     }
-}
+                Thread.sleep(random().nextInt(100));

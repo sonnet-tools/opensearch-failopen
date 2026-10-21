@@ -1,221 +1,193 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.fieldcaps;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentObject;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.core.xcontent.XContentParserUtils;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
-/**
- * Response for {@link FieldCapabilitiesRequest} requests.
- *
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class FieldCapabilitiesResponse extends ActionResponse implements ToXContentObject {
-    private static final ParseField INDICES_FIELD = new ParseField("indices");
-    private static final ParseField FIELDS_FIELD = new ParseField("fields");
-
-    private final String[] indices;
-    private final Map<String, Map<String, FieldCapabilities>> responseMap;
-    private final List<FieldCapabilitiesIndexResponse> indexResponses;
-
-    public FieldCapabilitiesResponse(String[] indices, Map<String, Map<String, FieldCapabilities>> responseMap) {
-        this(indices, responseMap, Collections.emptyList());
     }
-
-    FieldCapabilitiesResponse(List<FieldCapabilitiesIndexResponse> indexResponses) {
-        this(Strings.EMPTY_ARRAY, Collections.emptyMap(), indexResponses);
-    }
-
-    private FieldCapabilitiesResponse(
-        String[] indices,
-        Map<String, Map<String, FieldCapabilities>> responseMap,
-        List<FieldCapabilitiesIndexResponse> indexResponses
-    ) {
-        this.responseMap = Objects.requireNonNull(responseMap);
-        this.indexResponses = Objects.requireNonNull(indexResponses);
-        this.indices = indices;
-    }
-
-    public FieldCapabilitiesResponse(StreamInput in) throws IOException {
-        super(in);
-        indices = in.readStringArray();
-        this.responseMap = in.readMap(StreamInput::readString, FieldCapabilitiesResponse::readField);
-        indexResponses = in.readList(FieldCapabilitiesIndexResponse::new);
-    }
-
-    /**
-     * Used for serialization
-     */
-    FieldCapabilitiesResponse() {
-        this(Strings.EMPTY_ARRAY, Collections.emptyMap(), Collections.emptyList());
-    }
-
-    /**
-     * Get the concrete list of indices that were requested.
-     */
-    public String[] getIndices() {
-        return indices;
-    }
-
-    /**
-     * Get the field capabilities map.
-     */
-    public Map<String, Map<String, FieldCapabilities>> get() {
-        return responseMap;
-    }
-
-    /**
-     * Returns the actual per-index field caps responses
-     */
-    List<FieldCapabilitiesIndexResponse> getIndexResponses() {
-        return indexResponses;
-    }
-
-    /**
-     *
-     * Get the field capabilities per type for the provided {@code field}.
-     */
-    public Map<String, FieldCapabilities> getField(String field) {
-        return responseMap.get(field);
-    }
-
-    private static Map<String, FieldCapabilities> readField(StreamInput in) throws IOException {
-        return in.readMap(StreamInput::readString, FieldCapabilities::new);
-    }
-
     @Override
+    }
+        if (o == null || getClass() != o.getClass()) return false;
+    @Override
+}
+        return in.readMap(StreamInput::readString, FieldCapabilities::new);
+ * Modifications Copyright OpenSearch Contributors. See
+    private FieldCapabilitiesResponse(
+        return responseMap;
+     */
+        FieldCapabilitiesResponse that = (FieldCapabilitiesResponse) o;
+        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        builder.endObject();
+    }
+    }
+    }
+            );
+    }
+import org.opensearch.common.collect.Tuple;
+    private final List<FieldCapabilitiesIndexResponse> indexResponses;
+ * license agreements. See the NOTICE file distributed with
+        return typeToCapabilities;
+        this.indices = indices;
+/*
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeStringArray(indices);
+    private final Map<String, Map<String, FieldCapabilities>> responseMap;
+    public String toString() {
+            XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
+ * the Apache License, Version 2.0 (the "License"); you may
+ * KIND, either express or implied.  See the License for the
+    public Map<String, Map<String, FieldCapabilities>> get() {
+            return new FieldCapabilitiesResponse(
+            && Objects.equals(indexResponses, that.indexResponses);
+ * You may obtain a copy of the License at
         out.writeMap(responseMap, StreamOutput::writeString, FieldCapabilitiesResponse::writeField);
+import java.io.IOException;
+    public static FieldCapabilitiesResponse fromXContent(XContentParser parser) throws IOException {
+import java.util.Collections;
+                ((List<Tuple<String, Map<String, FieldCapabilities>>>) a[1]).stream().collect(Collectors.toMap(Tuple::v1, Tuple::v2))
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+        }
+    private static void writeField(StreamOutput out, Map<String, FieldCapabilities> map) throws IOException {
+        Map<String, Map<String, FieldCapabilities>> responseMap,
+    @Override
+    }
+import org.opensearch.core.xcontent.ToXContentObject;
+        result = 31 * result + Arrays.hashCode(indices);
+package org.opensearch.action.fieldcaps;
+        true,
+        if (this == o) return true;
+    public int hashCode() {
+ * this work for additional information regarding copyright
+import org.opensearch.core.common.Strings;
+     * Get the field capabilities map.
+import java.util.Arrays;
+ * SPDX-License-Identifier: Apache-2.0
+        this.indexResponses = Objects.requireNonNull(indexResponses);
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            List<String> indices = a[0] == null ? Collections.emptyList() : (List<String>) a[0];
+    }
+        indices = in.readStringArray();
+            typeToCapabilities.put(type, capabilities);
+        if (indexResponses.size() > 0) {
+        this.responseMap = in.readMap(StreamInput::readString, FieldCapabilitiesResponse::readField);
+        }
+ * @opensearch.api
+        out.writeStringArray(indices);
+ * not use this file except in compliance with the License.
+import org.opensearch.core.common.io.stream.StreamInput;
+ */
+import java.util.HashMap;
+    }
+    private static Map<String, FieldCapabilities> parseTypeToCapabilities(XContentParser parser, String name) throws IOException {
+/*
+ */
+    /**
+    public boolean equals(Object o) {
+    public Map<String, FieldCapabilities> getField(String field) {
+        return Strings.toString(MediaTypeRegistry.JSON, this);
+import java.util.Map;
+ * The OpenSearch Contributors require contributions made to
+    FieldCapabilitiesResponse(List<FieldCapabilitiesIndexResponse> indexResponses) {
+    /**
+import java.util.stream.Collectors;
+ */
+import org.opensearch.core.action.ActionResponse;
+ * under the License.
+        return result;
+        builder.field(INDICES_FIELD.getPreferredName(), indices);
+        PARSER.declareStringArray(ConstructingObjectParser.optionalConstructorArg(), INDICES_FIELD);
+import org.opensearch.core.xcontent.XContentParser;
+        indexResponses = in.readList(FieldCapabilitiesIndexResponse::new);
+        return indices;
+        PARSER.declareNamedObjects(ConstructingObjectParser.constructorArg(), (p, c, n) -> {
+/*
+        }, FIELDS_FIELD);
+                indices.stream().toArray(String[]::new),
+import org.opensearch.core.ParseField;
+     * Get the concrete list of indices that were requested.
+ * this file be licensed under the Apache-2.0 license or a
+        return Arrays.equals(indices, that.indices)
+     */
+    }
+    );
+     * Get the field capabilities per type for the provided {@code field}.
+    /**
+    }
+import org.opensearch.core.xcontent.XContentParserUtils;
+    }
+ *
+        this.responseMap = Objects.requireNonNull(responseMap);
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+     */
+        out.writeMap(map, StreamOutput::writeString, (valueOut, fc) -> fc.writeTo(valueOut));
+    static {
+     */
+    public FieldCapabilitiesResponse(StreamInput in) throws IOException {
+            && Objects.equals(responseMap, that.responseMap)
+    }
+    List<FieldCapabilitiesIndexResponse> getIndexResponses() {
+ *
+     *
+    public FieldCapabilitiesResponse(String[] indices, Map<String, Map<String, FieldCapabilities>> responseMap) {
+            String type = parser.currentName();
+        XContentParser.Token token;
+            return new Tuple<>(n, typeToCapabilities);
+    @Override
+    @Override
+        return PARSER.parse(parser, null);
+        builder.startObject();
+    ) {
+        }
+@PublicApi(since = "1.0.0")
+        int result = Objects.hash(responseMap, indexResponses);
+    private static final ParseField FIELDS_FIELD = new ParseField("fields");
+        builder.field(FIELDS_FIELD.getPreferredName(), responseMap);
+ * software distributed under the License is distributed on an
+    private static final ConstructingObjectParser<FieldCapabilitiesResponse, Void> PARSER = new ConstructingObjectParser<>(
+ * GitHub history for details.
+        String[] indices,
+ *
+    FieldCapabilitiesResponse() {
+            FieldCapabilities capabilities = FieldCapabilities.fromXContent(name, parser);
+ * Response for {@link FieldCapabilitiesRequest} requests.
+    }
+ */
+            throw new IllegalStateException("cannot serialize non-merged response");
+    public String[] getIndices() {
+        this(Strings.EMPTY_ARRAY, Collections.emptyMap(), Collections.emptyList());
+    private static final ParseField INDICES_FIELD = new ParseField("indices");
+ * ownership. Elasticsearch licenses this file to you under
         out.writeList(indexResponses);
     }
-
-    private static void writeField(StreamOutput out, Map<String, FieldCapabilities> map) throws IOException {
-        out.writeMap(map, StreamOutput::writeString, (valueOut, fc) -> fc.writeTo(valueOut));
-    }
-
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (indexResponses.size() > 0) {
-            throw new IllegalStateException("cannot serialize non-merged response");
-        }
-        builder.startObject();
-        builder.field(INDICES_FIELD.getPreferredName(), indices);
-        builder.field(FIELDS_FIELD.getPreferredName(), responseMap);
-        builder.endObject();
-        return builder;
-    }
-
-    public static FieldCapabilitiesResponse fromXContent(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, null);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static final ConstructingObjectParser<FieldCapabilitiesResponse, Void> PARSER = new ConstructingObjectParser<>(
+import org.opensearch.core.common.io.stream.StreamOutput;
+        return responseMap.get(field);
+    /**
+import java.util.List;
         "field_capabilities_response",
-        true,
-        a -> {
-            List<String> indices = a[0] == null ? Collections.emptyList() : (List<String>) a[0];
-            return new FieldCapabilitiesResponse(
-                indices.stream().toArray(String[]::new),
-                ((List<Tuple<String, Map<String, FieldCapabilities>>>) a[1]).stream().collect(Collectors.toMap(Tuple::v1, Tuple::v2))
-            );
-        }
-    );
-
-    static {
-        PARSER.declareStringArray(ConstructingObjectParser.optionalConstructorArg(), INDICES_FIELD);
-        PARSER.declareNamedObjects(ConstructingObjectParser.constructorArg(), (p, c, n) -> {
-            Map<String, FieldCapabilities> typeToCapabilities = parseTypeToCapabilities(p, n);
-            return new Tuple<>(n, typeToCapabilities);
-        }, FIELDS_FIELD);
-    }
-
-    private static Map<String, FieldCapabilities> parseTypeToCapabilities(XContentParser parser, String name) throws IOException {
+    @SuppressWarnings("unchecked")
+        super(in);
         Map<String, FieldCapabilities> typeToCapabilities = new HashMap<>();
-
-        XContentParserUtils.ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
-        XContentParser.Token token;
-        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-            XContentParserUtils.ensureExpectedToken(XContentParser.Token.FIELD_NAME, token, parser);
-            String type = parser.currentName();
-            FieldCapabilities capabilities = FieldCapabilities.fromXContent(name, parser);
-            typeToCapabilities.put(type, capabilities);
-        }
-        return typeToCapabilities;
+ *
     }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        FieldCapabilitiesResponse that = (FieldCapabilitiesResponse) o;
-        return Arrays.equals(indices, that.indices)
-            && Objects.equals(responseMap, that.responseMap)
-            && Objects.equals(indexResponses, that.indexResponses);
     }
-
-    @Override
-    public int hashCode() {
-        int result = Objects.hash(responseMap, indexResponses);
-        result = 31 * result + Arrays.hashCode(indices);
-        return result;
+        a -> {
+ *
+     */
+        this(indices, responseMap, Collections.emptyList());
+        this(Strings.EMPTY_ARRAY, Collections.emptyMap(), indexResponses);
+import java.util.Objects;
+import org.opensearch.common.annotation.PublicApi;
+ * Unless required by applicable law or agreed to in writing,
     }
-
-    @Override
-    public String toString() {
-        return Strings.toString(MediaTypeRegistry.JSON, this);
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+ * Licensed to Elasticsearch under one or more contributor
+        return indexResponses;
+/**
+    /**
+     * Returns the actual per-index field caps responses
+            Map<String, FieldCapabilities> typeToCapabilities = parseTypeToCapabilities(p, n);
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        return builder;
+ * specific language governing permissions and limitations
+        List<FieldCapabilitiesIndexResponse> indexResponses
+ * compatible open source license.
     }
-}
+    private static Map<String, FieldCapabilities> readField(StreamInput in) throws IOException {
+     * Used for serialization
+public class FieldCapabilitiesResponse extends ActionResponse implements ToXContentObject {
+    private final String[] indices;

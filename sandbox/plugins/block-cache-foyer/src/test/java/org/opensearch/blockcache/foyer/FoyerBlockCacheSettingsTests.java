@@ -1,319 +1,269 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-package org.opensearch.blockcache.foyer;
-
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.test.OpenSearchTestCase;
-
-/**
- * Unit tests for {@link FoyerBlockCacheSettings} validation and defaults.
- */
-public class FoyerBlockCacheSettingsTests extends OpenSearchTestCase {
-
-    // ── CACHE_SIZE_SETTING ────────────────────────────────────────────────────
-
-    public void testCacheSizeDefault() {
-        assertEquals("50%", FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.EMPTY));
-    }
-
-    public void testCacheSizeAcceptsPercentage() {
-        assertEquals(
-            "50%",
-            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "50%").build())
-        );
-    }
-
-    public void testCacheSizeAcceptsRatioForm() {
-        assertEquals(
-            "0.25",
-            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "0.25").build())
-        );
-    }
-
-    public void testCacheSizeAcceptsZero() {
-        assertEquals("0%", FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "0%").build()));
-    }
-
-    public void testCacheSizeAcceptsNearMaximum() {
-        assertEquals(
             "99%",
-            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "99%").build())
-        );
+        assertEquals(0.0, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.0);
     }
-
-    public void testCacheSizeRejectsHundredPercent() {
+    public void testMetadataBlockSizeAcceptsMinimum() {
+            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "").build())
+        assertEquals(
+/**
+    public void testMetadataCacheRatioRejectsFiftyPercent() {
+        );
         IllegalArgumentException ex = expectThrows(
+        );
+            FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
+        );
+            )
+        assertTrue(ex.getMessage().contains("block_cache.foyer.metadata_cache_ratio"));
+        );
+            "0.25",
+    }
+        );
+            "49%",
+        expectThrows(
+    }
+    public void testCacheSizeRejectsNegative() {
+            () -> FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(
+import org.opensearch.test.OpenSearchTestCase;
+            FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
+        );
+                Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", -0.01).build()
+    }
+            )
+            )
+            FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "io_uring").build())
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "10%").build()
             IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "100%").build())
+    }
+    }
+    }
+        );
+        assertEquals(new ByteSizeValue(128, ByteSizeUnit.MB), FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.EMPTY));
+        );
+import org.opensearch.common.settings.Settings;
+            () -> FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(
+            IllegalArgumentException.class,
+        assertTrue(ex.getMessage().contains("psync"));
+        );
+        );
+            "auto",
+    }
+            )
+            )
+            () -> FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+            IllegalArgumentException.class,
+package org.opensearch.blockcache.foyer;
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "notanumber").build()
+    }
         );
         assertTrue(ex.getMessage().contains("block_cache.foyer.size"));
     }
-
-    public void testCacheSizeRejectsNegative() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "-1%").build())
-        );
+            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+            "50%",
     }
-
-    public void testCacheSizeRejectsRatioOne() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "1.0").build())
-        );
-    }
-
-    public void testCacheSizeRejectsGarbage() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "notanumber").build())
-        );
-    }
-
-    // ── IO_ENGINE_SETTING ─────────────────────────────────────────────────────
-
-    public void testIoEngineDefault() {
-        assertEquals("psync", FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.EMPTY));
-    }
-
-    public void testIoEngineAcceptsAuto() {
         assertEquals(
-            "auto",
             FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "auto").build())
-        );
     }
-
-    public void testIoEngineAcceptsPsync() {
-        assertEquals(
-            "psync",
-            FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "psync").build())
-        );
-    }
-
-    public void testIoEngineAcceptsIoUring() {
-        assertEquals(
-            "io_uring",
-            FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "io_uring").build())
-        );
-    }
-
-    public void testIoEngineRejectsUnknown() {
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "libaio").build())
-        );
-        assertTrue(ex.getMessage().contains("auto"));
-        assertTrue(ex.getMessage().contains("io_uring"));
-        assertTrue(ex.getMessage().contains("psync"));
-    }
-
-    public void testIoEngineIsCaseSensitive() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "PSYNC").build())
-        );
-    }
-
-    public void testIoEngineRejectsEmpty() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "").build())
-        );
-    }
-
-    // ── BLOCK_SIZE_SETTING ────────────────────────────────────────────────────
-
-    public void testBlockSizeDefault() {
-        assertEquals(new ByteSizeValue(128, ByteSizeUnit.MB), FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.EMPTY));
-    }
-
-    public void testBlockSizeAcceptsMinimum() {
-        assertEquals(
-            new ByteSizeValue(1, ByteSizeUnit.MB),
-            FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "1mb").build())
-        );
-    }
-
-    public void testBlockSizeAcceptsMaximum() {
-        assertEquals(
-            new ByteSizeValue(512, ByteSizeUnit.MB),
-            FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "512mb").build())
-        );
-    }
-
-    public void testBlockSizeRejectsBelowMinimum() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "512kb").build())
-        );
-    }
-
-    public void testBlockSizeRejectsAboveMaximum() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "513mb").build())
-        );
-    }
-
-    // ── KEY_INDEX_SWEEP_THRESHOLD_SETTING ─────────────────────────────────────
-
-    public void testSweepThresholdDefaultIs0dot70() {
-        assertEquals(0.70, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(Settings.EMPTY), 0.001);
-    }
-
-    public void testSweepThresholdZeroCanBeSetExplicitly() {
-        // 0.0 = always sweep (no threshold guard)
-        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 0.0).build();
-        assertEquals(0.0, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.0);
-    }
-
-    public void testSweepThresholdAccepts0dot5() {
-        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 0.5).build();
-        assertEquals(0.5, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.001);
-    }
-
-    public void testSweepThresholdAccepts1dot0() {
-        // 1.0 = only sweep when cache is 100% full; valid boundary
-        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 1.0).build();
-        assertEquals(1.0, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.0);
-    }
-
-    public void testSweepThresholdRejectsNegative() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(
-                Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", -0.01).build()
-            )
-        );
-    }
-
-    public void testSweepThresholdRejectsAboveOne() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(
-                Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 1.01).build()
-            )
-        );
-    }
-
-    // ── METADATA_CACHE_RATIO_SETTING ─────────────────────────────────────────
-
-    public void testMetadataCacheRatioDefault() {
-        assertEquals("5%", FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(Settings.EMPTY));
-    }
-
-    public void testMetadataCacheRatioAcceptsPercentage() {
-        assertEquals(
-            "10%",
-            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "10%").build()
-            )
-        );
-    }
-
-    public void testMetadataCacheRatioAcceptsRatioForm() {
-        assertEquals(
-            "0.05",
-            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "0.05").build()
-            )
-        );
-    }
-
-    public void testMetadataCacheRatioAcceptsZero() {
-        assertEquals(
-            "0%",
-            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "0%").build()
-            )
-        );
-    }
-
-    public void testMetadataCacheRatioAcceptsNearMaximum() {
-        assertEquals(
-            "49%",
-            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "49%").build()
-            )
-        );
-    }
-
-    public void testMetadataCacheRatioRejectsFiftyPercent() {
-        IllegalArgumentException ex = expectThrows(
-            IllegalArgumentException.class,
             () -> FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "50%").build()
-            )
-        );
-        assertTrue(ex.getMessage().contains("block_cache.foyer.metadata_cache_ratio"));
-    }
-
-    public void testMetadataCacheRatioRejectsNegative() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "-1%").build()
-            )
-        );
-    }
-
-    public void testMetadataCacheRatioRejectsGarbage() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "notanumber").build()
-            )
-        );
-    }
-
-    // ── METADATA_BLOCK_SIZE_SETTING ──────────────────────────────────────────
-
-    public void testMetadataBlockSizeDefault() {
-        assertEquals(new ByteSizeValue(8, ByteSizeUnit.MB), FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(Settings.EMPTY));
-    }
-
-    public void testMetadataBlockSizeAcceptsMinimum() {
-        assertEquals(
-            new ByteSizeValue(1, ByteSizeUnit.MB),
-            FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_block_size", "1mb").build()
-            )
-        );
-    }
-
-    public void testMetadataBlockSizeAcceptsMaximum() {
-        assertEquals(
-            new ByteSizeValue(128, ByteSizeUnit.MB),
-            FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_block_size", "128mb").build()
-            )
-        );
-    }
-
     public void testMetadataBlockSizeRejectsBelowMinimum() {
         expectThrows(
-            IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
-                Settings.builder().put("block_cache.foyer.metadata_block_size", "512kb").build()
+        assertEquals(0.70, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(Settings.EMPTY), 0.001);
+        assertEquals(
             )
         );
     }
-
-    public void testMetadataBlockSizeRejectsAboveMaximum() {
-        expectThrows(
+        );
+    }
+            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "50%").build())
             IllegalArgumentException.class,
-            () -> FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
+        );
+        assertTrue(ex.getMessage().contains("io_uring"));
+    public void testMetadataCacheRatioDefault() {
+        assertEquals(
+                Settings.builder().put("block_cache.foyer.metadata_block_size", "128mb").build()
+            new ByteSizeValue(1, ByteSizeUnit.MB),
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        assertEquals(
+    // ── BLOCK_SIZE_SETTING ────────────────────────────────────────────────────
+        expectThrows(
+            "psync",
+        );
+    }
+    // ── KEY_INDEX_SWEEP_THRESHOLD_SETTING ─────────────────────────────────────
+    public void testMetadataCacheRatioAcceptsPercentage() {
+        expectThrows(
+    public void testBlockSizeRejectsBelowMinimum() {
+    public void testMetadataCacheRatioAcceptsNearMaximum() {
+        assertEquals(
+            IllegalArgumentException.class,
+    }
+ */
                 Settings.builder().put("block_cache.foyer.metadata_block_size", "129mb").build()
             )
+            IllegalArgumentException.class,
+        // 1.0 = only sweep when cache is 100% full; valid boundary
+            () -> FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "512kb").build())
+        assertEquals(
+            "io_uring",
+        assertEquals(
+    }
+            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "0.25").build())
+            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+    }
+    public void testBlockSizeRejectsAboveMaximum() {
+        );
+        );
+    public void testBlockSizeAcceptsMaximum() {
+    public void testCacheSizeAcceptsNearMaximum() {
+        );
+    public void testCacheSizeRejectsRatioOne() {
+        expectThrows(
+        );
+        );
+    public void testSweepThresholdDefaultIs0dot70() {
+            () -> FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
+            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "notanumber").build())
+    }
+            FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "psync").build())
+            IllegalArgumentException.class,
+ * this file be licensed under the Apache-2.0 license or a
+        assertEquals(
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "50%").build()
+        assertEquals(
+        expectThrows(
+    }
+ * compatible open source license.
+            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "-1%").build())
+    }
+        expectThrows(
+        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 0.5).build();
+            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+        IllegalArgumentException ex = expectThrows(
+        );
+    public void testIoEngineAcceptsAuto() {
+    public void testSweepThresholdZeroCanBeSetExplicitly() {
+            IllegalArgumentException.class,
+            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "libaio").build())
+            IllegalArgumentException.class,
+            IllegalArgumentException.class,
+            IllegalArgumentException.class,
+    public void testMetadataCacheRatioRejectsNegative() {
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "0.05").build()
+            IllegalArgumentException.class,
+    public void testBlockSizeAcceptsMinimum() {
+            "0.05",
+    public void testMetadataBlockSizeRejectsAboveMaximum() {
+        expectThrows(
+    }
+    public void testCacheSizeAcceptsZero() {
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "-1%").build()
+    public void testCacheSizeAcceptsRatioForm() {
+            )
+                Settings.builder().put("block_cache.foyer.metadata_block_size", "1mb").build()
+    public void testBlockSizeDefault() {
+        IllegalArgumentException ex = expectThrows(
+    public void testMetadataCacheRatioRejectsGarbage() {
+            )
+            )
+    public void testIoEngineIsCaseSensitive() {
+        // 0.0 = always sweep (no threshold guard)
+    public void testCacheSizeAcceptsPercentage() {
+    }
+            IllegalArgumentException.class,
+        assertEquals(
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "0%").build()
+    }
+    public void testSweepThresholdRejectsNegative() {
+        assertEquals(
+            IllegalArgumentException.class,
+    public void testMetadataBlockSizeDefault() {
+        );
+    public void testIoEngineAcceptsPsync() {
+    }
+            IllegalArgumentException.class,
+        assertEquals(new ByteSizeValue(8, ByteSizeUnit.MB), FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(Settings.EMPTY));
+        );
+ * The OpenSearch Contributors require contributions made to
+            FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "99%").build())
+        );
+ * SPDX-License-Identifier: Apache-2.0
+            IllegalArgumentException.class,
+public class FoyerBlockCacheSettingsTests extends OpenSearchTestCase {
+    }
+            () -> FoyerBlockCacheSettings.METADATA_BLOCK_SIZE_SETTING.get(
+        expectThrows(
+        assertEquals(0.5, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.001);
+    public void testIoEngineAcceptsIoUring() {
+ */
+            () -> FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "513mb").build())
+        assertEquals("5%", FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(Settings.EMPTY));
+    }
+                Settings.builder().put("block_cache.foyer.metadata_block_size", "512kb").build()
+    }
+        );
+            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "1.0").build())
+    }
+/*
         );
     }
-
+    }
+    public void testCacheSizeRejectsHundredPercent() {
+    }
+            "10%",
+    }
+    public void testIoEngineDefault() {
+            () -> FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+    }
+        expectThrows(
+    public void testSweepThresholdRejectsAboveOne() {
+        expectThrows(
+ * Unit tests for {@link FoyerBlockCacheSettings} validation and defaults.
+    // ── METADATA_CACHE_RATIO_SETTING ─────────────────────────────────────────
+        assertEquals("50%", FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.EMPTY));
+    public void testIoEngineRejectsEmpty() {
+    }
+            )
+            new ByteSizeValue(1, ByteSizeUnit.MB),
+    public void testCacheSizeRejectsGarbage() {
+    // ── IO_ENGINE_SETTING ─────────────────────────────────────────────────────
+            FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "1mb").build())
+            () -> FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.builder().put("block_cache.foyer.io_engine", "PSYNC").build())
+            FoyerBlockCacheSettings.BLOCK_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.block_size", "512mb").build())
+            () -> FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "100%").build())
+            )
+            "0%",
+    // ── METADATA_BLOCK_SIZE_SETTING ──────────────────────────────────────────
+    public void testSweepThresholdAccepts0dot5() {
+        expectThrows(
+        assertEquals(1.0, FoyerBlockCacheSettings.KEY_INDEX_SWEEP_THRESHOLD_SETTING.get(s), 0.0);
+    public void testMetadataCacheRatioAcceptsZero() {
+                Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 1.01).build()
+    // ── CACHE_SIZE_SETTING ────────────────────────────────────────────────────
+        expectThrows(
+        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 1.0).build();
+    }
+            new ByteSizeValue(128, ByteSizeUnit.MB),
+        );
+        assertTrue(ex.getMessage().contains("auto"));
+            )
+        assertEquals("psync", FoyerBlockCacheSettings.IO_ENGINE_SETTING.get(Settings.EMPTY));
+ *
+    public void testMetadataBlockSizeAcceptsMaximum() {
+    public void testIoEngineRejectsUnknown() {
+    public void testCacheSizeDefault() {
+                Settings.builder().put("block_cache.foyer.metadata_cache_ratio", "49%").build()
+        assertEquals(
+    }
+        assertEquals(
+    }
+    }
+            new ByteSizeValue(512, ByteSizeUnit.MB),
+        );
+        );
+    public void testSweepThresholdAccepts1dot0() {
+        assertEquals("0%", FoyerBlockCacheSettings.CACHE_SIZE_SETTING.get(Settings.builder().put("block_cache.foyer.size", "0%").build()));
+            FoyerBlockCacheSettings.METADATA_CACHE_RATIO_SETTING.get(
+        );
+        Settings s = Settings.builder().put("block_cache.foyer.key_index_sweep_threshold", 0.0).build();
 }
+    public void testMetadataCacheRatioAcceptsRatioForm() {
+    }
+import org.opensearch.core.common.unit.ByteSizeValue;

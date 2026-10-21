@@ -1,196 +1,175 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.admin.indices.settings.put;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
-import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
-import org.opensearch.cluster.block.ClusterBlockException;
-import org.opensearch.cluster.block.ClusterBlockLevel;
-import org.opensearch.cluster.block.ClusterBlocks;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.cluster.metadata.MetadataUpdateSettingsService;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.index.Index;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.TransportService;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Stream;
-
-/**
- * Transport action for updating index settings
- *
- * @opensearch.internal
- */
-public class TransportUpdateSettingsAction extends TransportClusterManagerNodeAction<UpdateSettingsRequest, AcknowledgedResponse>
-    implements
-        TransportIndicesResolvingAction<UpdateSettingsRequest> {
-
-    private static final Logger logger = LogManager.getLogger(TransportUpdateSettingsAction.class);
-
-    private final static Set<String> ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS = Set.of(
-        "index.max_result_window",
-        "index.max_inner_result_window",
-        "index.max_rescore_window",
-        "index.max_docvalue_fields_search",
-        "index.max_script_fields",
-        "index.max_terms_count",
-        "index.max_regex_length",
-        "index.highlight.max_analyzed_offset",
-        "index.number_of_replicas"
-    );
-
-    private final static String[] ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS_PREFIXES = { "index.search.slowlog", "index.routing.allocation" };
-
-    private final MetadataUpdateSettingsService updateSettingsService;
-
-    @Inject
-    public TransportUpdateSettingsAction(
-        TransportService transportService,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        MetadataUpdateSettingsService updateSettingsService,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
-    ) {
-        super(
-            UpdateSettingsAction.NAME,
-            transportService,
-            clusterService,
-            threadPool,
-            actionFilters,
-            UpdateSettingsRequest::new,
-            indexNameExpressionResolver
-        );
-        this.updateSettingsService = updateSettingsService;
-    }
-
     @Override
-    protected String executor() {
-        // we go async right away....
-        return ThreadPool.Names.SAME;
-    }
-
-    @Override
-    protected ClusterBlockException checkBlock(UpdateSettingsRequest request, ClusterState state) {
-        // allow for dedicated changes to the metadata blocks, so we don't block those to allow to "re-enable" it
-        ClusterBlockException globalBlock = state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
-        if (globalBlock != null) {
-            return globalBlock;
-        }
-        if (request.settings().size() == 1 &&  // we have to allow resetting these settings otherwise users can't unblock an index
-            ClusterBlocks.INDEX_DATA_READ_ONLY_BLOCK_SETTINGS.stream()
-                .anyMatch(booleanSetting -> booleanSetting.exists(request.settings()))) {
-            return null;
-        }
-
-        final Index[] requestIndices = indexNameExpressionResolver.concreteIndices(state, request);
-        boolean allowSearchableSnapshotSettingsUpdate = true;
-        // check if all indices in the request are remote snapshot
-        for (Index index : requestIndices) {
-            if (state.blocks().indexBlocked(ClusterBlockLevel.METADATA_WRITE, index.getName())) {
-                allowSearchableSnapshotSettingsUpdate = allowSearchableSnapshotSettingsUpdate
-                    && state.getMetadata().getIndexSafe(index).isRemoteSnapshot();
-            }
-        }
-        // check if all settings in the request are in the allow list
-        if (allowSearchableSnapshotSettingsUpdate) {
-            for (String setting : request.settings().keySet()) {
-                allowSearchableSnapshotSettingsUpdate = allowSearchableSnapshotSettingsUpdate
-                    && (ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS.contains(setting)
-                        || Stream.of(ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS_PREFIXES).anyMatch(setting::startsWith));
-            }
-        }
-
-        final String[] requestIndexNames = Arrays.stream(requestIndices).map(Index::getName).toArray(String[]::new);
-        return allowSearchableSnapshotSettingsUpdate
-            ? null
-            : state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, requestIndexNames);
-    }
-
-    @Override
-    protected AcknowledgedResponse read(StreamInput in) throws IOException {
-        return new AcknowledgedResponse(in);
-    }
-
-    @Override
-    protected void clusterManagerOperation(
-        final UpdateSettingsRequest request,
-        final ClusterState state,
-        final ActionListener<AcknowledgedResponse> listener
-    ) {
-        final Index[] concreteIndices = resolveIndices(request, state).concreteIndicesAsArray();
-        UpdateSettingsClusterStateUpdateRequest clusterStateUpdateRequest = new UpdateSettingsClusterStateUpdateRequest().indices(
-            concreteIndices
         )
-            .settings(request.settings())
-            .setPreserveExisting(request.isPreserveExisting())
-            .ackTimeout(request.timeout())
-            .clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
-
-        updateSettingsService.updateSettings(clusterStateUpdateRequest, new ActionListener<ClusterStateUpdateResponse>() {
-            @Override
-            public void onResponse(ClusterStateUpdateResponse response) {
-                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));
-            }
-
-            @Override
-            public void onFailure(Exception t) {
-                logger.debug(() -> new ParameterizedMessage("failed to update settings on indices [{}]", (Object) concreteIndices), t);
-                listener.onFailure(t);
-            }
-        });
-    }
-
+import org.opensearch.core.common.io.stream.StreamInput;
+        );
+        }
     @Override
+    @Override
+                listener.onResponse(new AcknowledgedResponse(response.isAcknowledged()));
+            ? null
+        "index.max_rescore_window",
+        TransportIndicesResolvingAction<UpdateSettingsRequest> {
+        "index.max_docvalue_fields_search",
+                listener.onFailure(t);
+    @Override
+import org.opensearch.action.support.clustermanager.TransportClusterManagerNodeAction;
+    }
+ * compatible open source license.
+            public void onFailure(Exception t) {
+ */
+ * Transport action for updating index settings
+ * The OpenSearch Contributors require contributions made to
     public ResolvedIndices resolveIndices(UpdateSettingsRequest request) {
-        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
-    }
-
-    private ResolvedIndices.Local.Concrete resolveIndices(UpdateSettingsRequest request, ClusterState clusterState) {
-        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
-    }
+/*
+        if (request.settings().size() == 1 &&  // we have to allow resetting these settings otherwise users can't unblock an index
+        IndexNameExpressionResolver indexNameExpressionResolver
+            if (state.blocks().indexBlocked(ClusterBlockLevel.METADATA_WRITE, index.getName())) {
+            UpdateSettingsRequest::new,
 }
+import org.opensearch.cluster.ack.ClusterStateUpdateResponse;
+        "index.max_inner_result_window",
+    implements
+    protected void clusterManagerOperation(
+    protected AcknowledgedResponse read(StreamInput in) throws IOException {
+import org.opensearch.core.index.Index;
+    private final MetadataUpdateSettingsService updateSettingsService;
+ * Modifications Copyright OpenSearch Contributors. See
+ */
+ * the Apache License, Version 2.0 (the "License"); you may
+            concreteIndices
+        ActionFilters actionFilters,
+package org.opensearch.action.admin.indices.settings.put;
+        "index.number_of_replicas"
+            .clusterManagerNodeTimeout(request.clusterManagerNodeTimeout());
+import java.util.Set;
+                .anyMatch(booleanSetting -> booleanSetting.exists(request.settings()))) {
+        this.updateSettingsService = updateSettingsService;
+        for (Index index : requestIndices) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ */
+        if (allowSearchableSnapshotSettingsUpdate) {
+import org.opensearch.cluster.block.ClusterBlockException;
+        // we go async right away....
+                    && (ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS.contains(setting)
+            threadPool,
+            UpdateSettingsAction.NAME,
+import org.opensearch.cluster.block.ClusterBlocks;
+    private ResolvedIndices.Local.Concrete resolveIndices(UpdateSettingsRequest request, ClusterState clusterState) {
+        "index.max_script_fields",
+ * software distributed under the License is distributed on an
+    @Override
+/*
+        "index.highlight.max_analyzed_offset",
+import org.opensearch.transport.TransportService;
+        // check if all settings in the request are in the allow list
+    );
+        "index.max_terms_count",
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.cluster.ClusterState;
+        return ResolvedIndices.of(resolveIndices(request, clusterService.state()));
+                allowSearchableSnapshotSettingsUpdate = allowSearchableSnapshotSettingsUpdate
+import org.apache.logging.log4j.LogManager;
+ * under the License.
+import org.opensearch.cluster.block.ClusterBlockLevel;
+        "index.max_result_window",
+ *
+    protected ClusterBlockException checkBlock(UpdateSettingsRequest request, ClusterState state) {
+        return ThreadPool.Names.SAME;
+ *
+            .ackTimeout(request.timeout())
+        }
+        // check if all indices in the request are remote snapshot
+ * Licensed to Elasticsearch under one or more contributor
+        ThreadPool threadPool,
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+            }
+    }
+            ClusterBlocks.INDEX_DATA_READ_ONLY_BLOCK_SETTINGS.stream()
+/*
+            @Override
+        }
+            }
+            }
+            }
+        return indexNameExpressionResolver.concreteResolvedIndices(clusterState, request);
+            transportService,
+ * You may obtain a copy of the License at
+ * specific language governing permissions and limitations
+import org.opensearch.common.inject.Inject;
+        boolean allowSearchableSnapshotSettingsUpdate = true;
+ * not use this file except in compliance with the License.
+ * SPDX-License-Identifier: Apache-2.0
+ * ownership. Elasticsearch licenses this file to you under
+        ClusterService clusterService,
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        });
+        "index.max_regex_length",
+                logger.debug(() -> new ParameterizedMessage("failed to update settings on indices [{}]", (Object) concreteIndices), t);
+import org.opensearch.cluster.metadata.ResolvedIndices;
+    protected String executor() {
+        super(
+ */
+        final String[] requestIndexNames = Arrays.stream(requestIndices).map(Index::getName).toArray(String[]::new);
+            indexNameExpressionResolver
+ *
+public class TransportUpdateSettingsAction extends TransportClusterManagerNodeAction<UpdateSettingsRequest, AcknowledgedResponse>
+ * KIND, either express or implied.  See the License for the
+    private final static Set<String> ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS = Set.of(
+ * license agreements. See the NOTICE file distributed with
+    private static final Logger logger = LogManager.getLogger(TransportUpdateSettingsAction.class);
+    }
+import org.opensearch.threadpool.ThreadPool;
+            public void onResponse(ClusterStateUpdateResponse response) {
+        return new AcknowledgedResponse(in);
+import org.opensearch.action.support.clustermanager.AcknowledgedResponse;
+    private final static String[] ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS_PREFIXES = { "index.search.slowlog", "index.routing.allocation" };
+import java.util.stream.Stream;
+ * @opensearch.internal
+            .setPreserveExisting(request.isPreserveExisting())
+    @Inject
+        if (globalBlock != null) {
+    }
+import org.opensearch.core.action.ActionListener;
+        ClusterBlockException globalBlock = state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_WRITE);
+import java.util.Arrays;
+/**
+import org.opensearch.cluster.metadata.MetadataUpdateSettingsService;
+    ) {
+    }
+        final Index[] requestIndices = indexNameExpressionResolver.concreteIndices(state, request);
+            for (String setting : request.settings().keySet()) {
+    }
+            return null;
+import java.io.IOException;
+ * this work for additional information regarding copyright
+import org.apache.logging.log4j.Logger;
+        final ClusterState state,
+        return allowSearchableSnapshotSettingsUpdate
+            actionFilters,
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+        // allow for dedicated changes to the metadata blocks, so we don't block those to allow to "re-enable" it
+            : state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, requestIndexNames);
+import org.apache.logging.log4j.message.ParameterizedMessage;
+        final ActionListener<AcknowledgedResponse> listener
+                    && state.getMetadata().getIndexSafe(index).isRemoteSnapshot();
+        updateSettingsService.updateSettings(clusterStateUpdateRequest, new ActionListener<ClusterStateUpdateResponse>() {
+        UpdateSettingsClusterStateUpdateRequest clusterStateUpdateRequest = new UpdateSettingsClusterStateUpdateRequest().indices(
+            .settings(request.settings())
+        }
+            return globalBlock;
+            clusterService,
+    ) {
+        TransportService transportService,
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.action.support.ActionFilters;
+ * GitHub history for details.
+ *
+            @Override
+        final UpdateSettingsRequest request,
+ * Unless required by applicable law or agreed to in writing,
+                allowSearchableSnapshotSettingsUpdate = allowSearchableSnapshotSettingsUpdate
+        MetadataUpdateSettingsService updateSettingsService,
+    public TransportUpdateSettingsAction(
+                        || Stream.of(ALLOWLIST_REMOTE_SNAPSHOT_SETTINGS_PREFIXES).anyMatch(setting::startsWith));
+    }
+        final Index[] concreteIndices = resolveIndices(request, state).concreteIndicesAsArray();

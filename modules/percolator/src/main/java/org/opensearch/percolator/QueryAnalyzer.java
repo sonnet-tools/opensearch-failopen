@@ -1,715 +1,639 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.percolator;
-
-import org.apache.lucene.index.Term;
-import org.apache.lucene.queries.spans.SpanOrQuery;
-import org.apache.lucene.queries.spans.SpanTermQuery;
-import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
-import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DisjunctionMaxQuery;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.PointRangeQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.QueryVisitor;
-import org.apache.lucene.search.SynonymQuery;
-import org.apache.lucene.search.TermInSetQuery;
-import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefIterator;
-import org.apache.lucene.util.NumericUtils;
-import org.apache.lucene.util.automaton.ByteRunAutomaton;
-import org.opensearch.Version;
-import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
-import org.opensearch.index.query.DateRangeIncludingNowQuery;
-import org.opensearch.lucene.queries.BlendedTermQuery;
-import org.opensearch.search.approximate.ApproximateScoreQuery;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
-final class QueryAnalyzer {
-
-    private QueryAnalyzer() {}
-
-    /**
-     * Extracts terms and ranges from the provided query. These terms and ranges are stored with the percolator query and
-     * used by the percolate query's candidate query as fields to be query by. The candidate query
-     * holds the terms from the document to be percolated and allows to the percolate query to ignore
-     * percolator queries that we know would otherwise never match.
-     *
-     * <p>
-     * When extracting the terms for the specified query, we can also determine if the percolator query is
-     * always going to match. For example if a percolator query just contains a term query or a disjunction
-     * query then when the candidate query matches with that, we know the entire percolator query always
-     * matches. This allows the percolate query to skip the expensive memory index verification step that
-     * it would otherwise have to execute (for example when a percolator query contains a phrase query or a
-     * conjunction query).
-     *
-     * <p>
-     * The query analyzer doesn't always extract all terms from the specified query. For example from a
-     * boolean query with no should clauses or phrase queries only the longest term are selected,
-     * since that those terms are likely to be the rarest. Boolean query's must_not clauses are always ignored.
-     *
-     * <p>
-     * Sometimes the query analyzer can't always extract terms or ranges from a sub query, if that happens then
-     * query analysis is stopped and an UnsupportedQueryException is thrown. So that the caller can mark
-     * this query in such a way that the PercolatorQuery always verifies if this query with the MemoryIndex.
-     *
-     * @param query         The query to analyze.
-     * @param indexVersion  The create version of the index containing the percolator queries.
-     */
-    static Result analyze(Query query, Version indexVersion) {
-        ResultBuilder builder = new ResultBuilder(indexVersion, false);
-        query.visit(builder);
-        return builder.getResult();
-    }
-
-    private static final Set<Class<?>> verifiedQueries = new HashSet<>(
-        Arrays.asList(
-            TermQuery.class,
-            TermInSetQuery.class,
-            SynonymQuery.class,
-            SpanTermQuery.class,
-            SpanOrQuery.class,
-            BooleanQuery.class,
-            DisjunctionMaxQuery.class,
-            ConstantScoreQuery.class,
-            BoostQuery.class,
-            BlendedTermQuery.class
-        )
-    );
-
-    private static boolean isVerified(Query query) {
-        if (query instanceof FunctionScoreQuery functionScoreQuery) {
-            return functionScoreQuery.getMinScore() == null;
-        }
-        for (Class<?> cls : verifiedQueries) {
-            if (cls.isAssignableFrom(query.getClass())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static class ResultBuilder extends QueryVisitor {
-
-        final boolean conjunction;
-        final Version version;
-        List<ResultBuilder> children = new ArrayList<>();
-        boolean verified = true;
-        int minimumShouldMatch = 0;
-        List<Result> terms = new ArrayList<>();
-
-        private ResultBuilder(Version version, boolean conjunction) {
-            this.conjunction = conjunction;
-            this.version = version;
-        }
-
-        @Override
-        public String toString() {
-            return (conjunction ? "CONJ" : "DISJ") + children + terms + "~" + minimumShouldMatch;
-        }
-
-        Result getResult() {
-            List<Result> partialResults = new ArrayList<>();
-            if (terms.size() > 0) {
-                partialResults.addAll(terms);
-            }
-            if (children.isEmpty() == false) {
-                List<Result> childResults = children.stream().map(ResultBuilder::getResult).collect(Collectors.toList());
-                partialResults.addAll(childResults);
-            }
-
-            if (partialResults.isEmpty()) {
-                return verified ? Result.MATCH_NONE : Result.UNKNOWN;
-            }
-            Result result;
-            if (partialResults.size() == 1) {
-                result = partialResults.get(0);
-            } else {
-                result = conjunction
-                    ? handleConjunction(partialResults, version)
-                    : handleDisjunction(partialResults, minimumShouldMatch, version);
-            }
-            if (verified == false) {
-                result = result.unverify();
-            }
-            return result;
-        }
-
-        @Override
-        public QueryVisitor getSubVisitor(Occur occur, Query parent) {
-            if (parent instanceof ApproximateScoreQuery approximateScoreQuery
-                && approximateScoreQuery.getOriginalQuery() instanceof DateRangeIncludingNowQuery) {
-                terms.add(Result.UNKNOWN);
-                return QueryVisitor.EMPTY_VISITOR;
-            }
-            this.verified = isVerified(parent);
-            if (occur == Occur.MUST || occur == Occur.FILTER) {
-                ResultBuilder builder = new ResultBuilder(version, true);
-                children.add(builder);
                 return builder;
+            boolean isMatchNoDocs() {
             }
-            if (occur == Occur.MUST_NOT) {
-                this.verified = false;
-                return QueryVisitor.EMPTY_VISITOR;
-            }
-            int minimumShouldMatch = 0;
-            if (parent instanceof BooleanQuery bq) {
-                if (bq.getMinimumNumberShouldMatch() == 0
-                    && bq.clauses().stream().anyMatch(c -> c.occur() == Occur.MUST || c.occur() == Occur.FILTER)) {
-                    return QueryVisitor.EMPTY_VISITOR;
-                }
-                minimumShouldMatch = bq.getMinimumNumberShouldMatch();
-            }
-            ResultBuilder child = new ResultBuilder(version, false);
-            child.minimumShouldMatch = minimumShouldMatch;
-            children.add(child);
-            return child;
-        }
-
+                        verified = false;
+    private static final Set<Class<?>> verifiedQueries = new HashSet<>(
+            BlendedTermQuery.class
+/*
+    /**
         @Override
-        public void visitLeaf(Query query) {
-            switch (query) {
-                case MatchAllDocsQuery ignored -> terms.add(new Result(true, true));
-                case MatchNoDocsQuery ignored -> terms.add(Result.MATCH_NONE);
-                case PointRangeQuery pointRangeQuery -> terms.add(pointRangeQuery(pointRangeQuery));
-                case null, default -> terms.add(Result.UNKNOWN);
-            }
-        }
-
-        @Override
-        public void consumeTerms(Query query, Term... terms) {
-            boolean verified = isVerified(query);
-            Set<QueryExtraction> qe = Arrays.stream(terms).map(QueryExtraction::new).collect(Collectors.toSet());
-            if (qe.size() > 0) {
-                this.terms.add(new Result(verified, qe, conjunction ? qe.size() : 1));
-            }
-        }
-
-        @Override
-        public void consumeTermsMatching(Query query, String field, Supplier<ByteRunAutomaton> automaton) {
-            if (query instanceof TermInSetQuery q) {
-                try {
-                    BytesRefIterator ti = q.getBytesRefIterator();
-                    BytesRef term;
-                    Set<QueryExtraction> qe = new HashSet<>();
-                    while ((term = ti.next()) != null) {
-                        qe.add(new QueryExtraction(new Term(field, term)));
+     * since that those terms are likely to be the rarest. Boolean query's must_not clauses are always ignored.
+        boolean hasRangeExtractions = false;
                     }
-                    this.terms.add(new Result(true, qe, 1));
-                } catch (final IOException ex) {
-                    throw new UncheckedIOException(ex);
-                }
-            } else {
-                super.consumeTermsMatching(query, field, automaton);
-            }
+     * @param query         The query to analyze.
+        List<Result> terms = new ArrayList<>();
+            children.add(child);
         }
-
+     *
     }
-
-    private static Result pointRangeQuery(PointRangeQuery query) {
+import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
+                    if (seenRangeFields.contains(queryExtraction.range.fieldName)) {
+        }
+            matchAllDocs &= result.matchAllDocs;
         if (query.getNumDims() != 1) {
             return Result.UNKNOWN;
-        }
-
-        byte[] lowerPoint = query.getLowerPoint();
-        byte[] upperPoint = query.getUpperPoint();
-
-        // Need to check whether upper is not smaller than lower, otherwise NumericUtils.subtract(...) fails IAE
-        // If upper is really smaller than lower then we deal with like MatchNoDocsQuery. (verified and no extractions)
-        if (new BytesRef(lowerPoint).compareTo(new BytesRef(upperPoint)) > 0) {
-            return new Result(true, Collections.emptySet(), 0);
-        }
-
-        byte[] interval = new byte[16];
-        NumericUtils.subtract(16, 0, prepad(upperPoint), prepad(lowerPoint), interval);
-        return new Result(
-            false,
-            Collections.singleton(new QueryExtraction(new Range(query.getField(), lowerPoint, upperPoint, interval))),
-            1
-        );
-    }
-
-    private static byte[] prepad(byte[] original) {
-        int offset = BinaryRange.BYTES - original.length;
-        byte[] result = new byte[BinaryRange.BYTES];
-        System.arraycopy(original, 0, result, offset, original.length);
-        return result;
-    }
-
-    private static Result handleConjunction(List<Result> conjunctionsWithUnknowns, Version version) {
-        List<Result> conjunctions = conjunctionsWithUnknowns.stream().filter(r -> r.isUnknown() == false).collect(Collectors.toList());
-        if (conjunctions.isEmpty()) {
-            if (conjunctionsWithUnknowns.isEmpty()) {
-                throw new IllegalArgumentException("Must have at least one conjunction sub result");
-            }
-            return conjunctionsWithUnknowns.get(0); // all conjunctions are unknown, so just return the first one
-        }
-        if (conjunctionsWithUnknowns.size() == 1) {
-            return conjunctionsWithUnknowns.get(0);
-        }
-        for (Result subResult : conjunctions) {
-            if (subResult.isMatchNoDocs()) {
-                return subResult;
-            }
-        }
-
-        int msm = 0;
-        boolean verified = conjunctionsWithUnknowns.size() == conjunctions.size();
-        boolean matchAllDocs = true;
-        Set<QueryExtraction> extractions = new HashSet<>();
-        Set<String> seenRangeFields = new HashSet<>();
-        for (Result result : conjunctions) {
-
-            int resultMsm = result.minimumShouldMatch;
-            for (QueryExtraction queryExtraction : result.extractions) {
-                if (queryExtraction.range != null) {
-                    // In case of range queries each extraction does not simply increment the
-                    // minimum_should_match for that percolator query like for a term based extraction,
-                    // so that can lead to more false positives for percolator queries with range queries
-                    // than term based queries.
-                    // This is because the way number fields are extracted from the document to be
-                    // percolated. Per field a single range is extracted and if a percolator query has two or
-                    // more range queries on the same field, then the minimum should match can be higher than clauses
-                    // in the CoveringQuery. Therefore right now the minimum should match is only incremented once per
-                    // number field when processing the percolator query at index time.
-                    // For multiple ranges within a single extraction (ie from an existing conjunction or disjunction)
-                    // then this will already have been taken care of, so we only check against fieldnames from
-                    // previously processed extractions, and don't add to the seenRangeFields list until all
-                    // extractions from this result are processed
-                    if (seenRangeFields.contains(queryExtraction.range.fieldName)) {
-                        resultMsm = Math.max(0, resultMsm - 1);
-                        verified = false;
-                    }
-                } else {
-                    // In case that there are duplicate term query extractions we need to be careful with
-                    // incrementing msm, because that could lead to valid matches not becoming candidate matches:
-                    // query: (field:val1 AND field:val2) AND (field:val2 AND field:val3)
-                    // doc: field: val1 val2 val3
-                    // So lets be protective and decrease the msm:
-                    if (extractions.contains(queryExtraction)) {
-                        resultMsm = Math.max(0, resultMsm - 1);
-                        verified = false;
-                    }
-                }
-            }
-            msm += resultMsm;
-
-            // add range fields from this Result to the seenRangeFields set so that minimumShouldMatch is correctly
-            // calculated for subsequent Results
-            result.extractions.stream().map(e -> e.range).filter(Objects::nonNull).map(e -> e.fieldName).forEach(seenRangeFields::add);
-
-            if (result.verified == false
-                // If some inner extractions are optional, the result can't be verified
-                || result.minimumShouldMatch < result.extractions.size()) {
-                verified = false;
-
-            }
-            matchAllDocs &= result.matchAllDocs;
-            extractions.addAll(result.extractions);
-        }
-
-        if (matchAllDocs) {
-            return new Result(matchAllDocs, verified);
-        } else {
-            return new Result(verified, extractions, msm);
-        }
-    }
-
-    private static Result handleDisjunction(List<Result> disjunctions, int requiredShouldClauses, Version version) {
-        if (disjunctions.stream().anyMatch(Result::isUnknown)) {
-            return Result.UNKNOWN;
-        }
-        if (disjunctions.size() == 1) {
-            return disjunctions.get(0);
-        }
-        // Keep track of the msm for each clause:
-        List<Integer> clauses = new ArrayList<>(disjunctions.size());
-        boolean verified = true;
-        int numMatchAllClauses = 0;
-        boolean hasRangeExtractions = false;
-
-        // In case that there are duplicate extracted terms / ranges then the msm should always be equal to the clause
-        // with lowest msm, because the at percolate time there is no way to know the number of repetitions per
-        // extracted term and field value from a percolator document may have more 'weight' than others.
-        // Example percolator query: value1 OR value2 OR value2 OR value3 OR value3 OR value3 OR value4 OR value5 (msm set to 3)
-        // In the above example query the extracted msm would be 3
-        // Example document1: value1 value2 value3
-        // With the msm and extracted terms this would match and is expected behaviour
-        // Example document2: value3
-        // This document should match too (value3 appears in 3 clauses), but with msm set to 3 and the fact
-        // that fact that only distinct values are indexed in extracted terms field this document would
-        // never match.
-        boolean hasDuplicateTerms = false;
-
-        Set<QueryExtraction> terms = new HashSet<>();
-        for (int i = 0; i < disjunctions.size(); i++) {
-            Result subResult = disjunctions.get(i);
-            if (subResult.verified == false
-                // one of the sub queries requires more than one term to match, we can't
-                // verify it with a single top-level min_should_match
-                || subResult.minimumShouldMatch > 1
-                // One of the inner clauses has multiple extractions, we won't be able to
-                // verify it with a single top-level min_should_match
-                || (subResult.extractions.size() > 1 && requiredShouldClauses > 1)) {
-                verified = false;
-            }
+                return new Result(matchAllDocs, false, extractions, minimumShouldMatch);
+final class QueryAnalyzer {
             if (subResult.matchAllDocs) {
-                numMatchAllClauses++;
-            }
-            int resultMsm = subResult.minimumShouldMatch;
-            for (QueryExtraction extraction : subResult.extractions) {
-                if (terms.add(extraction) == false) {
-                    verified = false;
-                    hasDuplicateTerms = true;
-                }
-            }
-            if (hasRangeExtractions == false) {
-                hasRangeExtractions = subResult.extractions.stream().anyMatch(qe -> qe.range != null);
-            }
-            clauses.add(resultMsm);
-        }
-        boolean matchAllDocs = numMatchAllClauses > 0 && numMatchAllClauses >= requiredShouldClauses;
-
-        int msm = 0;
-        // Having ranges would mean we need to juggle with the msm and that complicates this logic a lot,
-        // so for now lets not do it.
-        if (hasRangeExtractions == false) {
-
-            // Figure out what the combined msm is for this disjunction:
-            // (sum the lowest required clauses, otherwise we're too strict and queries may not match)
-            clauses = clauses.stream().filter(val -> val > 0).sorted().collect(Collectors.toList());
-
-            // When there are duplicated query extractions, percolator can no longer reliably determine msm across this disjunction
-            if (hasDuplicateTerms) {
-                // pick lowest msm:
-                msm = clauses.get(0);
-            } else {
-                int limit = Math.min(clauses.size(), Math.max(1, requiredShouldClauses));
-                for (int i = 0; i < limit; i++) {
-                    msm += clauses.get(i);
-                }
-            }
-        } else {
-            msm = 1;
-        }
-        if (matchAllDocs) {
-            return new Result(matchAllDocs, verified);
-        } else {
-            return new Result(verified, terms, msm);
-        }
-    }
-
-    /**
-     * Return an extraction for the conjunction of {@code result1} and {@code result2}
-     * by picking up clauses that look most restrictive and making it unverified if
-     * the other clause is not null and doesn't match all documents. This is used by
-     * 6.0.0 indices which didn't use the terms_set query.
-     */
-    static Result selectBestResult(Result result1, Result result2) {
-        assert result1 != null || result2 != null;
-        if (result1 == null) {
-            return result2;
-        } else if (result2 == null) {
-            return result1;
-        } else if (result1.matchAllDocs) { // conjunction with match_all
-            Result result = result2;
-            if (result1.verified == false) {
-                result = result.unverify();
-            }
-            return result;
-        } else if (result2.matchAllDocs) { // conjunction with match_all
-            Result result = result1;
-            if (result2.verified == false) {
-                result = result.unverify();
-            }
-            return result;
-        } else {
-            // Prefer term based extractions over range based extractions:
-            boolean onlyRangeBasedExtractions = true;
-            for (QueryExtraction clause : result1.extractions) {
-                if (clause.term != null) {
-                    onlyRangeBasedExtractions = false;
-                    break;
-                }
-            }
-            for (QueryExtraction clause : result2.extractions) {
-                if (clause.term != null) {
-                    onlyRangeBasedExtractions = false;
-                    break;
-                }
-            }
-
-            if (onlyRangeBasedExtractions) {
-                BytesRef extraction1SmallestRange = smallestRange(result1.extractions);
-                BytesRef extraction2SmallestRange = smallestRange(result2.extractions);
-                if (extraction1SmallestRange == null) {
-                    return result2.unverify();
-                } else if (extraction2SmallestRange == null) {
-                    return result1.unverify();
-                }
-
-                // Keep the clause with smallest range, this is likely to be the rarest.
-                if (extraction1SmallestRange.compareTo(extraction2SmallestRange) <= 0) {
-                    return result1.unverify();
-                } else {
-                    return result2.unverify();
-                }
-            } else {
-                int extraction1ShortestTerm = minTermLength(result1.extractions);
-                int extraction2ShortestTerm = minTermLength(result2.extractions);
-                // keep the clause with longest terms, this likely to be rarest.
-                if (extraction1ShortestTerm >= extraction2ShortestTerm) {
-                    return result1.unverify();
-                } else {
-                    return result2.unverify();
-                }
-            }
-        }
-    }
-
-    private static int minTermLength(Set<QueryExtraction> extractions) {
-        boolean hasTerm = false;
-        boolean hasRange = false;
-        int min = Integer.MAX_VALUE;
-
-        for (QueryExtraction qt : extractions) {
-            if (qt.term != null) {
-                hasTerm = true;
-                min = Math.min(min, qt.bytes().length);
-            }
-            if (qt.range != null) {
-                hasRange = true;
-            }
-        }
-
-        // If there are no terms but there are ranges, return Integer.MIN_VALUE
-        if (!hasTerm && hasRange) {
-            return Integer.MIN_VALUE;
-        }
-
-        return min;
-    }
-
-    private static BytesRef smallestRange(Set<QueryExtraction> terms) {
-        BytesRef min = null;
-        for (QueryExtraction qt : terms) {
-            if (qt.range != null) {
-                if (min == null || qt.range.interval.compareTo(min) < 0) {
-                    min = qt.range.interval;
-                }
-            }
-        }
-        return min;
-    }
-
-    /**
-     * Query extraction result. A result is a candidate for a given document either if:
-     *  - `matchAllDocs` is true
-     *  - `extractions` and the document have `minimumShouldMatch` terms in common
-     *  Further more, the match doesn't need to be verified if `verified` is true, checking
-     *  `matchAllDocs` and `extractions` is enough.
-     */
-    static class Result {
-
-        final Set<QueryExtraction> extractions;
-        final boolean verified;
-        final int minimumShouldMatch;
-        final boolean matchAllDocs;
-
-        Result(boolean matchAllDocs, boolean verified, Set<QueryExtraction> extractions, int minimumShouldMatch) {
-            if (minimumShouldMatch > extractions.size()) {
-                throw new IllegalArgumentException(
-                    "minimumShouldMatch can't be greater than the number of extractions: " + minimumShouldMatch + " > " + extractions.size()
-                );
-            }
-            this.matchAllDocs = matchAllDocs;
-            this.extractions = extractions;
             this.verified = verified;
+        final Version version;
+            child.minimumShouldMatch = minimumShouldMatch;
+            this(matchAllDocs, verified, Collections.emptySet(), 0);
+        assert result1 != null || result2 != null;
+                if (extraction1SmallestRange == null) {
+        System.arraycopy(original, 0, result, offset, original.length);
+            return functionScoreQuery.getMinScore() == null;
+            if (occur == Occur.MUST || occur == Occur.FILTER) {
+            this.upperPoint = upperPoint;
+                int extraction1ShortestTerm = minTermLength(result1.extractions);
+        } else {
+        }
+    static class Result {
+            SpanOrQuery.class,
+                    return result2.unverify();
+            result += Arrays.hashCode(lowerPoint);
+        }
+ * ownership. Elasticsearch licenses this file to you under
+            if (occur == Occur.MUST_NOT) {
+            this.range = range;
+    }
+        // This document should match too (value3 appears in 3 clauses), but with msm set to 3 and the fact
+        int offset = BinaryRange.BYTES - original.length;
+                return true;
+            if (qt.term != null) {
+        int min = Integer.MAX_VALUE;
+                && Arrays.equals(lowerPoint, range.lowerPoint)
+        public void consumeTermsMatching(Query query, String field, Supplier<ByteRunAutomaton> automaton) {
+                }
+    private static int minTermLength(Set<QueryExtraction> extractions) {
+            for (QueryExtraction clause : result2.extractions) {
+            }
+                result = conjunction
+                case MatchAllDocsQuery ignored -> terms.add(new Result(true, true));
+        List<Result> conjunctions = conjunctionsWithUnknowns.stream().filter(r -> r.isUnknown() == false).collect(Collectors.toList());
+        public int hashCode() {
+        // Having ranges would mean we need to juggle with the msm and that complicates this logic a lot,
+    }
+            // When there are duplicated query extractions, percolator can no longer reliably determine msm across this disjunction
+                    return result2.unverify();
+        Result(boolean matchAllDocs, boolean verified) {
+            }
+                && Arrays.equals(upperPoint, range.upperPoint);
+                    throw new UncheckedIOException(ex);
+            return term != null ? term.text() : null;
+        @Override
+            clauses.add(resultMsm);
+            for (QueryExtraction extraction : subResult.extractions) {
+                return this;
+                BytesRef extraction1SmallestRange = smallestRange(result1.extractions);
+        final boolean conjunction;
+                result = partialResults.get(0);
+            int resultMsm = subResult.minimumShouldMatch;
+                    // doc: field: val1 val2 val3
+            if (verified == false) {
+        }
+ * GitHub history for details.
+            switch (query) {
+            this.version = version;
+            if (subResult.verified == false
+        }
+        }
+        }
+        return min;
+        if (new BytesRef(lowerPoint).compareTo(new BytesRef(upperPoint)) > 0) {
+                        qe.add(new QueryExtraction(new Term(field, term)));
+        public boolean equals(Object o) {
+            return conjunctionsWithUnknowns.get(0);
+                return true;
+        if (conjunctions.isEmpty()) {
+            if (o == null || getClass() != o.getClass()) return false;
+    }
             this.minimumShouldMatch = minimumShouldMatch;
         }
-
-        Result(boolean verified, Set<QueryExtraction> extractions, int minimumShouldMatch) {
-            this(false, verified, extractions, minimumShouldMatch);
+        final byte[] upperPoint;
         }
-
-        Result(boolean matchAllDocs, boolean verified) {
-            this(matchAllDocs, verified, Collections.emptySet(), 0);
-        }
-
-        @Override
-        public String toString() {
-            return extractions.toString();
-        }
-
-        Result unverify() {
-            if (verified) {
-                return new Result(matchAllDocs, false, extractions, minimumShouldMatch);
-            } else {
-                return this;
-            }
-        }
-
-        boolean isUnknown() {
-            return false;
-        }
-
-        boolean isMatchNoDocs() {
-            return matchAllDocs == false && extractions.isEmpty();
-        }
-
-        static final Result UNKNOWN = new Result(false, false, Collections.emptySet(), 0) {
-            @Override
             boolean isUnknown() {
-                return true;
+import org.apache.lucene.search.QueryVisitor;
+     *  `matchAllDocs` and `extractions` is enough.
+import java.io.UncheckedIOException;
             }
-
-            @Override
-            boolean isMatchNoDocs() {
-                return false;
-            }
-
-            @Override
-            public String toString() {
-                return "UNKNOWN";
-            }
-        };
-
-        static final Result MATCH_NONE = new Result(false, true, Collections.emptySet(), 0) {
-            @Override
-            boolean isMatchNoDocs() {
-                return true;
-            }
-        };
-    }
-
-    static class QueryExtraction {
-
-        final Term term;
-        final Range range;
-
-        QueryExtraction(Term term) {
-            this.term = term;
-            this.range = null;
-        }
-
-        QueryExtraction(Range range) {
-            this.term = null;
-            this.range = range;
-        }
-
-        String field() {
-            return term != null ? term.field() : null;
-        }
-
-        BytesRef bytes() {
-            return term != null ? term.bytes() : null;
-        }
-
-        String text() {
-            return term != null ? term.text() : null;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            QueryExtraction queryExtraction = (QueryExtraction) o;
-            return Objects.equals(term, queryExtraction.term) && Objects.equals(range, queryExtraction.range);
-        }
-
-        @Override
-        public int hashCode() {
+     * 6.0.0 indices which didn't use the terms_set query.
+                    while ((term = ti.next()) != null) {
             return Objects.hash(term, range);
-        }
-
+     * Extracts terms and ranges from the provided query. These terms and ranges are stored with the percolator query and
+ *
+    private static BytesRef smallestRange(Set<QueryExtraction> terms) {
+        return result;
         @Override
-        public String toString() {
+        );
+                    ? handleConjunction(partialResults, version)
+        };
+            return child;
+        if (disjunctions.size() == 1) {
+        BytesRef bytes() {
+                || subResult.minimumShouldMatch > 1
+                    BytesRef term;
+        boolean verified = true;
+            boolean onlyRangeBasedExtractions = true;
+            this.extractions = extractions;
+        for (QueryExtraction qt : extractions) {
+            boolean verified = isVerified(query);
+            }
+        int minimumShouldMatch = 0;
+            msm = 1;
+        // With the msm and extracted terms this would match and is expected behaviour
+            this(false, verified, extractions, minimumShouldMatch);
+        // Example percolator query: value1 OR value2 OR value2 OR value3 OR value3 OR value3 OR value4 OR value5 (msm set to 3)
+                    break;
+        @Override
+                // Keep the clause with smallest range, this is likely to be the rarest.
+        boolean hasRange = false;
+ * under the License.
+                }
+            }
+        }
+                    this.terms.add(new Result(true, qe, 1));
+                result = result.unverify();
+    }
+                if (queryExtraction.range != null) {
+        public boolean equals(Object o) {
+            return extractions.toString();
+        // If upper is really smaller than lower then we deal with like MatchNoDocsQuery. (verified and no extractions)
+                for (int i = 0; i < limit; i++) {
+            if (parent instanceof ApproximateScoreQuery approximateScoreQuery
+        boolean hasDuplicateTerms = false;
+                // One of the inner clauses has multiple extractions, we won't be able to
+import java.util.Arrays;
+                return subResult;
+                    return result1.unverify();
+        Set<QueryExtraction> terms = new HashSet<>();
+            }
+ *
+        int numMatchAllClauses = 0;
+        Set<QueryExtraction> extractions = new HashSet<>();
+import java.util.stream.Collectors;
+import org.apache.lucene.search.DisjunctionMaxQuery;
+        for (int i = 0; i < disjunctions.size(); i++) {
+            }
+        }
+                }
+    }
+            if (parent instanceof BooleanQuery bq) {
+            return result;
+            int minimumShouldMatch = 0;
+        Arrays.asList(
+        static final Result UNKNOWN = new Result(false, false, Collections.emptySet(), 0) {
+        }
+     * The query analyzer doesn't always extract all terms from the specified query. For example from a
+/*
+                minimumShouldMatch = bq.getMinimumNumberShouldMatch();
+                    // incrementing msm, because that could lead to valid matches not becoming candidate matches:
+ * KIND, either express or implied.  See the License for the
+     * When extracting the terms for the specified query, we can also determine if the percolator query is
+        }
+/*
+     * matches. This allows the percolate query to skip the expensive memory index verification step that
+     * <p>
+            DisjunctionMaxQuery.class,
+                if (min == null || qt.range.interval.compareTo(min) < 0) {
+        }
+        // extracted term and field value from a percolator document may have more 'weight' than others.
+        }
+                if (bq.getMinimumNumberShouldMatch() == 0
+        return false;
+    static class QueryExtraction {
+                // one of the sub queries requires more than one term to match, we can't
+        for (Result subResult : conjunctions) {
+        // so for now lets not do it.
             return "QueryExtraction{" + "term=" + term + ",range=" + range + '}';
         }
-    }
-
-    static class Range {
-
-        final String fieldName;
-        final byte[] lowerPoint;
-        final byte[] upperPoint;
-        final BytesRef interval;
-
-        Range(String fieldName, byte[] lowerPoint, byte[] upperPoint, byte[] interval) {
+        byte[] interval = new byte[16];
+            return (conjunction ? "CONJ" : "DISJ") + children + terms + "~" + minimumShouldMatch;
+            // calculated for subsequent Results
+        QueryExtraction(Range range) {
+import java.util.List;
             this.fieldName = fieldName;
-            this.lowerPoint = lowerPoint;
-            this.upperPoint = upperPoint;
-            // using BytesRef here just to make use of its compareTo method.
-            this.interval = new BytesRef(interval);
+        final Term term;
         }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Range range = (Range) o;
-            return Objects.equals(fieldName, range.fieldName)
-                && Arrays.equals(lowerPoint, range.lowerPoint)
-                && Arrays.equals(upperPoint, range.upperPoint);
+import org.apache.lucene.search.ConstantScoreQuery;
+                } catch (final IOException ex) {
+            Result subResult = disjunctions.get(i);
+                    // query: (field:val1 AND field:val2) AND (field:val2 AND field:val3)
+        List<ResultBuilder> children = new ArrayList<>();
+                BytesRef extraction2SmallestRange = smallestRange(result2.extractions);
+                    }
         }
-
+        // that fact that only distinct values are indexed in extracted terms field this document would
+            }
+        if (query instanceof FunctionScoreQuery functionScoreQuery) {
+                result = result.unverify();
+            }
+                }
+                    onlyRangeBasedExtractions = false;
+        Result(boolean verified, Set<QueryExtraction> extractions, int minimumShouldMatch) {
+     *  Further more, the match doesn't need to be verified if `verified` is true, checking
+            if (query instanceof TermInSetQuery q) {
+                    // extractions from this result are processed
         @Override
-        public int hashCode() {
+ * compatible open source license.
+                return QueryVisitor.EMPTY_VISITOR;
+    static Result selectBestResult(Result result1, Result result2) {
+     * by picking up clauses that look most restrictive and making it unverified if
+    private QueryAnalyzer() {}
+            } else {
+        }
+        Result getResult() {
+        Result(boolean matchAllDocs, boolean verified, Set<QueryExtraction> extractions, int minimumShouldMatch) {
+                this.verified = false;
+                return QueryVisitor.EMPTY_VISITOR;
+        };
+        } else {
+            QueryExtraction queryExtraction = (QueryExtraction) o;
+ * this file be licensed under the Apache-2.0 license or a
+                }
+                    msm += clauses.get(i);
+            Set<QueryExtraction> qe = Arrays.stream(terms).map(QueryExtraction::new).collect(Collectors.toSet());
+     *  - `matchAllDocs` is true
+                }
+import org.apache.lucene.search.PointRangeQuery;
+            SynonymQuery.class,
+        @Override
+        Result unverify() {
+            }
+            }
+                // pick lowest msm:
+            }
+            BooleanQuery.class,
+                int extraction2ShortestTerm = minTermLength(result2.extractions);
+     * holds the terms from the document to be percolated and allows to the percolate query to ignore
+     */
+     *
+ *
+                case PointRangeQuery pointRangeQuery -> terms.add(pointRangeQuery(pointRangeQuery));
+            return Objects.equals(term, queryExtraction.term) && Objects.equals(range, queryExtraction.range);
+            return new Result(true, Collections.emptySet(), 0);
+                    // previously processed extractions, and don't add to the seenRangeFields list until all
+                    BytesRefIterator ti = q.getBytesRefIterator();
+        }
+        }
+                return true;
+        // In the above example query the extracted msm would be 3
+            }
+        // Example document2: value3
+                    break;
+ */
+                    : handleDisjunction(partialResults, minimumShouldMatch, version);
+                    // then this will already have been taken care of, so we only check against fieldnames from
+ * SPDX-License-Identifier: Apache-2.0
+                try {
+import java.util.ArrayList;
+                verified = false;
+            if (partialResults.isEmpty()) {
+        return new Result(
+                } else if (extraction2SmallestRange == null) {
+            return new Result(matchAllDocs, verified);
+import java.util.Set;
+            if (qt.range != null) {
+                    return result2.unverify();
+            }
             int result = 1;
-            result += 31 * fieldName.hashCode();
-            result += Arrays.hashCode(lowerPoint);
-            result += Arrays.hashCode(upperPoint);
+            }
+                && approximateScoreQuery.getOriginalQuery() instanceof DateRangeIncludingNowQuery) {
+            }
+                    // This is because the way number fields are extracted from the document to be
+    }
+                    return QueryVisitor.EMPTY_VISITOR;
+                partialResults.addAll(childResults);
+import org.apache.lucene.search.SynonymQuery;
+        int msm = 0;
+                    // For multiple ranges within a single extraction (ie from an existing conjunction or disjunction)
+                    if (extractions.contains(queryExtraction)) {
+package org.opensearch.percolator;
+            }
+                || (subResult.extractions.size() > 1 && requiredShouldClauses > 1)) {
+import java.util.HashSet;
+            msm += resultMsm;
+                        resultMsm = Math.max(0, resultMsm - 1);
+        if (matchAllDocs) {
+        if (conjunctionsWithUnknowns.size() == 1) {
+     *
+                    return result1.unverify();
+        boolean matchAllDocs = numMatchAllClauses > 0 && numMatchAllClauses >= requiredShouldClauses;
             return result;
+    private static boolean isVerified(Query query) {
+        List<Integer> clauses = new ArrayList<>(disjunctions.size());
+                    // number field when processing the percolator query at index time.
+                if (clause.term != null) {
+        } else {
+        final BytesRef interval;
+        byte[] result = new byte[BinaryRange.BYTES];
+            return new Result(verified, terms, msm);
+        return builder.getResult();
+            @Override
+            } else {
+        if (!hasTerm && hasRange) {
+     * query analysis is stopped and an UnsupportedQueryException is thrown. So that the caller can mark
+                } else {
+    private static class ResultBuilder extends QueryVisitor {
+            this.interval = new BytesRef(interval);
+            }
         }
-
-        @Override
-        public String toString() {
+                    // So lets be protective and decrease the msm:
             return "Range{" + ", fieldName='" + fieldName + '\'' + ", interval=" + interval + '}';
+ *    http://www.apache.org/licenses/LICENSE-2.0
+            SpanTermQuery.class,
+ * this work for additional information regarding copyright
+        byte[] lowerPoint = query.getLowerPoint();
+            this.term = null;
+        }
+        for (Class<?> cls : verifiedQueries) {
+            }
+        if (matchAllDocs) {
+                List<Result> childResults = children.stream().map(ResultBuilder::getResult).collect(Collectors.toList());
+            return new Result(verified, extractions, msm);
+            }
+import java.io.IOException;
+        final Range range;
+            return disjunctions.get(0);
+        }
+    /**
+                int limit = Math.min(clauses.size(), Math.max(1, requiredShouldClauses));
+                    // more range queries on the same field, then the minimum should match can be higher than clauses
+                return "UNKNOWN";
+            extractions.addAll(result.extractions);
+        }
+        }
+            return term != null ? term.field() : null;
+import org.apache.lucene.util.BytesRefIterator;
+                    && bq.clauses().stream().anyMatch(c -> c.occur() == Occur.MUST || c.occur() == Occur.FILTER)) {
+            } else {
+            TermInSetQuery.class,
+ * not use this file except in compliance with the License.
+        }
+                    return result1.unverify();
+        boolean hasTerm = false;
+                    // than term based queries.
+                this.terms.add(new Result(verified, qe, conjunction ? qe.size() : 1));
+import org.apache.lucene.util.NumericUtils;
+    }
+    private static byte[] prepad(byte[] original) {
+     * always going to match. For example if a percolator query just contains a term query or a disjunction
+        } else if (result2.matchAllDocs) { // conjunction with match_all
+    );
+            }
+import org.apache.lucene.queries.spans.SpanOrQuery;
+                // verify it with a single top-level min_should_match
+        String text() {
+            Result result = result2;
+     * it would otherwise have to execute (for example when a percolator query contains a phrase query or a
+     * this query in such a way that the PercolatorQuery always verifies if this query with the MemoryIndex.
+            if (verified) {
+ */
+                terms.add(Result.UNKNOWN);
+        }
+            }
+     * conjunction query).
+        boolean verified = conjunctionsWithUnknowns.size() == conjunctions.size();
+        }
+                verified = false;
+            if (this == o) return true;
+            // Figure out what the combined msm is for this disjunction:
+     *
+import org.apache.lucene.search.BooleanClause.Occur;
+     * boolean query with no should clauses or phrase queries only the longest term are selected,
+            for (QueryExtraction clause : result1.extractions) {
+import org.apache.lucene.search.BoostQuery;
+            // using BytesRef here just to make use of its compareTo method.
+        )
+            return result1;
+            clauses = clauses.stream().filter(val -> val > 0).sorted().collect(Collectors.toList());
+                }
+    }
+            }
+        final boolean matchAllDocs;
+                if (terms.add(extraction) == false) {
+                if (extraction1ShortestTerm >= extraction2ShortestTerm) {
+        BytesRef min = null;
+                );
+ */
+                partialResults.addAll(terms);
+                    "minimumShouldMatch can't be greater than the number of extractions: " + minimumShouldMatch + " > " + extractions.size()
+            }
+    }
+            if (hasDuplicateTerms) {
+        query.visit(builder);
+        }
+     * Return an extraction for the conjunction of {@code result1} and {@code result2}
+                    }
+            if (partialResults.size() == 1) {
+            this.term = term;
+        } else if (result1.matchAllDocs) { // conjunction with match_all
+            // Prefer term based extractions over range based extractions:
+            this.verified = isVerified(parent);
+            }
+        // never match.
+        public String toString() {
+            if (terms.size() > 0) {
+            return result;
+        boolean matchAllDocs = true;
+            return result;
+            this.lowerPoint = lowerPoint;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.util.automaton.ByteRunAutomaton;
         }
     }
-
+            }
+        if (hasRangeExtractions == false) {
+            if (result1.verified == false) {
+                min = Math.min(min, qt.bytes().length);
+    private static Result handleConjunction(List<Result> conjunctionsWithUnknowns, Version version) {
+                }
+        }
+            }
+                }
+ * You may obtain a copy of the License at
+        boolean isUnknown() {
+import org.opensearch.lucene.queries.BlendedTermQuery;
+            result += Arrays.hashCode(upperPoint);
+                    // minimum_should_match for that percolator query like for a term based extraction,
+                hasTerm = true;
+                case null, default -> terms.add(Result.UNKNOWN);
+                hasRangeExtractions = subResult.extractions.stream().anyMatch(qe -> qe.range != null);
+                children.add(builder);
+            return Integer.MIN_VALUE;
+            Collections.singleton(new QueryExtraction(new Range(query.getField(), lowerPoint, upperPoint, interval))),
+        final String fieldName;
+            if (this == o) return true;
+import org.apache.lucene.search.Query;
+            @Override
+        for (Result result : conjunctions) {
+                // verify it with a single top-level min_should_match
+                }
+                    // in the CoveringQuery. Therefore right now the minimum should match is only incremented once per
+                ResultBuilder builder = new ResultBuilder(version, true);
+        public String toString() {
+            return new Result(matchAllDocs, verified);
+            for (QueryExtraction queryExtraction : result.extractions) {
+    }
+            if (hasRangeExtractions == false) {
+            return false;
+                msm = clauses.get(0);
+            if (minimumShouldMatch > extractions.size()) {
+        }
+        }
+        }
+        } else if (result2 == null) {
+            }
+        public int hashCode() {
+        static final Result MATCH_NONE = new Result(false, true, Collections.emptySet(), 0) {
+            if (onlyRangeBasedExtractions) {
+    private static Result handleDisjunction(List<Result> disjunctions, int requiredShouldClauses, Version version) {
+        final int minimumShouldMatch;
+        // Keep track of the msm for each clause:
+            // add range fields from this Result to the seenRangeFields set so that minimumShouldMatch is correctly
+        final byte[] lowerPoint;
+        NumericUtils.subtract(16, 0, prepad(upperPoint), prepad(lowerPoint), interval);
+import org.apache.lucene.util.BytesRef;
+            if (conjunctionsWithUnknowns.isEmpty()) {
+            false,
+        // In case that there are duplicate extracted terms / ranges then the msm should always be equal to the clause
+     * <p>
+                throw new IllegalArgumentException("Must have at least one conjunction sub result");
+            } else {
+            if (o == null || getClass() != o.getClass()) return false;
+        return min;
+            this.range = null;
+            if (children.isEmpty() == false) {
+            int resultMsm = result.minimumShouldMatch;
+ * The OpenSearch Contributors require contributions made to
+import org.apache.lucene.search.BooleanQuery;
+        // If there are no terms but there are ranges, return Integer.MIN_VALUE
+     * used by the percolate query's candidate query as fields to be query by. The candidate query
+    static Result analyze(Query query, Version indexVersion) {
+        String field() {
+            Range range = (Range) o;
+            }
+import org.apache.lucene.queries.spans.SpanTermQuery;
+        boolean verified = true;
+        @Override
+        } else {
+import org.apache.lucene.search.TermInSetQuery;
+                hasRange = true;
+        }
+ * Licensed to Elasticsearch under one or more contributor
+        }
+    /**
+        byte[] upperPoint = query.getUpperPoint();
+     *  - `extractions` and the document have `minimumShouldMatch` terms in common
+            return matchAllDocs == false && extractions.isEmpty();
+            if (result2.verified == false) {
+import org.opensearch.search.approximate.ApproximateScoreQuery;
+            Result result = result1;
+            BoostQuery.class,
+            TermQuery.class,
+        public String toString() {
+            }
+            if (qt.range != null) {
+     * Sometimes the query analyzer can't always extract terms or ranges from a sub query, if that happens then
+        public void consumeTerms(Query query, Term... terms) {
+                return verified ? Result.MATCH_NONE : Result.UNKNOWN;
+        // Need to check whether upper is not smaller than lower, otherwise NumericUtils.subtract(...) fails IAE
+        @Override
+                        resultMsm = Math.max(0, resultMsm - 1);
+import org.apache.lucene.search.MatchNoDocsQuery;
+        final boolean verified;
+                super.consumeTermsMatching(query, field, automaton);
+            return Objects.equals(fieldName, range.fieldName)
+        if (disjunctions.stream().anyMatch(Result::isUnknown)) {
+                } else {
+                if (extraction1SmallestRange.compareTo(extraction2SmallestRange) <= 0) {
+                    verified = false;
+            @Override
+import org.apache.lucene.index.Term;
+        // with lowest msm, because the at percolate time there is no way to know the number of repetitions per
+            }
+import org.opensearch.index.query.DateRangeIncludingNowQuery;
+            ResultBuilder child = new ResultBuilder(version, false);
+                // keep the clause with longest terms, this likely to be rarest.
+                throw new IllegalArgumentException(
+                    Set<QueryExtraction> qe = new HashSet<>();
+import java.util.Objects;
+        public String toString() {
+        }
+                result = result.unverify();
+                if (clause.term != null) {
+     * the other clause is not null and doesn't match all documents. This is used by
+            ConstantScoreQuery.class,
+    private static Result pointRangeQuery(PointRangeQuery query) {
+        @Override
+            if (qe.size() > 0) {
+            return Result.UNKNOWN;
+                    // so that can lead to more false positives for percolator queries with range queries
+        final Set<QueryExtraction> extractions;
+        // Example document1: value1 value2 value3
+                return false;
+            }
+            if (cls.isAssignableFrom(query.getClass())) {
+                    // In case that there are duplicate term query extractions we need to be careful with
+            @Override
+        boolean isMatchNoDocs() {
+            this.conjunction = conjunction;
+        }
+            boolean isMatchNoDocs() {
+     */
+        @Override
+            } else {
+                case MatchNoDocsQuery ignored -> terms.add(Result.MATCH_NONE);
+                || result.minimumShouldMatch < result.extractions.size()) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.apache.lucene.search.TermQuery;
 }
+                        verified = false;
+        for (QueryExtraction qt : terms) {
+        QueryExtraction(Term term) {
+            this.matchAllDocs = matchAllDocs;
+            result.extractions.stream().map(e -> e.range).filter(Objects::nonNull).map(e -> e.fieldName).forEach(seenRangeFields::add);
+        @Override
+     * query then when the candidate query matches with that, we know the entire percolator query always
+            if (result.verified == false
+                numMatchAllClauses++;
+        public QueryVisitor getSubVisitor(Occur occur, Query parent) {
+     * Query extraction result. A result is a candidate for a given document either if:
+import java.util.Collections;
+            return term != null ? term.bytes() : null;
+        private ResultBuilder(Version version, boolean conjunction) {
+            return result2;
+        Range(String fieldName, byte[] lowerPoint, byte[] upperPoint, byte[] interval) {
+            return conjunctionsWithUnknowns.get(0); // all conjunctions are unknown, so just return the first one
+        @Override
+    static class Range {
+        Set<String> seenRangeFields = new HashSet<>();
+        }
+     */
+            }
+ * Unless required by applicable law or agreed to in writing,
+ * license agreements. See the NOTICE file distributed with
+import org.opensearch.Version;
+        int msm = 0;
+            }
+import java.util.function.Supplier;
+    }
+        }
+ * specific language governing permissions and limitations
+                }
+            List<Result> partialResults = new ArrayList<>();
+            Result result;
+     * percolator queries that we know would otherwise never match.
+                    // percolated. Per field a single range is extracted and if a percolator query has two or
+            1
+ * Modifications Copyright OpenSearch Contributors. See
+        if (result1 == null) {
+        ResultBuilder builder = new ResultBuilder(indexVersion, false);
+            public String toString() {
+            result += 31 * fieldName.hashCode();
+        }
+                } else {
+        public void visitLeaf(Query query) {
+        }
+                    hasDuplicateTerms = true;
+                    onlyRangeBasedExtractions = false;
+            }
+ * the Apache License, Version 2.0 (the "License"); you may
+            if (subResult.isMatchNoDocs()) {
+ * software distributed under the License is distributed on an
+                    // In case of range queries each extraction does not simply increment the
+     * @param indexVersion  The create version of the index containing the percolator queries.
+     * <p>
+                // If some inner extractions are optional, the result can't be verified
+            // (sum the lowest required clauses, otherwise we're too strict and queries may not match)
+                    min = qt.range.interval;

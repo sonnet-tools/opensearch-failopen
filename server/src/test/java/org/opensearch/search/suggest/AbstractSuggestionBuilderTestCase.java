@@ -1,311 +1,284 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.suggest;
-
-import org.apache.lucene.analysis.core.SimpleAnalyzer;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.BigArrays;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.index.Index;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.MapperService;
+                null,
 import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.mapper.TextSearchInfo;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.ingest.TestTemplateService;
-import org.opensearch.script.Script;
-import org.opensearch.script.ScriptService;
-import org.opensearch.search.SearchModule;
-import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
-import org.opensearch.test.IndexSettingsModule;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-
-import java.io.IOException;
-
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+            } else if (fieldTypeSearchAnalyzerSet) {
+            assertEquals(toBytesRef(suggestionBuilder.text()), suggestionContext.getText());
+import org.opensearch.core.index.Index;
+            SB suggestionBuilder = randomTestBuilder();
+                assertEquals(suggestionBuilder.analyzer(), ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
+    public void testBuild() throws IOException {
 import static java.util.Collections.emptyList;
-import static org.opensearch.common.lucene.BytesRefs.toBytesRef;
-import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public abstract class AbstractSuggestionBuilderTestCase<SB extends SuggestionBuilder<SB>> extends OpenSearchTestCase {
-
-    private static final int NUMBER_OF_TESTBUILDERS = 20;
-    protected static NamedWriteableRegistry namedWriteableRegistry;
-    protected static NamedXContentRegistry xContentRegistry;
-
-    /**
-     * setup for the whole base test class
-     */
-    @BeforeClass
-    public static void init() {
-        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());
-        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
+            ScriptService scriptService = mock(ScriptService.class);
         xContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        namedWriteableRegistry = null;
-        xContentRegistry = null;
-    }
-
-    /**
-     * Test serialization and deserialization of the suggestion builder
-     */
-    public void testSerialization() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
-            SB original = randomTestBuilder();
+import org.opensearch.script.Script;
             SB deserialized = copy(original);
-            assertEquals(deserialized, original);
-            assertEquals(deserialized.hashCode(), original.hashCode());
-            assertNotSame(deserialized, original);
-        }
-    }
-
-    /**
-     * returns a random suggestion builder, setting the common options randomly
-     */
-    protected SB randomTestBuilder() {
-        SB randomSuggestion = randomSuggestionBuilder();
-        return randomSuggestion;
-    }
-
-    public static void setCommonPropertiesOnRandomBuilder(SuggestionBuilder<?> randomSuggestion) {
-        randomSuggestion.text(randomAlphaOfLengthBetween(2, 20)); // have to set the text because we don't know if the global text was set
-        maybeSet(randomSuggestion::prefix, randomAlphaOfLengthBetween(2, 20));
-        maybeSet(randomSuggestion::regex, randomAlphaOfLengthBetween(2, 20));
-        maybeSet(randomSuggestion::analyzer, randomAlphaOfLengthBetween(2, 20));
-        maybeSet(randomSuggestion::size, randomIntBetween(1, 20));
-        maybeSet(randomSuggestion::shardSize, randomIntBetween(1, 20));
-    }
-
-    /**
-     * create a randomized {@link SuggestBuilder} that is used in further tests
-     */
-    protected abstract SB randomSuggestionBuilder();
-
-    /**
-     * Test equality and hashCode properties
-     */
+ *
     public void testEqualsAndHashcode() {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+     * recursive random shuffling in the {@link #testFromXContent()} test case
+    @AfterClass
+            SuggestionContext suggestionContext = suggestionBuilder.build(mockShardContext);
+            SB suggestionBuilder = randomTestBuilder();
+                    mutation.shardSize(randomValueOtherThan(mutation.shardSize(), () -> randomIntBetween(1, 20)));
+ *
+            Settings indexSettings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
+            assertEquals(toBytesRef(suggestionBuilder.regex()), suggestionContext.getRegex());
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.search.suggest.SuggestionSearchContext.SuggestionContext;
+                    break;
+        return copyWriteable(
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.core.xcontent.XContentBuilder;
+                assertEquals(suggestionBuilder, secondSuggestionBuilder);
+import static org.opensearch.test.EqualsHashCodeTestUtils.checkEqualsAndHashCode;
+                null,
+        when(fieldType.name()).thenReturn(fieldName);
+ * specific language governing permissions and limitations
+                idxSettings,
+                namedWriteableRegistry,
+            assertEquals(expectedSize, suggestionContext.getSize());
+            : null;
+     * create a randomized {@link SuggestBuilder} that is used in further tests
+    @BeforeClass
+        return new String[0];
+    @SuppressWarnings("unchecked")
+ * KIND, either express or implied.  See the License for the
+            if (randomBoolean()) {
+                case 1:
+            when(scriptService.compile(any(Script.class), any())).then(
+ * GitHub history for details.
+                null,
+ * Licensed to Elasticsearch under one or more contributor
+    public void testSerialization() throws IOException {
+    }
+     */
+     */
+import org.opensearch.common.xcontent.XContentType;
+        randomSuggestion.text(randomAlphaOfLengthBetween(2, 20)); // have to set the text because we don't know if the global text was set
+                    break;
+            }
             checkEqualsAndHashCode(randomTestBuilder(), this::copy, this::mutate);
         }
-    }
-
+import java.io.IOException;
+import org.opensearch.index.mapper.TextSearchInfo;
+                null
+ * Modifications Copyright OpenSearch Contributors. See
+ * this work for additional information regarding copyright
+                indexSettings
+            when(mapperService.getNamedAnalyzer(any(String.class))).then(
+ * the Apache License, Version 2.0 (the "License"); you may
     /**
-     * creates random suggestion builder, renders it to xContent and back to new
-     * instance that should be equal to original
-     */
-    public void testFromXContent() throws IOException {
+                () -> true,
+ * ownership. Elasticsearch licenses this file to you under
+                    break;
+public abstract class AbstractSuggestionBuilderTestCase<SB extends SuggestionBuilder<SB>> extends OpenSearchTestCase {
+    /**
+            );
+    @Override
+        }
+ */
+    /**
+    protected NamedXContentRegistry xContentRegistry() {
         for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
-            SB suggestionBuilder = randomTestBuilder();
-            XContentBuilder xContentBuilder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
-            if (randomBoolean()) {
-                xContentBuilder = xContentBuilder.prettyPrint();
-            }
-            xContentBuilder.startObject();
-            suggestionBuilder.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
-            xContentBuilder.endObject();
-
-            XContentBuilder shuffled = shuffleXContent(xContentBuilder, shuffleProtectedFields());
-            try (XContentParser parser = createParser(shuffled)) {
-                // we need to skip the start object and the name, those will be parsed by outer SuggestBuilder
-                parser.nextToken();
-
-                SuggestionBuilder<?> secondSuggestionBuilder = SuggestionBuilder.fromXContent(parser);
-                assertNotSame(suggestionBuilder, secondSuggestionBuilder);
-                assertEquals(suggestionBuilder, secondSuggestionBuilder);
-                assertEquals(suggestionBuilder.hashCode(), secondSuggestionBuilder.hashCode());
-            }
+import org.opensearch.common.settings.Settings;
         }
     }
-
-    public void testBuild() throws IOException {
-        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
-            SB suggestionBuilder = randomTestBuilder();
-            Settings indexSettings = Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT).build();
-            IndexSettings idxSettings = IndexSettingsModule.newIndexSettings(
-                new Index(randomAlphaOfLengthBetween(1, 10), "_na_"),
-                indexSettings
-            );
-            MapperService mapperService = mock(MapperService.class);
-            ScriptService scriptService = mock(ScriptService.class);
-            boolean fieldTypeSearchAnalyzerSet = randomBoolean();
-            MappedFieldType fieldType = mockFieldType(suggestionBuilder.field(), fieldTypeSearchAnalyzerSet);
-            when(mapperService.searchAnalyzer()).thenReturn(
-                new NamedAnalyzer("mapperServiceSearchAnalyzer", AnalyzerScope.INDEX, new SimpleAnalyzer())
-            );
-            when(mapperService.fieldType(any(String.class))).thenReturn(fieldType);
-            when(mapperService.getNamedAnalyzer(any(String.class))).then(
-                invocation -> new NamedAnalyzer((String) invocation.getArguments()[0], AnalyzerScope.INDEX, new SimpleAnalyzer())
-            );
-            when(scriptService.compile(any(Script.class), any())).then(
-                invocation -> new TestTemplateService.MockTemplateScript.Factory(((Script) invocation.getArguments()[0]).getIdOrCode())
-            );
-            QueryShardContext mockShardContext = new QueryShardContext(
-                0,
-                idxSettings,
-                BigArrays.NON_RECYCLING_INSTANCE,
-                null,
-                null,
-                mapperService,
-                null,
-                scriptService,
-                xContentRegistry(),
-                namedWriteableRegistry,
-                null,
-                null,
-                System::currentTimeMillis,
-                null,
-                null,
-                () -> true,
-                null
-            );
-
-            SuggestionContext suggestionContext = suggestionBuilder.build(mockShardContext);
-            assertEquals(toBytesRef(suggestionBuilder.text()), suggestionContext.getText());
-            if (suggestionBuilder.text() != null && suggestionBuilder.prefix() == null) {
-                assertEquals(toBytesRef(suggestionBuilder.text()), suggestionContext.getPrefix());
-            } else {
-                assertEquals(toBytesRef(suggestionBuilder.prefix()), suggestionContext.getPrefix());
+    public static void setCommonPropertiesOnRandomBuilder(SuggestionBuilder<?> randomSuggestion) {
+        } else {
+     */
             }
-            assertEquals(toBytesRef(suggestionBuilder.regex()), suggestionContext.getRegex());
+     * take and input {@link SuggestBuilder} and return another one that is
+ * Unless required by applicable law or agreed to in writing,
+    private SB mutate(SB firstBuilder) throws IOException {
             assertEquals(suggestionBuilder.field(), suggestionContext.getField());
             int expectedSize = suggestionBuilder.size() != null ? suggestionBuilder.size : 5;
-            assertEquals(expectedSize, suggestionContext.getSize());
-            Integer expectedShardSize = suggestionBuilder.shardSize != null ? suggestionBuilder.shardSize : Math.max(expectedSize, 5);
-            assertEquals(expectedShardSize, suggestionContext.getShardSize());
-            assertSame(mockShardContext, suggestionContext.getShardContext());
-            if (suggestionBuilder.analyzer() != null) {
-                assertEquals(suggestionBuilder.analyzer(), ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
-            } else if (fieldTypeSearchAnalyzerSet) {
-                assertEquals("fieldSearchAnalyzer", ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
-            } else {
-                assertEquals("mapperServiceSearchAnalyzer", ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
-            }
-            assertSuggestionContext(suggestionBuilder, suggestionContext);
-        }
-    }
-
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+ * SPDX-License-Identifier: Apache-2.0
     /**
-     * put implementation dependent assertions in the sub-type test
+import static org.opensearch.common.lucene.BytesRefs.toBytesRef;
+            );
      */
-    protected abstract void assertSuggestionContext(SB builder, SuggestionContext context) throws IOException;
-
-    protected MappedFieldType mockFieldType(String fieldName, boolean analyzerSet) {
-        MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.name()).thenReturn(fieldName);
-        NamedAnalyzer searchAnalyzer = analyzerSet
-            ? new NamedAnalyzer("fieldSearchAnalyzer", AnalyzerScope.INDEX, new SimpleAnalyzer())
-            : null;
-        TextSearchInfo tsi = new TextSearchInfo(TextFieldMapper.Defaults.FIELD_TYPE, null, searchAnalyzer, searchAnalyzer);
-        when(fieldType.getTextSearchInfo()).thenReturn(tsi);
-        return fieldType;
-    }
-
-    /**
-     * Subclasses can override this method and return a set of fields which should be protected from
-     * recursive random shuffling in the {@link #testFromXContent()} test case
-     */
-    protected String[] shuffleProtectedFields() {
-        return new String[0];
-    }
-
-    private SB mutate(SB firstBuilder) throws IOException {
-        SB mutation = copy(firstBuilder);
         assertNotSame(mutation, firstBuilder);
-        // change ither one of the shared SuggestionBuilder parameters, or delegate to the specific tests mutate method
+    protected MappedFieldType mockFieldType(String fieldName, boolean analyzerSet) {
+package org.opensearch.search.suggest;
+            xContentBuilder.startObject();
+                SuggestionBuilder<?> secondSuggestionBuilder = SuggestionBuilder.fromXContent(parser);
+import org.opensearch.test.OpenSearchTestCase;
+     * Subclasses can override this method and return a set of fields which should be protected from
+        xContentRegistry = null;
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.search.SearchModule;
+    }
+            boolean fieldTypeSearchAnalyzerSet = randomBoolean();
         if (randomBoolean()) {
-            switch (randomIntBetween(0, 5)) {
-                case 0:
-                    mutation.text(randomValueOtherThan(mutation.text(), () -> randomAlphaOfLengthBetween(2, 20)));
-                    break;
-                case 1:
-                    mutation.prefix(randomValueOtherThan(mutation.prefix(), () -> randomAlphaOfLengthBetween(2, 20)));
-                    break;
-                case 2:
-                    mutation.regex(randomValueOtherThan(mutation.regex(), () -> randomAlphaOfLengthBetween(2, 20)));
-                    break;
-                case 3:
-                    mutation.analyzer(randomValueOtherThan(mutation.analyzer(), () -> randomAlphaOfLengthBetween(2, 20)));
-                    break;
-                case 4:
-                    mutation.size(randomValueOtherThan(mutation.size(), () -> randomIntBetween(1, 20)));
-                    break;
-                case 5:
-                    mutation.shardSize(randomValueOtherThan(mutation.shardSize(), () -> randomIntBetween(1, 20)));
-                    break;
-            }
-        } else {
-            mutateSpecificParameters(firstBuilder);
         }
-        return mutation;
+        namedWriteableRegistry = new NamedWriteableRegistry(searchModule.getNamedWriteables());
+            if (suggestionBuilder.analyzer() != null) {
+ * license agreements. See the NOTICE file distributed with
+                // we need to skip the start object and the name, those will be parsed by outer SuggestBuilder
+        TextSearchInfo tsi = new TextSearchInfo(TextFieldMapper.Defaults.FIELD_TYPE, null, searchAnalyzer, searchAnalyzer);
+                assertEquals(toBytesRef(suggestionBuilder.prefix()), suggestionContext.getPrefix());
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+                assertEquals("fieldSearchAnalyzer", ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
+/*
+        when(fieldType.getTextSearchInfo()).thenReturn(tsi);
+     * Test serialization and deserialization of the suggestion builder
+                null,
+                scriptService,
+                case 0:
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+            }
+        SB randomSuggestion = randomSuggestionBuilder();
+ */
+ * not use this file except in compliance with the License.
+            xContentBuilder.endObject();
     }
-
-    /**
-     * take and input {@link SuggestBuilder} and return another one that is
-     * different in one aspect (to test non-equality)
      */
-    protected abstract void mutateSpecificParameters(SB firstBuilder) throws IOException;
-
-    @SuppressWarnings("unchecked")
-    protected SB copy(SB original) throws IOException {
-        return copyWriteable(
+            ? new NamedAnalyzer("fieldSearchAnalyzer", AnalyzerScope.INDEX, new SimpleAnalyzer())
+import org.opensearch.index.analysis.NamedAnalyzer;
+/*
+ *
+                case 5:
+import org.opensearch.index.IndexSettings;
+import org.opensearch.Version;
+        return randomSuggestion;
+    }
+            } else {
+import org.opensearch.core.xcontent.XContentParser;
+    private static final int NUMBER_OF_TESTBUILDERS = 20;
+import static org.mockito.Mockito.when;
+            assertEquals(expectedShardSize, suggestionContext.getShardSize());
+                new NamedAnalyzer("mapperServiceSearchAnalyzer", AnalyzerScope.INDEX, new SimpleAnalyzer())
+                case 3:
+import org.opensearch.index.analysis.AnalyzerScope;
+    public void testFromXContent() throws IOException {
+    /**
+                    mutation.prefix(randomValueOtherThan(mutation.prefix(), () -> randomAlphaOfLengthBetween(2, 20)));
+     * returns a random suggestion builder, setting the common options randomly
+            SB original = randomTestBuilder();
+    protected static NamedXContentRegistry xContentRegistry;
+            Integer expectedShardSize = suggestionBuilder.shardSize != null ? suggestionBuilder.shardSize : Math.max(expectedSize, 5);
+import org.opensearch.core.common.io.stream.Writeable;
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+                    break;
+    /**
             original,
-            namedWriteableRegistry,
+        // change ither one of the shared SuggestionBuilder parameters, or delegate to the specific tests mutate method
+            MappedFieldType fieldType = mockFieldType(suggestionBuilder.field(), fieldTypeSearchAnalyzerSet);
+import org.junit.BeforeClass;
+    /**
+            if (suggestionBuilder.text() != null && suggestionBuilder.prefix() == null) {
+                    mutation.size(randomValueOtherThan(mutation.size(), () -> randomIntBetween(1, 20)));
+            mutateSpecificParameters(firstBuilder);
+                    mutation.analyzer(randomValueOtherThan(mutation.analyzer(), () -> randomAlphaOfLengthBetween(2, 20)));
+     * put implementation dependent assertions in the sub-type test
+     * creates random suggestion builder, renders it to xContent and back to new
+            assertNotSame(deserialized, original);
+            assertEquals(deserialized, original);
+     * instance that should be equal to original
+            suggestionBuilder.toXContent(xContentBuilder, ToXContent.EMPTY_PARAMS);
+     */
+     */
+        for (int runs = 0; runs < NUMBER_OF_TESTBUILDERS; runs++) {
+        maybeSet(randomSuggestion::regex, randomAlphaOfLengthBetween(2, 20));
+    public static void afterClass() throws Exception {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    }
             (Writeable.Reader<SB>) namedWriteableRegistry.getReader(SuggestionBuilder.class, original.getWriteableName())
+        }
+    /**
+            );
+            );
+import org.opensearch.cluster.metadata.IndexMetadata;
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, emptyList());
+ * this file be licensed under the Apache-2.0 license or a
+        maybeSet(randomSuggestion::shardSize, randomIntBetween(1, 20));
+    }
+            assertSame(mockShardContext, suggestionContext.getShardContext());
+                    mutation.regex(randomValueOtherThan(mutation.regex(), () -> randomAlphaOfLengthBetween(2, 20)));
+                xContentRegistry(),
+            IndexSettings idxSettings = IndexSettingsModule.newIndexSettings(
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        return mutation;
+import org.opensearch.script.ScriptService;
+        namedWriteableRegistry = null;
+                new Index(randomAlphaOfLengthBetween(1, 10), "_na_"),
+            }
+ */
+                    break;
+                mapperService,
+            when(mapperService.fieldType(any(String.class))).thenReturn(fieldType);
+                    break;
+    protected abstract void assertSuggestionContext(SB builder, SuggestionContext context) throws IOException;
+                xContentBuilder = xContentBuilder.prettyPrint();
+                null,
         );
+    protected SB randomTestBuilder() {
+                0,
+     * setup for the whole base test class
+            }
+                System::currentTimeMillis,
+            } else {
+            MapperService mapperService = mock(MapperService.class);
+            QueryShardContext mockShardContext = new QueryShardContext(
+                BigArrays.NON_RECYCLING_INSTANCE,
+                null,
     }
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {
+     * Test equality and hashCode properties
+            XContentBuilder shuffled = shuffleXContent(xContentBuilder, shuffleProtectedFields());
+                null,
+import org.opensearch.index.mapper.MapperService;
+                invocation -> new TestTemplateService.MockTemplateScript.Factory(((Script) invocation.getArguments()[0]).getIdOrCode())
+            namedWriteableRegistry,
+    /**
+/*
+                assertEquals(toBytesRef(suggestionBuilder.text()), suggestionContext.getPrefix());
+        return fieldType;
+            try (XContentParser parser = createParser(shuffled)) {
+        SB mutation = copy(firstBuilder);
+                assertEquals(suggestionBuilder.hashCode(), secondSuggestionBuilder.hashCode());
+                invocation -> new NamedAnalyzer((String) invocation.getArguments()[0], AnalyzerScope.INDEX, new SimpleAnalyzer())
+ * under the License.
+            when(mapperService.searchAnalyzer()).thenReturn(
+        maybeSet(randomSuggestion::size, randomIntBetween(1, 20));
+            XContentBuilder xContentBuilder = MediaTypeRegistry.contentBuilder(randomFrom(XContentType.values()));
+    public static void init() {
+    }
+    }
+import org.opensearch.common.util.BigArrays;
+                assertEquals("mapperServiceSearchAnalyzer", ((NamedAnalyzer) suggestionContext.getAnalyzer()).name());
+    protected abstract void mutateSpecificParameters(SB firstBuilder) throws IOException;
+    protected abstract SB randomSuggestionBuilder();
+import org.apache.lucene.analysis.core.SimpleAnalyzer;
+import static org.mockito.Mockito.mock;
+    protected static NamedWriteableRegistry namedWriteableRegistry;
+    protected SB copy(SB original) throws IOException {
+                case 2:
+            assertSuggestionContext(suggestionBuilder, suggestionContext);
+     * different in one aspect (to test non-equality)
+                assertNotSame(suggestionBuilder, secondSuggestionBuilder);
+ * software distributed under the License is distributed on an
+        NamedAnalyzer searchAnalyzer = analyzerSet
+import org.opensearch.index.query.QueryShardContext;
+                    mutation.text(randomValueOtherThan(mutation.text(), () -> randomAlphaOfLengthBetween(2, 20)));
+        maybeSet(randomSuggestion::analyzer, randomAlphaOfLengthBetween(2, 20));
+        maybeSet(randomSuggestion::prefix, randomAlphaOfLengthBetween(2, 20));
+import org.opensearch.test.IndexSettingsModule;
+                case 4:
+            switch (randomIntBetween(0, 5)) {
+    protected String[] shuffleProtectedFields() {
+            assertEquals(deserialized.hashCode(), original.hashCode());
+import org.opensearch.ingest.TestTemplateService;
+                parser.nextToken();
+    }
+ * compatible open source license.
+    }
+     */
+ * You may obtain a copy of the License at
+            );
+import static org.mockito.Mockito.any;
+import org.junit.AfterClass;
         return xContentRegistry;
-    }
+     */
 }
+    }

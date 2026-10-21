@@ -1,201 +1,176 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.search.aggregations;
-
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.Strings;
-import org.opensearch.core.common.io.stream.NamedWriteable;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContentFragment;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.Rewriteable;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
-import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Map;
-
-/**
- * A factory that knows how to create an {@link Aggregator} of a specific type.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public abstract class AggregationBuilder
-    implements
-        NamedWriteable,
-        ToXContentFragment,
-        BaseAggregationBuilder,
-        Rewriteable<AggregationBuilder> {
-
+    }
+    public abstract Map<String, Object> getMetadata();
+     * this method return the builder itself. If the builder did not change the
+    /** Associate metadata with this {@link AggregationBuilder}. */
+     * Create a shallow copy of this builder and replacing {@link #factoriesBuilder} and <code>metadata</code>.
+            return shallowCopy(rewrittenSubAggs, getMetadata());
+     * A rough count of the number of buckets that {@link Aggregator}s built
     protected final String name;
-    protected AggregatorFactories.Builder factoriesBuilder = AggregatorFactories.builder();
-
+ */
+    public final AggregationBuilder rewrite(QueryRewriteContext context) throws IOException {
+ * compatible open source license.
+    protected abstract AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata);
+    protected AggregationBuilder(AggregationBuilder clone, AggregatorFactories.Builder factoriesBuilder) {
+ * KIND, either express or implied.  See the License for the
+ * this file be licensed under the Apache-2.0 license or a
+    }
     /**
-     * Constructs a new aggregation builder.
-     *
-     * @param name  The aggregation name
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator.PipelineTree;
+ * Licensed to Elasticsearch under one or more contributor
+    /**
+import java.io.IOException;
+/**
+    /**
+        return this;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        Rewriteable<AggregationBuilder> {
+     * @return this factory (fluent interface)
+ * @opensearch.api
+    protected abstract AggregatorFactory build(QueryShardContext queryShardContext, AggregatorFactory parent) throws IOException;
+    public String getName() {
+    public String toString() {
+        } else {
+        } else if (rewrittenSubAggs != factoriesBuilder) {
+ * SPDX-License-Identifier: Apache-2.0
+    }
+    }
+    /** Add a sub aggregation to this builder. */
+/*
      */
-    protected AggregationBuilder(String name) {
-        if (name == null) {
-            throw new IllegalArgumentException("[name] must not be null: [" + name + "]");
-        }
+import org.opensearch.common.annotation.PublicApi;
+    public abstract AggregationBuilder subAggregation(PipelineAggregationBuilder aggregation);
+    @Override
+ * You may obtain a copy of the License at
+        AggregationBuilder rewritten = doRewrite(context);
+     *
+     * rewritten infinitely.
+     * be responsible for the creation of sub-aggregators under the aggregator
+ * The OpenSearch Contributors require contributions made to
+        this.factoriesBuilder = factoriesBuilder;
+    /** Return the configured set of pipeline aggregations **/
+import org.opensearch.core.common.io.stream.NamedWriteable;
+ *
+    public abstract AggregationBuilder setMetadata(Map<String, Object> metadata);
+import org.opensearch.core.common.Strings;
+import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+ */
+ * GitHub history for details.
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     */
+    /** Return any associated metadata with this {@link AggregationBuilder}. */
+    /**
+    }
+            return this;
+     */
+     * {@link AggregatorFactories#parseAggregators(XContentParser)}.
+    protected AggregationBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
+import org.opensearch.core.xcontent.ToXContentFragment;
+        return name;
+     * aggregation results after the final reduction.
+     * A rough count of the number of buckets that {@link Aggregator}s built
+    /** Add a sub aggregation to this builder. */
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+    public PipelineTree buildPipelineTree() {
+     * @opensearch.internal
+    /**
+ * not use this file except in compliance with the License.
+     * by this builder will contain per parent bucket used to validate sorts
+ * ownership. Elasticsearch licenses this file to you under
+ *
+    /**
+        ONE,
+    public Collection<PipelineAggregationBuilder> getPipelineAggregations() {
+    /**
+ * under the License.
+    public abstract AggregationBuilder subAggregation(AggregationBuilder aggregation);
+import org.opensearch.index.query.QueryRewriteContext;
+ * software distributed under the License is distributed on an
+     * Unlike {@link CardinalityUpperBound} which is <strong>total</strong>
         this.name = name;
     }
-
-    protected AggregationBuilder(AggregationBuilder clone, AggregatorFactories.Builder factoriesBuilder) {
-        this.name = clone.name;
-        this.factoriesBuilder = factoriesBuilder;
-    }
-
-    /** Return this aggregation's name. */
-    public String getName() {
-        return name;
-    }
-
-    /** Internal: build an {@link AggregatorFactory} based on the configuration of this builder. */
-    protected abstract AggregatorFactory build(QueryShardContext queryShardContext, AggregatorFactory parent) throws IOException;
-
-    /** Associate metadata with this {@link AggregationBuilder}. */
-    @Override
-    public abstract AggregationBuilder setMetadata(Map<String, Object> metadata);
-
-    /** Return any associated metadata with this {@link AggregationBuilder}. */
-    public abstract Map<String, Object> getMetadata();
-
-    /** Add a sub aggregation to this builder. */
-    public abstract AggregationBuilder subAggregation(AggregationBuilder aggregation);
-
-    /** Add a sub aggregation to this builder. */
-    public abstract AggregationBuilder subAggregation(PipelineAggregationBuilder aggregation);
-
-    /** Return the configured set of subaggregations **/
-    public Collection<AggregationBuilder> getSubAggregations() {
-        return factoriesBuilder.getAggregatorFactories();
-    }
-
-    /** Return the configured set of pipeline aggregations **/
-    public Collection<PipelineAggregationBuilder> getPipelineAggregations() {
-        return factoriesBuilder.getPipelineAggregatorFactories();
-    }
-
-    /**
-     * Internal: Registers sub-factories with this factory. The sub-factory will
-     * be responsible for the creation of sub-aggregators under the aggregator
-     * created by this factory. This is only for use by
-     * {@link AggregatorFactories#parseAggregators(XContentParser)}.
-     *
-     * @param subFactories
-     *            The sub-factories
-     * @return this factory (fluent interface)
-     */
-    @Override
-    public abstract AggregationBuilder subAggregations(AggregatorFactories.Builder subFactories);
-
-    /**
-     * Create a shallow copy of this builder and replacing {@link #factoriesBuilder} and <code>metadata</code>.
-     * Used by {@link #rewrite(QueryRewriteContext)}.
-     */
-    protected abstract AggregationBuilder shallowCopy(AggregatorFactories.Builder factoriesBuilder, Map<String, Object> metadata);
-
-    @Override
-    public final AggregationBuilder rewrite(QueryRewriteContext context) throws IOException {
-        AggregationBuilder rewritten = doRewrite(context);
-        AggregatorFactories.Builder rewrittenSubAggs = factoriesBuilder.rewrite(context);
-        if (rewritten != this) {
-            return rewritten.setMetadata(getMetadata()).subAggregations(rewrittenSubAggs);
-        } else if (rewrittenSubAggs != factoriesBuilder) {
-            return shallowCopy(rewrittenSubAggs, getMetadata());
-        } else {
-            return this;
-        }
-    }
-
-    /**
-     * Rewrites this aggregation builder into its primitive form. By default
-     * this method return the builder itself. If the builder did not change the
-     * identity reference must be returned otherwise the builder will be
-     * rewritten infinitely.
-     */
-    protected AggregationBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
-        return this;
-    }
-
-    /**
-     * Build a tree of {@link PipelineAggregator}s to modify the tree of
-     * aggregation results after the final reduction.
-     */
-    public PipelineTree buildPipelineTree() {
-        return factoriesBuilder.buildPipelineTree();
-    }
-
-    /**
-     * A rough count of the number of buckets that {@link Aggregator}s built
-     * by this builder will contain per parent bucket used to validate sorts
-     * and pipeline aggregations. Just "zero", "one", and "many".
-     * <p>
-     * Unlike {@link CardinalityUpperBound} which is <strong>total</strong>
-     * instead of <strong>per parent bucket</strong>.
-     *
      * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
     public enum BucketCardinality {
-        NONE,
-        ONE,
-        MANY;
+ *
+        if (name == null) {
     }
-
-    /**
-     * A rough count of the number of buckets that {@link Aggregator}s built
-     * by this builder will contain per owning parent bucket.
-     */
-    public abstract BucketCardinality bucketCardinality();
-
-    /**
-     * Common xcontent fields shared among aggregator builders
-     *
-     * @opensearch.internal
-     */
-    public static final class CommonFields extends ParseField.CommonFields {
-        public static final ParseField VALUE_TYPE = new ParseField("value_type");
+package org.opensearch.search.aggregations;
+     * @param name  The aggregation name
+            return rewritten.setMetadata(getMetadata()).subAggregations(rewrittenSubAggs);
+ * this work for additional information regarding copyright
+    protected AggregationBuilder(String name) {
     }
-
-    @Override
-    public String toString() {
+        return factoriesBuilder.getPipelineAggregatorFactories();
         return Strings.toString(MediaTypeRegistry.JSON, this);
     }
+     * Build a tree of {@link PipelineAggregator}s to modify the tree of
+     */
+     */
+     * instead of <strong>per parent bucket</strong>.
+     */
+ * specific language governing permissions and limitations
+ * Modifications Copyright OpenSearch Contributors. See
+        return factoriesBuilder.buildPipelineTree();
+     * identity reference must be returned otherwise the builder will be
+     * <p>
+    @PublicApi(since = "1.0.0")
+            throw new IllegalArgumentException("[name] must not be null: [" + name + "]");
+    /** Return this aggregation's name. */
+        }
+        }
+    public static final class CommonFields extends ParseField.CommonFields {
+     * created by this factory. This is only for use by
+ * license agreements. See the NOTICE file distributed with
+    @Override
+ */
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    @Override
+        return factoriesBuilder.getAggregatorFactories();
+     * by this builder will contain per owning parent bucket.
+        BaseAggregationBuilder,
+     * @param subFactories
+        NamedWriteable,
+    implements
+     * Common xcontent fields shared among aggregator builders
+        AggregatorFactories.Builder rewrittenSubAggs = factoriesBuilder.rewrite(context);
+        ToXContentFragment,
+ * A factory that knows how to create an {@link Aggregator} of a specific type.
+        NONE,
+     * and pipeline aggregations. Just "zero", "one", and "many".
+import org.opensearch.index.query.Rewriteable;
+@PublicApi(since = "1.0.0")
+     * Rewrites this aggregation builder into its primitive form. By default
+ *
+     *
+        this.name = clone.name;
+        public static final ParseField VALUE_TYPE = new ParseField("value_type");
+    @Override
+        if (rewritten != this) {
+    /**
+/*
+        MANY;
+import org.opensearch.core.ParseField;
+    /** Return the configured set of subaggregations **/
+     * Constructs a new aggregation builder.
+    public abstract BucketCardinality bucketCardinality();
+     * Used by {@link #rewrite(QueryRewriteContext)}.
+     *            The sub-factories
+     */
+import java.util.Collection;
+     *
+    public abstract AggregationBuilder subAggregations(AggregatorFactories.Builder subFactories);
+     */
 }
+    }
+    public Collection<AggregationBuilder> getSubAggregations() {
+import org.opensearch.index.query.QueryShardContext;
+/*
+    protected AggregatorFactories.Builder factoriesBuilder = AggregatorFactories.builder();
+    /** Internal: build an {@link AggregatorFactory} based on the configuration of this builder. */
+     * Internal: Registers sub-factories with this factory. The sub-factory will
+     *
+ */
+import java.util.Map;
+ * Unless required by applicable law or agreed to in writing,
+public abstract class AggregationBuilder
+import org.opensearch.core.xcontent.XContentParser;

@@ -1,465 +1,432 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.NumericDocValues;
-import org.apache.lucene.index.StoredFields;
-import org.apache.lucene.search.BooleanClause;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TopFieldCollector;
-import org.apache.lucene.search.TopFieldCollectorManager;
-import org.apache.lucene.util.ArrayUtil;
-import org.opensearch.common.lucene.Lucene;
-import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
-import org.opensearch.common.lucene.search.Queries;
-import org.opensearch.common.util.io.IOUtils;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.index.fieldvisitor.FieldsVisitor;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
-import org.opensearch.index.mapper.SourceFieldMapper;
-import org.opensearch.index.translog.Translog;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-/**
- * A {@link Translog.Snapshot} from changes in a Lucene index
- *
- * @opensearch.internal
- */
-final class LuceneChangesSnapshot implements Translog.Snapshot {
-    static final int DEFAULT_BATCH_SIZE = 1024;
-
-    /**
-     * Batches smaller than this are read with the default stored fields reader: acquiring a sequential reader costs a
-     * reader clone plus the decompression of a whole block, which only pays for itself over enough documents.
-     */
-    static final int MIN_SEQUENTIAL_ACCESS_BATCH_SIZE = 10;
-
-    private final int searchBatchSize;
-    private final long fromSeqNo, toSeqNo;
-    private long lastSeenSeqNo;
-    private int skippedOperations;
-    private final boolean requiredFullRange;
-
-    private final IndexSearcher indexSearcher;
-    private int docIndex = 0;
-    private final int totalHits;
-    private ScoreDoc[] scoreDocs;
-    private final ParallelArray parallelArray;
-    private final Closeable onClose;
-
-    /**
-     * Whether to use a sequential stored fields reader. Only used when there is a gapless run of docIDs
-     * matching sequence number order. This allows for an optimization to decompress a block once and
-     * read multiple stored fields from it, as opposed to the default path that does a decompression on
-     * every stored fields read.
-     */
-    private boolean useSequentialStoredFieldsReader;
-
+                            "source not found for seqno=" + seqNo + " from_seqno=" + fromSeqNo + " to_seqno=" + toSeqNo
+                throw new MissingHistoryOperationsException(
     private StoredFields sequentialStoredFields;
-    private int sequentialStoredFieldsLeafOrd = -1;
-    private Thread sequentialStoredFieldsOwner;
-
-    /**
-     * Creates a new "translog" snapshot from Lucene for reading operations whose seq# in the specified range.
-     *
-     * @param engineSearcher    the internal engine searcher which will be taken over if the snapshot is opened successfully
-     * @param searchBatchSize   the number of documents should be returned by each search
-     * @param fromSeqNo         the min requesting seq# - inclusive
-     * @param toSeqNo           the maximum requesting seq# - inclusive
-     * @param requiredFullRange if true, the snapshot will strictly check for the existence of operations between fromSeqNo and toSeqNo
-     */
-    LuceneChangesSnapshot(
-        Engine.Searcher engineSearcher,
-        int searchBatchSize,
-        long fromSeqNo,
-        long toSeqNo,
-        boolean requiredFullRange,
-        boolean accurateCount
-    ) throws IOException {
-        if (fromSeqNo < 0 || toSeqNo < 0 || fromSeqNo > toSeqNo) {
-            throw new IllegalArgumentException("Invalid range; from_seqno [" + fromSeqNo + "], to_seqno [" + toSeqNo + "]");
-        }
-        if (searchBatchSize <= 0) {
-            throw new IllegalArgumentException("Search_batch_size must be positive [" + searchBatchSize + "]");
-        }
-        final AtomicBoolean closed = new AtomicBoolean();
-        this.onClose = () -> {
-            if (closed.compareAndSet(false, true)) {
-                IOUtils.close(engineSearcher);
-            }
-        };
-        final long requestingSize = (toSeqNo - fromSeqNo) == Long.MAX_VALUE ? Long.MAX_VALUE : (toSeqNo - fromSeqNo + 1L);
-        this.searchBatchSize = requestingSize < searchBatchSize ? Math.toIntExact(requestingSize) : searchBatchSize;
-        this.fromSeqNo = fromSeqNo;
-        this.toSeqNo = toSeqNo;
-        this.lastSeenSeqNo = fromSeqNo - 1;
-        this.requiredFullRange = requiredFullRange;
-        this.indexSearcher = new IndexSearcher(Lucene.wrapAllDocsLive(engineSearcher.getDirectoryReader()));
-        this.indexSearcher.setQueryCache(null);
-        this.parallelArray = new ParallelArray(this.searchBatchSize);
-        final TopDocs topDocs = searchOperations(null, accurateCount);
-        this.totalHits = Math.toIntExact(topDocs.totalHits.value());
-        this.scoreDocs = topDocs.scoreDocs;
-        fillParallelArray(scoreDocs, parallelArray);
-    }
-
-    @Override
-    public void close() throws IOException {
-        releaseSequentialStoredFieldsReader();
-        onClose.close();
-    }
-
-    @Override
-    public int totalOperations() {
-        return totalHits;
-    }
-
-    @Override
-    public int skippedOperations() {
-        return skippedOperations;
-    }
-
-    @Override
-    public Translog.Operation next() throws IOException {
-        Translog.Operation op = null;
-        for (int idx = nextDocIndex(); idx != -1; idx = nextDocIndex()) {
-            op = readDocAsOp(idx);
-            if (op != null) {
-                break;
-            }
-        }
-        if (requiredFullRange) {
-            rangeCheck(op);
-        }
-        if (op != null) {
-            lastSeenSeqNo = op.seqNo();
-        }
-        return op;
-    }
-
-    private void rangeCheck(Translog.Operation op) {
-        if (op == null) {
-            if (lastSeenSeqNo < toSeqNo) {
-                throw new MissingHistoryOperationsException(
-                    "Not all operations between from_seqno ["
-                        + fromSeqNo
-                        + "] "
-                        + "and to_seqno ["
-                        + toSeqNo
-                        + "] found; prematurely terminated last_seen_seqno ["
-                        + lastSeenSeqNo
-                        + "]"
-                );
-            }
         } else {
-            final long expectedSeqNo = lastSeenSeqNo + 1;
-            if (op.seqNo() != expectedSeqNo) {
-                throw new MissingHistoryOperationsException(
-                    "Not all operations between from_seqno ["
-                        + fromSeqNo
-                        + "] "
-                        + "and to_seqno ["
-                        + toSeqNo
-                        + "] found; expected seqno ["
-                        + expectedSeqNo
-                        + "]; found ["
-                        + op
-                        + "]"
-                );
-            }
-        }
-    }
-
-    private int nextDocIndex() throws IOException {
-        // we have processed all docs in the current search - fetch the next batch
-        if (docIndex == scoreDocs.length && docIndex > 0) {
-            final ScoreDoc prev = scoreDocs[scoreDocs.length - 1];
-            scoreDocs = searchOperations((FieldDoc) prev, false).scoreDocs;
-            fillParallelArray(scoreDocs, parallelArray);
-            docIndex = 0;
-        }
-        if (docIndex < scoreDocs.length) {
-            int idx = docIndex;
-            docIndex++;
-            return idx;
-        }
-        return -1;
-    }
-
-    private void fillParallelArray(ScoreDoc[] scoreDocs, ParallelArray parallelArray) throws IOException {
-        if (scoreDocs.length > 0) {
-            for (int i = 0; i < scoreDocs.length; i++) {
-                scoreDocs[i].shardIndex = i;
-            }
-            useSequentialStoredFieldsReader = scoreDocs.length >= MIN_SEQUENTIAL_ACCESS_BATCH_SIZE && hasSequentialAccess(scoreDocs);
-            if (useSequentialStoredFieldsReader == false) {
-                releaseSequentialStoredFieldsReader();
-                // for better loading performance we sort the array by docID and
-                // then visit all leaves in order.
-                ArrayUtil.introSort(scoreDocs, Comparator.comparingInt(i -> i.doc));
-            }
-            int docBase = -1;
-            int maxDoc = 0;
-            List<LeafReaderContext> leaves = indexSearcher.getIndexReader().leaves();
-            int readerIndex = 0;
-            CombinedDocValues combinedDocValues = null;
-            LeafReaderContext leaf = null;
-            for (ScoreDoc scoreDoc : scoreDocs) {
-                if (scoreDoc.doc >= docBase + maxDoc) {
-                    do {
-                        leaf = leaves.get(readerIndex++);
-                        docBase = leaf.docBase;
-                        maxDoc = leaf.reader().maxDoc();
-                    } while (scoreDoc.doc >= docBase + maxDoc);
-                    combinedDocValues = new CombinedDocValues(leaf.reader());
-                }
-                final int segmentDocID = scoreDoc.doc - docBase;
-                final int index = scoreDoc.shardIndex;
-                parallelArray.leafReaderContexts[index] = leaf;
-                parallelArray.seqNo[index] = combinedDocValues.docSeqNo(segmentDocID);
-                parallelArray.primaryTerm[index] = combinedDocValues.docPrimaryTerm(segmentDocID);
-                parallelArray.version[index] = combinedDocValues.docVersion(segmentDocID);
-                parallelArray.isTombStone[index] = combinedDocValues.isTombstone(segmentDocID);
-                parallelArray.hasRecoverySource[index] = combinedDocValues.hasRecoverySource(segmentDocID);
-            }
-            if (useSequentialStoredFieldsReader == false) {
-                // now sort back based on the shardIndex. we use this to store the previous index
                 ArrayUtil.introSort(scoreDocs, Comparator.comparingInt(i -> i.shardIndex));
-            }
         }
+            // so track the owning thread and recreate it if consumed by another thread.
+    private boolean useSequentialStoredFieldsReader;
+        final TopFieldCollector topFieldCollector = new TopFieldCollectorManager(
+                );
+    private ScoreDoc[] scoreDocs;
+            int idx = docIndex;
+        this.indexSearcher.setQueryCache(null);
+    private final ParallelArray parallelArray;
+            useSequentialStoredFieldsReader = scoreDocs.length >= MIN_SEQUENTIAL_ACCESS_BATCH_SIZE && hasSequentialAccess(scoreDocs);
+ * A {@link Translog.Snapshot} from changes in a Lucene index
+                throw new MissingHistoryOperationsException(
+                        + op
+        final boolean[] hasRecoverySource;
+import java.io.IOException;
+     * matching sequence number order. This allows for an optimization to decompress a block once and
+                    seqNo,
     }
-
+        boolean accurateCount
+     * @param toSeqNo           the maximum requesting seq# - inclusive
+                final int index = scoreDoc.shardIndex;
+        final long[] primaryTerm;
+     * Returns a merge-optimized (sequential) stored fields reader for the leaf
+        onClose.close();
+    private final Closeable onClose;
+            if (isTombstone) {
+ * GitHub history for details.
+            fillParallelArray(scoreDocs, parallelArray);
+            primaryTerm = new long[size];
+        final TopDocs topDocs = searchOperations(null, accurateCount);
+        }
+        if (useSequentialStoredFieldsReader) {
+    private int nextDocIndex() throws IOException {
+            // A StoredFields instance may only be consumed in the thread that acquired it,
+            seqNo = new long[size];
+                    if (requiredFullRange) {
+                parallelArray.primaryTerm[index] = combinedDocValues.docPrimaryTerm(segmentDocID);
+                    fields.routing(),
+        final long seqNo = parallelArray.seqNo[docIndex];
+            }
+ * You may obtain a copy of the License at
+ */
+        final NumericDocValues ndv = leafReader.getNumericDocValues(Lucene.SOFT_DELETES_FIELD);
+ * under the License.
+        } else {
     /**
-     * Returns whether the batch, in the order it will be read, is a strictly increasing and gapless run of docIDs
+            int maxDoc = 0;
+ * The OpenSearch Contributors require contributions made to
+                        + toSeqNo
      */
+        this.onClose = () -> {
+import org.apache.lucene.util.ArrayUtil;
+        this.indexSearcher = new IndexSearcher(Lucene.wrapAllDocsLive(engineSearcher.getDirectoryReader()));
+                parallelArray.hasRecoverySource[index] = combinedDocValues.hasRecoverySource(segmentDocID);
+import org.apache.lucene.index.FilterLeafReader;
+import org.opensearch.common.lucene.Lucene;
+     * Drops the cached reader, if any
+                return false;
+        }
+import java.io.Closeable;
+    }
+                    primaryTerm,
+     * Whether to use a sequential stored fields reader. Only used when there is a gapless run of docIDs
+import org.opensearch.common.lucene.index.SequentialStoredFieldsLeafReader;
+    private void fillParallelArray(ScoreDoc[] scoreDocs, ParallelArray parallelArray) throws IOException {
+        sequentialStoredFields = null;
+                        + toSeqNo
+    private TopDocs searchOperations(FieldDoc after, boolean accurate) throws IOException {
+            if (useSequentialStoredFieldsReader == false) {
+     * @param engineSearcher    the internal engine searcher which will be taken over if the snapshot is opened successfully
+            }
+        return -1;
+    // for testing
+        long toSeqNo,
+                op = new Translog.Index(
+        return indexSearcher.count(operationsRangeQuery(fromSeqNo, toSeqNo));
+            if (lastSeenSeqNo < toSeqNo) {
+        this.parallelArray = new ParallelArray(this.searchBatchSize);
+     */
+                    } while (scoreDoc.doc >= docBase + maxDoc);
+                        maxDoc = leaf.reader().maxDoc();
+    @Override
+            final String id = fields.id();
+    public Translog.Operation next() throws IOException {
+        if (op == null) {
+        return true;
+            }
+            op = readDocAsOp(idx);
     private static boolean hasSequentialAccess(ScoreDoc[] scoreDocs) {
         for (int i = 0; i < scoreDocs.length - 1; i++) {
-            if (scoreDocs[i].doc + 1 != scoreDocs[i + 1].doc) {
-                return false;
-            }
+                        + "] found; expected seqno ["
+    private long lastSeenSeqNo;
+        final long requestingSize = (toSeqNo - fromSeqNo) == Long.MAX_VALUE ? Long.MAX_VALUE : (toSeqNo - fromSeqNo + 1L);
+    private final long fromSeqNo, toSeqNo;
+    }
+                sequentialStoredFieldsOwner = currentThread;
+                // TODO: pass the latest timestamp from engine.
+package org.opensearch.index.engine;
+        this.searchBatchSize = requestingSize < searchBatchSize ? Math.toIntExact(requestingSize) : searchBatchSize;
+            + "], op ["
+        for (int idx = nextDocIndex(); idx != -1; idx = nextDocIndex()) {
+                // then visit all leaves in order.
+    private Translog.Operation readDocAsOp(int docIndex) throws IOException {
+                }
+    private final boolean requiredFullRange;
+import org.apache.lucene.document.LongPoint;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.ScoreDoc;
+ * this work for additional information regarding copyright
+     * reader clone plus the decompression of a whole block, which only pays for itself over enough documents.
+import org.opensearch.index.fieldvisitor.FieldsVisitor;
+        // we have processed all docs in the current search - fetch the next batch
+    private void rangeCheck(Translog.Operation op) {
+            if (op.seqNo() != expectedSeqNo) {
         }
-        return true;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.TopDocs;
+    boolean useSequentialStoredFieldsReader() {
+            docIndex++;
+                break;
+        return op;
+                        + expectedSeqNo
+        indexSearcher.search(rangeQuery, topFieldCollector);
+ * Licensed to Elasticsearch under one or more contributor
+                );
+            if (reader instanceof SequentialStoredFieldsLeafReader) {
     }
-
-    private static Query operationsRangeQuery(long fromSeqNo, long toSeqNo) {
-        return new BooleanQuery.Builder().add(LongPoint.newRangeQuery(SeqNoFieldMapper.NAME, fromSeqNo, toSeqNo), BooleanClause.Occur.MUST)
-            .add(Queries.newNonNestedFilter(), BooleanClause.Occur.MUST) // exclude non-root nested docs
+        final boolean isTombstone = parallelArray.isTombStone[docIndex];
+            assert assertDocSoftDeleted(leaf.reader(), segmentDocID) : "Noop but soft_deletes field is not set [" + op + "]";
+     * Returns whether the batch, in the order it will be read, is a strictly increasing and gapless run of docIDs
+ * specific language governing permissions and limitations
             .build();
+        ParallelArray(int size) {
+     */
+                    version,
+                || sequentialStoredFieldsOwner != currentThread) {
     }
-
-    static int countNumberOfHistoryOperations(Engine.Searcher searcher, long fromSeqNo, long toSeqNo) throws IOException {
+                parallelArray.isTombStone[index] = combinedDocValues.isTombstone(segmentDocID);
+            + "last_seen_seqno ["
+                    id,
+        final AtomicBoolean closed = new AtomicBoolean();
+            scoreDocs = searchOperations((FieldDoc) prev, false).scoreDocs;
+        releaseSequentialStoredFieldsReader();
+            rangeCheck(op);
+     * Creates a new "translog" snapshot from Lucene for reading operations whose seq# in the specified range.
+        }
         if (fromSeqNo > toSeqNo || fromSeqNo < 0 || toSeqNo < 0) {
+import org.apache.lucene.search.IndexSearcher;
+            int docBase = -1;
+        return skippedOperations;
+                parallelArray.version[index] = combinedDocValues.docVersion(segmentDocID);
+     * @opensearch.internal
+                ArrayUtil.introSort(scoreDocs, Comparator.comparingInt(i -> i.doc));
+            isTombStone = new boolean[size];
+                    source.toBytesRef().bytes,
+import org.opensearch.index.translog.Translog;
+                        + fromSeqNo
+            for (int i = 0; i < scoreDocs.length; i++) {
+    /**
+            LeafReaderContext leaf = null;
+                        + lastSeenSeqNo
+        }
+                        + fromSeqNo
+    }
+    LuceneChangesSnapshot(
+            } else {
+        if (requiredFullRange) {
+        assert fromSeqNo <= op.seqNo() && op.seqNo() <= toSeqNo && lastSeenSeqNo < op.seqNo() : "Unexpected operation; "
+            after,
+ * ownership. Elasticsearch licenses this file to you under
+final class LuceneChangesSnapshot implements Translog.Snapshot {
+                    }
+     * @param requiredFullRange if true, the snapshot will strictly check for the existence of operations between fromSeqNo and toSeqNo
+            }
+    ) throws IOException {
+     */
+        while (true) {
+            + fromSeqNo
+                    "Not all operations between from_seqno ["
+ */
+        return new BooleanQuery.Builder().add(LongPoint.newRangeQuery(SeqNoFieldMapper.NAME, fromSeqNo, toSeqNo), BooleanClause.Occur.MUST)
+     * @param searchBatchSize   the number of documents should be returned by each search
+ *
+    @Override
+        assert primaryTerm > 0 : "nested child document must be excluded";
+import java.util.Comparator;
+ * not use this file except in compliance with the License.
+        }
+            : SourceFieldMapper.NAME;
+                        + "and to_seqno ["
+ *
+ * this file be licensed under the Apache-2.0 license or a
+ * the Apache License, Version 2.0 (the "License"); you may
+    }
+ */
+            }
+                        skippedOperations++;
+            if (closed.compareAndSet(false, true)) {
+    }
+            accurate ? Integer.MAX_VALUE : 0,
+                final long autoGeneratedIdTimestamp = -1;
+            if (op != null) {
+import org.apache.lucene.search.BooleanQuery;
+            int readerIndex = 0;
+            if (reader instanceof FilterLeafReader == false) {
+        if (fromSeqNo < 0 || toSeqNo < 0 || fromSeqNo > toSeqNo) {
+    static int countNumberOfHistoryOperations(Engine.Searcher searcher, long fromSeqNo, long toSeqNo) throws IOException {
+        storedFieldsFor(leaf).document(segmentDocID, fields);
+                    do {
+        Engine.Searcher engineSearcher,
+                );
+                    // TODO: Callers should ask for the range that source should be retained. Thus we should always
+/*
             throw new IllegalArgumentException("Invalid sequence range; fromSeqNo [" + fromSeqNo + "] toSeqNo [" + toSeqNo + "]");
         }
-        IndexSearcher indexSearcher = new IndexSearcher(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
-        return indexSearcher.count(operationsRangeQuery(fromSeqNo, toSeqNo));
-    }
-
-    private TopDocs searchOperations(FieldDoc after, boolean accurate) throws IOException {
-        final Query rangeQuery = operationsRangeQuery(Math.max(fromSeqNo, lastSeenSeqNo), toSeqNo);
-        final Sort sortedBySeqNo = new Sort(new SortField(SeqNoFieldMapper.NAME, SortField.Type.LONG));
-        final TopFieldCollector topFieldCollector = new TopFieldCollectorManager(
-            sortedBySeqNo,
-            searchBatchSize,
-            after,
-            accurate ? Integer.MAX_VALUE : 0,
-            false
-        ).newCollector();
-        indexSearcher.search(rangeQuery, topFieldCollector);
-        return topFieldCollector.topDocs();
-    }
-
-    private Translog.Operation readDocAsOp(int docIndex) throws IOException {
-        final LeafReaderContext leaf = parallelArray.leafReaderContexts[docIndex];
-        final int segmentDocID = scoreDocs[docIndex].doc - leaf.docBase;
-        final long primaryTerm = parallelArray.primaryTerm[docIndex];
-        assert primaryTerm > 0 : "nested child document must be excluded";
-        final long seqNo = parallelArray.seqNo[docIndex];
-        // Only pick the first seen seq#
-        if (seqNo == lastSeenSeqNo) {
-            skippedOperations++;
-            return null;
-        }
-        final long version = parallelArray.version[docIndex];
-        final String sourceField = parallelArray.hasRecoverySource[docIndex]
+                        docBase = leaf.docBase;
+            if (useSequentialStoredFieldsReader == false) {
             ? SourceFieldMapper.RECOVERY_SOURCE_NAME
-            : SourceFieldMapper.NAME;
-        final FieldsVisitor fields = new FieldsVisitor(true, sourceField);
-        storedFieldsFor(leaf).document(segmentDocID, fields);
-
-        final Translog.Operation op;
-        final boolean isTombstone = parallelArray.isTombStone[docIndex];
-        if (isTombstone && fields.id() == null) {
-            op = new Translog.NoOp(seqNo, primaryTerm, fields.source().utf8ToString());
-            assert version == 1L : "Noop tombstone should have version 1L; actual version [" + version + "]";
-            assert assertDocSoftDeleted(leaf.reader(), segmentDocID) : "Noop but soft_deletes field is not set [" + op + "]";
-        } else {
-            final String id = fields.id();
-            if (isTombstone) {
-                op = new Translog.Delete(id, seqNo, primaryTerm, version, fields.routing());
-                assert assertDocSoftDeleted(leaf.reader(), segmentDocID) : "Delete op but soft_deletes field is not set [" + op + "]";
-            } else {
                 final BytesReference source = fields.source();
-                if (source == null) {
-                    // TODO: Callers should ask for the range that source should be retained. Thus we should always
-                    // check for the existence source once we make peer-recovery to send ops after the local checkpoint.
-                    if (requiredFullRange) {
-                        throw new MissingHistoryOperationsException(
-                            "source not found for seqno=" + seqNo + " from_seqno=" + fromSeqNo + " to_seqno=" + toSeqNo
-                        );
-                    } else {
-                        skippedOperations++;
-                        return null;
-                    }
-                }
-                // TODO: pass the latest timestamp from engine.
-                final long autoGeneratedIdTimestamp = -1;
-                op = new Translog.Index(
-                    id,
-                    seqNo,
-                    primaryTerm,
-                    version,
-                    source.toBytesRef().bytes,
-                    fields.routing(),
-                    autoGeneratedIdTimestamp
-                );
-            }
-        }
-        assert fromSeqNo <= op.seqNo() && op.seqNo() <= toSeqNo && lastSeenSeqNo < op.seqNo() : "Unexpected operation; "
-            + "last_seen_seqno ["
-            + lastSeenSeqNo
-            + "], from_seqno ["
-            + fromSeqNo
-            + "], to_seqno ["
-            + toSeqNo
-            + "], op ["
-            + op
-            + "]";
-        return op;
-    }
-
-    private StoredFields storedFieldsFor(LeafReaderContext leaf) throws IOException {
-        if (useSequentialStoredFieldsReader) {
-            // A StoredFields instance may only be consumed in the thread that acquired it,
-            // so track the owning thread and recreate it if consumed by another thread.
-            final Thread currentThread = Thread.currentThread();
-            if (sequentialStoredFields == null
-                || sequentialStoredFieldsLeafOrd != leaf.ord
-                || sequentialStoredFieldsOwner != currentThread) {
-                sequentialStoredFields = sequentialStoredFields(leaf.reader());
-                sequentialStoredFieldsLeafOrd = leaf.ord;
-                sequentialStoredFieldsOwner = currentThread;
-            }
-            return sequentialStoredFields;
-        }
-        return leaf.reader().storedFields();
-    }
-
-    /**
-     * Returns a merge-optimized (sequential) stored fields reader for the leaf
-     */
-    private static StoredFields sequentialStoredFields(LeafReader leaf) throws IOException {
-        LeafReader reader = leaf;
-        while (true) {
-            if (reader instanceof SequentialStoredFieldsLeafReader) {
-                return ((SequentialStoredFieldsLeafReader) reader).getSequentialStoredFieldsReader();
-            }
-            if (reader instanceof FilterLeafReader == false) {
-                return leaf.storedFields();
-            }
-            reader = ((FilterLeafReader) reader).getDelegate();
-        }
-    }
-
-    /**
-     * Drops the cached reader, if any
-     */
-    private void releaseSequentialStoredFieldsReader() {
-        sequentialStoredFields = null;
-        sequentialStoredFieldsLeafOrd = -1;
-        sequentialStoredFieldsOwner = null;
-    }
-
-    // for testing
-    boolean useSequentialStoredFieldsReader() {
-        return useSequentialStoredFieldsReader;
-    }
-
-    private boolean assertDocSoftDeleted(LeafReader leafReader, int segmentDocId) throws IOException {
-        final NumericDocValues ndv = leafReader.getNumericDocValues(Lucene.SOFT_DELETES_FIELD);
-        if (ndv == null || ndv.advanceExact(segmentDocId) == false) {
-            throw new IllegalStateException("DocValues for field [" + Lucene.SOFT_DELETES_FIELD + "] is not found");
-        }
-        return ndv.longValue() == 1;
-    }
-
-    /**
-     * Parallel array to hold translog operations
-     *
-     * @opensearch.internal
-     */
-    private static final class ParallelArray {
+                final int segmentDocID = scoreDoc.doc - docBase;
+        Translog.Operation op = null;
+            final long expectedSeqNo = lastSeenSeqNo + 1;
         final LeafReaderContext[] leafReaderContexts;
-        final long[] version;
-        final long[] seqNo;
-        final long[] primaryTerm;
-        final boolean[] isTombStone;
-        final boolean[] hasRecoverySource;
-
-        ParallelArray(int size) {
-            version = new long[size];
-            seqNo = new long[size];
-            primaryTerm = new long[size];
-            isTombStone = new boolean[size];
-            hasRecoverySource = new boolean[size];
-            leafReaderContexts = new LeafReaderContext[size];
         }
+        final Sort sortedBySeqNo = new Sort(new SortField(SeqNoFieldMapper.NAME, SortField.Type.LONG));
+import org.opensearch.index.mapper.SourceFieldMapper;
+ * @opensearch.internal
+import org.apache.lucene.index.StoredFields;
+        sequentialStoredFieldsOwner = null;
+        this.totalHits = Math.toIntExact(topDocs.totalHits.value());
+                        return null;
+    private int sequentialStoredFieldsLeafOrd = -1;
+            searchBatchSize,
+            }
+        final Translog.Operation op;
+    @Override
+                || sequentialStoredFieldsLeafOrd != leaf.ord
+/*
+    static final int DEFAULT_BATCH_SIZE = 1024;
+import org.apache.lucene.search.SortField;
+    /**
+            + "], to_seqno ["
+        final boolean[] isTombStone;
+            if (scoreDocs[i].doc + 1 != scoreDocs[i + 1].doc) {
+     * Batches smaller than this are read with the default stored fields reader: acquiring a sequential reader costs a
+                return leaf.storedFields();
+    /**
+        final int segmentDocID = scoreDocs[docIndex].doc - leaf.docBase;
+                        + "]"
+        this.toSeqNo = toSeqNo;
+        }
+        return totalHits;
+ * software distributed under the License is distributed on an
+    static final int MIN_SEQUENTIAL_ACCESS_BATCH_SIZE = 10;
+        final Query rangeQuery = operationsRangeQuery(Math.max(fromSeqNo, lastSeenSeqNo), toSeqNo);
+                sequentialStoredFieldsLeafOrd = leaf.ord;
+    public int skippedOperations() {
+ *
+            }
+    private final int totalHits;
+ * Unless required by applicable law or agreed to in writing,
     }
-
+        };
+        if (scoreDocs.length > 0) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                // for better loading performance we sort the array by docID and
+                scoreDocs[i].shardIndex = i;
+import org.apache.lucene.search.Query;
+        ).newCollector();
+    }
+    /**
+     */
+            lastSeenSeqNo = op.seqNo();
+            skippedOperations++;
+     * Parallel array to hold translog operations
+    private static StoredFields sequentialStoredFields(LeafReader leaf) throws IOException {
+                parallelArray.leafReaderContexts[index] = leaf;
+        if (docIndex < scoreDocs.length) {
+    }
+            throw new IllegalStateException("DocValues for field [" + Lucene.SOFT_DELETES_FIELD + "] is not found");
+import org.apache.lucene.search.TopFieldCollector;
+import org.opensearch.core.common.bytes.BytesReference;
+        this.requiredFullRange = requiredFullRange;
+                return ((SequentialStoredFieldsLeafReader) reader).getSequentialStoredFieldsReader();
+import java.util.concurrent.atomic.AtomicBoolean;
+            false
+                if (scoreDoc.doc >= docBase + maxDoc) {
+        this.lastSeenSeqNo = fromSeqNo - 1;
+            CombinedDocValues combinedDocValues = null;
+        fillParallelArray(scoreDocs, parallelArray);
+     * @param fromSeqNo         the min requesting seq# - inclusive
+                IOUtils.close(engineSearcher);
+    }
+ */
+        LeafReader reader = leaf;
+        final String sourceField = parallelArray.hasRecoverySource[docIndex]
+                assert assertDocSoftDeleted(leaf.reader(), segmentDocID) : "Delete op but soft_deletes field is not set [" + op + "]";
+                        + "] "
+        return ndv.longValue() == 1;
+import org.apache.lucene.index.LeafReader;
+            return null;
+            }
+        }
+import org.apache.lucene.search.FieldDoc;
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+        this.fromSeqNo = fromSeqNo;
+            sortedBySeqNo,
+        return op;
+    private StoredFields storedFieldsFor(LeafReaderContext leaf) throws IOException {
+ *
+                    } else {
+     * every stored fields read.
+import org.apache.lucene.search.BooleanClause;
+            }
+    private static Query operationsRangeQuery(long fromSeqNo, long toSeqNo) {
+ * SPDX-License-Identifier: Apache-2.0
+ * Modifications Copyright OpenSearch Contributors. See
+                op = new Translog.Delete(id, seqNo, primaryTerm, version, fields.routing());
+    }
+    private int skippedOperations;
+            docIndex = 0;
+    /**
+        if (docIndex == scoreDocs.length && docIndex > 0) {
+        }
+            }
+    private int docIndex = 0;
+            List<LeafReaderContext> leaves = indexSearcher.getIndexReader().leaves();
+        final long version = parallelArray.version[docIndex];
+/**
+                parallelArray.seqNo[index] = combinedDocValues.docSeqNo(segmentDocID);
+        if (searchBatchSize <= 0) {
+import org.apache.lucene.index.NumericDocValues;
+    @Override
+        boolean requiredFullRange,
+        final LeafReaderContext leaf = parallelArray.leafReaderContexts[docIndex];
+        final long[] version;
+    }
+    public int totalOperations() {
+        return useSequentialStoredFieldsReader;
+                        leaf = leaves.get(readerIndex++);
+ * license agreements. See the NOTICE file distributed with
+            return idx;
+    private static final class ParallelArray {
+            final Thread currentThread = Thread.currentThread();
+        final long primaryTerm = parallelArray.primaryTerm[docIndex];
+                if (source == null) {
+ * compatible open source license.
+     */
+        }
+import java.util.List;
+                    // check for the existence source once we make peer-recovery to send ops after the local checkpoint.
+            reader = ((FilterLeafReader) reader).getDelegate();
+            hasRecoverySource = new boolean[size];
+     *
+                        throw new MissingHistoryOperationsException(
+            for (ScoreDoc scoreDoc : scoreDocs) {
+    private void releaseSequentialStoredFieldsReader() {
+        }
+                        + "]"
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            final ScoreDoc prev = scoreDocs[scoreDocs.length - 1];
+    private boolean assertDocSoftDeleted(LeafReader leafReader, int segmentDocId) throws IOException {
+                    autoGeneratedIdTimestamp
+                }
+    }
+     * read multiple stored fields from it, as opposed to the default path that does a decompression on
+                    combinedDocValues = new CombinedDocValues(leaf.reader());
+    /**
+            }
+    private final IndexSearcher indexSearcher;
+        // Only pick the first seen seq#
+        sequentialStoredFieldsLeafOrd = -1;
+            + lastSeenSeqNo
+            if (sequentialStoredFields == null
+    private Thread sequentialStoredFieldsOwner;
+        }
+            return sequentialStoredFields;
+        if (ndv == null || ndv.advanceExact(segmentDocId) == false) {
+                releaseSequentialStoredFieldsReader();
+        IndexSearcher indexSearcher = new IndexSearcher(Lucene.wrapAllDocsLive(searcher.getDirectoryReader()));
+                // now sort back based on the shardIndex. we use this to store the previous index
+     */
+            + op
+        if (op != null) {
+            throw new IllegalArgumentException("Invalid range; from_seqno [" + fromSeqNo + "], to_seqno [" + toSeqNo + "]");
+                        + "]; found ["
+        final long[] seqNo;
+        }
+            throw new IllegalArgumentException("Search_batch_size must be positive [" + searchBatchSize + "]");
+    }
+    public void close() throws IOException {
+    }
+                        + "and to_seqno ["
+            + "], from_seqno ["
+            version = new long[size];
+    }
+        if (seqNo == lastSeenSeqNo) {
+                sequentialStoredFields = sequentialStoredFields(leaf.reader());
+                        );
+    private final int searchBatchSize;
+        final FieldsVisitor fields = new FieldsVisitor(true, sourceField);
+import org.opensearch.common.lucene.search.Queries;
+            }
+                        + "] found; prematurely terminated last_seen_seqno ["
+                    "Not all operations between from_seqno ["
+import org.opensearch.common.util.io.IOUtils;
+/*
+        }
+                        + "] "
+        int searchBatchSize,
+            + "]";
+            op = new Translog.NoOp(seqNo, primaryTerm, fields.source().utf8ToString());
+        if (isTombstone && fields.id() == null) {
 }
+            + toSeqNo
+        return topFieldCollector.topDocs();
+            }
+            .add(Queries.newNonNestedFilter(), BooleanClause.Occur.MUST) // exclude non-root nested docs
+ * KIND, either express or implied.  See the License for the
+import org.apache.lucene.search.TopFieldCollectorManager;
+    }
+            leafReaderContexts = new LeafReaderContext[size];
+        long fromSeqNo,
+            assert version == 1L : "Noop tombstone should have version 1L; actual version [" + version + "]";
+     *
+        this.scoreDocs = topDocs.scoreDocs;
+        return leaf.reader().storedFields();

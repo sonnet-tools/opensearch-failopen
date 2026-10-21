@@ -1,244 +1,223 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
+                if (plan.busySpin) {
+        if (throwInOnCancel) {
+                }
+    }
+        }
+                } else {
  * You may obtain a copy of the License at
+            expectThrows(ThrowOnCancelException.class, cancellableThreads::checkForCancel);
+            } else {
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.util;
-
-import org.opensearch.common.util.CancellableThreads.IOInterruptible;
-import org.opensearch.common.util.CancellableThreads.Interruptible;
-import org.opensearch.test.OpenSearchTestCase;
-import org.hamcrest.Matchers;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.opensearch.common.util.CancellableThreads.ExecutionCancelledException;
-import static org.hamcrest.Matchers.equalTo;
-
-public class CancellableThreadsTests extends OpenSearchTestCase {
-    public static class CustomException extends RuntimeException {
-        public CustomException(String msg) {
-            super(msg);
-        }
-    }
-
-    public static class IOCustomException extends IOException {
-        public IOCustomException(String msg) {
-            super(msg);
-        }
-    }
-
-    static class ThrowOnCancelException extends RuntimeException {}
-
-    private class TestPlan {
-        public final int id;
-        public final boolean busySpin;
-        public final boolean exceptBeforeCancel;
-        public final boolean exitBeforeCancel;
-        public final boolean exceptAfterCancel;
-        public final boolean presetInterrupt;
-        public final boolean ioOp;
-        private final boolean ioException;
-
-        private TestPlan(int id) {
-            this.id = id;
-            this.busySpin = randomBoolean();
-            this.exceptBeforeCancel = randomBoolean();
-            this.exitBeforeCancel = randomBoolean();
-            this.exceptAfterCancel = randomBoolean();
-            this.presetInterrupt = randomBoolean();
-            this.ioOp = randomBoolean();
-            this.ioException = ioOp && randomBoolean();
-        }
-    }
-
-    static class TestRunnable implements Interruptible {
-        final TestPlan plan;
-        final CountDownLatch readyForCancel;
-
-        TestRunnable(TestPlan plan, CountDownLatch readyForCancel) {
-            this.plan = plan;
-            this.readyForCancel = readyForCancel;
-        }
-
-        @Override
-        public void run() throws InterruptedException {
-            assertFalse("interrupt thread should have been clear", Thread.currentThread().isInterrupted());
-            if (plan.exceptBeforeCancel) {
-                throw new CustomException("thread [" + plan.id + "] pre-cancel exception");
-            } else if (plan.exitBeforeCancel) {
-                return;
-            }
-            readyForCancel.countDown();
-            try {
-                if (plan.busySpin) {
-                    while (!Thread.currentThread().isInterrupted()) {
-                    }
-                } else {
-                    Thread.sleep(50000);
-                }
-            } finally {
-                if (plan.exceptAfterCancel) {
-                    throw new CustomException("thread [" + plan.id + "] post-cancel exception");
-                }
-            }
-        }
-    }
-
-    static class TestIORunnable implements IOInterruptible {
-        final TestPlan plan;
-        final CountDownLatch readyForCancel;
-
-        TestIORunnable(TestPlan plan, CountDownLatch readyForCancel) {
-            this.plan = plan;
-            this.readyForCancel = readyForCancel;
-        }
-
-        @Override
-        public void run() throws IOException, InterruptedException {
-            assertFalse("interrupt thread should have been clear", Thread.currentThread().isInterrupted());
-            if (plan.exceptBeforeCancel) {
-                throw new IOCustomException("thread [" + plan.id + "] pre-cancel exception");
-            } else if (plan.exitBeforeCancel) {
-                return;
-            }
-            readyForCancel.countDown();
-            try {
-                if (plan.busySpin) {
-                    while (!Thread.currentThread().isInterrupted()) {
-                    }
-                } else {
-                    Thread.sleep(50000);
-                }
-            } finally {
-                if (plan.exceptAfterCancel) {
-                    throw new IOCustomException("thread [" + plan.id + "] post-cancel exception");
-                }
-            }
-
-        }
-    }
-
-    public void testCancellableThreads() throws InterruptedException {
-        Thread[] threads = new Thread[randomIntBetween(3, 10)];
         final TestPlan[] plans = new TestPlan[threads.length];
-        final Exception[] exceptions = new Exception[threads.length];
-        final boolean[] interrupted = new boolean[threads.length];
-        final CancellableThreads cancellableThreads = new CancellableThreads();
-        final CountDownLatch readyForCancel = new CountDownLatch(threads.length);
-        for (int i = 0; i < threads.length; i++) {
-            final TestPlan plan = new TestPlan(i);
-            plans[i] = plan;
-            threads[i] = new Thread(() -> {
-                try {
-                    if (plan.presetInterrupt) {
-                        Thread.currentThread().interrupt();
-                    }
-                    if (plan.ioOp) {
-                        if (plan.ioException) {
-                            cancellableThreads.executeIO(new TestIORunnable(plan, readyForCancel));
-                        } else {
-                            cancellableThreads.executeIO(new TestRunnable(plan, readyForCancel));
-                        }
-                    } else {
-                        cancellableThreads.execute(new TestRunnable(plan, readyForCancel));
-                    }
-                } catch (Exception e) {
-                    exceptions[plan.id] = e;
+ * the Apache License, Version 2.0 (the "License"); you may
                 }
-                if (plan.exceptBeforeCancel || plan.exitBeforeCancel) {
-                    // we have to mark we're ready now (actually done).
-                    readyForCancel.countDown();
-                }
-                interrupted[plan.id] = Thread.currentThread().isInterrupted();
-            });
-            threads[i].setDaemon(true);
-            threads[i].start();
         }
-
-        readyForCancel.await();
-        final boolean throwInOnCancel = randomBoolean();
-        final AtomicInteger invokeTimes = new AtomicInteger();
-        cancellableThreads.setOnCancel((reason, beforeCancelException) -> {
-            invokeTimes.getAndIncrement();
-            if (throwInOnCancel) {
+            try {
+        }
+                if (plan.busySpin) {
+                try {
+        final TestPlan plan;
                 ThrowOnCancelException e = new ThrowOnCancelException();
-                if (beforeCancelException != null) {
-                    e.addSuppressed(beforeCancelException);
+        final CountDownLatch readyForCancel;
+    static class TestIORunnable implements IOInterruptible {
+            });
+            } else if (plan.exitBeforeCancel) {
+ * compatible open source license.
+            this.ioOp = randomBoolean();
+                    if (plan.ioOp) {
+            final Class<?> exceptionClass = plan.ioException ? IOCustomException.class : CustomException.class;
+            threads[i] = new Thread(() -> {
+        public final boolean exceptAfterCancel;
+            invokeTimes.longValue(),
                 }
-                throw e;
+        }
+import java.io.IOException;
+        assertThat(
+            assertFalse("interrupt thread should have been clear", Thread.currentThread().isInterrupted());
+        }
+            expectThrows(ExecutionCancelledException.class, cancellableThreads::checkForCancel);
+    public static class CustomException extends RuntimeException {
+    }
+        } else {
+                    }
+                if (throwInOnCancel) {
+        final TestPlan plan;
+    }
+ * GitHub history for details.
+                        }
+        TestRunnable(TestPlan plan, CountDownLatch readyForCancel) {
+        cancellableThreads.setOnCancel((reason, beforeCancelException) -> {
+        @Override
+            readyForCancel.countDown();
+        public final boolean presetInterrupt;
+            readyForCancel.countDown();
+                } catch (Exception e) {
+ * Modifications Copyright OpenSearch Contributors. See
+        public void run() throws InterruptedException {
+import org.opensearch.test.OpenSearchTestCase;
+                            cancellableThreads.executeIO(new TestRunnable(plan, readyForCancel));
+                }
+                } else {
+        );
+        }
+import java.util.Arrays;
+    }
+                } else {
+            this.ioException = ioOp && randomBoolean();
+        private TestPlan(int id) {
+                    Thread.sleep(50000);
+/*
+        TestIORunnable(TestPlan plan, CountDownLatch readyForCancel) {
+                    e.addSuppressed(beforeCancelException);
+            if (plan.exceptBeforeCancel) {
+            super(msg);
+                throw new CustomException("thread [" + plan.id + "] pre-cancel exception");
+                }
+                    // we have to mark we're ready now (actually done).
+public class CancellableThreadsTests extends OpenSearchTestCase {
+    static class TestRunnable implements Interruptible {
+    public static class IOCustomException extends IOException {
+            this.readyForCancel = readyForCancel;
+    public void testCancellableThreads() throws InterruptedException {
+        for (int i = 0; i < threads.length; i++) {
+        public final boolean ioOp;
+        final CountDownLatch readyForCancel = new CountDownLatch(threads.length);
+        public final boolean busySpin;
+            this.exceptBeforeCancel = randomBoolean();
+/*
+ * license agreements. See the NOTICE file distributed with
+            invokeTimes.getAndIncrement();
+            }
+            this.exitBeforeCancel = randomBoolean();
+ */
+ *
+ * Licensed to Elasticsearch under one or more contributor
+                        if (plan.ioException) {
+            thread.join(20000);
+ * ownership. Elasticsearch licenses this file to you under
+                    assertThat(exceptions[i].getSuppressed(), Matchers.emptyArray());
+import java.util.concurrent.CountDownLatch;
+        for (Thread thread : threads) {
+                    Thread.sleep(50000);
+        }
+            this.presetInterrupt = randomBoolean();
+            }
+            this.readyForCancel = readyForCancel;
+            threads[i].setDaemon(true);
+            assertFalse("interrupt thread should have been clear", Thread.currentThread().isInterrupted());
+    private class TestPlan {
+        final boolean[] interrupted = new boolean[threads.length];
+                    throw new IOCustomException("thread [" + plan.id + "] post-cancel exception");
+                if (plan.exceptAfterCancel) {
+                return;
+import java.util.concurrent.atomic.AtomicInteger;
+            if (throwInOnCancel) {
             }
         });
-
-        cancellableThreads.cancel("test");
-        for (Thread thread : threads) {
-            thread.join(20000);
-            assertFalse(thread.isAlive());
-        }
-        for (int i = 0; i < threads.length; i++) {
-            TestPlan plan = plans[i];
-            final Class<?> exceptionClass = plan.ioException ? IOCustomException.class : CustomException.class;
-            if (plan.exceptBeforeCancel) {
-                assertThat(exceptions[i], Matchers.instanceOf(exceptionClass));
-            } else if (plan.exitBeforeCancel) {
-                assertNull(exceptions[i]);
-            } else {
-                // in all other cases, we expect a cancellation exception.
-                if (throwInOnCancel) {
-                    assertThat(exceptions[i], Matchers.instanceOf(ThrowOnCancelException.class));
-                } else {
-                    assertThat(exceptions[i], Matchers.instanceOf(ExecutionCancelledException.class));
-                }
+                    } else {
+import org.opensearch.common.util.CancellableThreads.Interruptible;
                 if (plan.exceptAfterCancel) {
-                    assertThat(exceptions[i].getSuppressed(), Matchers.arrayContaining(Matchers.instanceOf(exceptionClass)));
-                } else {
-                    assertThat(exceptions[i].getSuppressed(), Matchers.emptyArray());
-                }
-            }
+                if (plan.exceptAfterCancel) {
+                    }
+        public CustomException(String msg) {
             assertThat(interrupted[plan.id], equalTo(plan.presetInterrupt));
         }
+/*
+                    if (plan.presetInterrupt) {
+                throw new IOCustomException("thread [" + plan.id + "] pre-cancel exception");
+ * under the License.
+ * KIND, either express or implied.  See the License for the
+                    while (!Thread.currentThread().isInterrupted()) {
+                    }
+                }
+                    assertThat(exceptions[i], Matchers.instanceOf(ThrowOnCancelException.class));
+            threads[i].start();
         assertThat(
-            invokeTimes.longValue(),
-            equalTo(Arrays.stream(plans).filter(p -> p.exceptBeforeCancel == false && p.exitBeforeCancel == false).count())
-        );
-        if (throwInOnCancel) {
-            expectThrows(ThrowOnCancelException.class, cancellableThreads::checkForCancel);
-        } else {
-            expectThrows(ExecutionCancelledException.class, cancellableThreads::checkForCancel);
-        }
-        assertThat(
-            invokeTimes.longValue(),
+            try {
+            } finally {
+                return;
+                            cancellableThreads.executeIO(new TestIORunnable(plan, readyForCancel));
+        final CancellableThreads cancellableThreads = new CancellableThreads();
+ * The OpenSearch Contributors require contributions made to
             equalTo(Arrays.stream(plans).filter(p -> p.exceptBeforeCancel == false && p.exitBeforeCancel == false).count() + 1)
-        );
-    }
-
+                // in all other cases, we expect a cancellation exception.
+            } finally {
+                assertThat(exceptions[i], Matchers.instanceOf(exceptionClass));
+ * specific language governing permissions and limitations
+            final TestPlan plan = new TestPlan(i);
+                    }
+ * this file be licensed under the Apache-2.0 license or a
+                if (plan.exceptBeforeCancel || plan.exitBeforeCancel) {
+            }
+        @Override
+        cancellableThreads.cancel("test");
+            this.exceptAfterCancel = randomBoolean();
+                }
+                }
 }
+import org.hamcrest.Matchers;
+ */
+                    exceptions[plan.id] = e;
+                assertNull(exceptions[i]);
+        public final boolean exceptBeforeCancel;
+        private final boolean ioException;
+    static class ThrowOnCancelException extends RuntimeException {}
+        }
+import static org.opensearch.common.util.CancellableThreads.ExecutionCancelledException;
+                    while (!Thread.currentThread().isInterrupted()) {
+                    assertThat(exceptions[i], Matchers.instanceOf(ExecutionCancelledException.class));
+                        Thread.currentThread().interrupt();
+        }
+        public void run() throws IOException, InterruptedException {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        readyForCancel.await();
+                    throw new CustomException("thread [" + plan.id + "] post-cancel exception");
+            }
+            } else if (plan.exitBeforeCancel) {
+            this.plan = plan;
+ * this work for additional information regarding copyright
+        );
+            this.busySpin = randomBoolean();
+            this.id = id;
+            if (plan.exceptBeforeCancel) {
+            }
+        public final int id;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        final boolean throwInOnCancel = randomBoolean();
+ * software distributed under the License is distributed on an
+package org.opensearch.common.util;
+import static org.hamcrest.Matchers.equalTo;
+ * SPDX-License-Identifier: Apache-2.0
+                } else {
+        final CountDownLatch readyForCancel;
+ * not use this file except in compliance with the License.
+            } else if (plan.exitBeforeCancel) {
+                interrupted[plan.id] = Thread.currentThread().isInterrupted();
+ *
+    }
+                        cancellableThreads.execute(new TestRunnable(plan, readyForCancel));
+        final AtomicInteger invokeTimes = new AtomicInteger();
+        for (int i = 0; i < threads.length; i++) {
+            invokeTimes.longValue(),
+                }
+            this.plan = plan;
+                    readyForCancel.countDown();
+        final Exception[] exceptions = new Exception[threads.length];
+    }
+                        } else {
+import org.opensearch.common.util.CancellableThreads.IOInterruptible;
+        Thread[] threads = new Thread[randomIntBetween(3, 10)];
+        public IOCustomException(String msg) {
+            plans[i] = plan;
+ * Unless required by applicable law or agreed to in writing,
+ */
+                throw e;
+        public final boolean exitBeforeCancel;
+            super(msg);
+            if (plan.exceptBeforeCancel) {
+            assertFalse(thread.isAlive());
+        }
+                if (beforeCancelException != null) {
+            TestPlan plan = plans[i];
+            equalTo(Arrays.stream(plans).filter(p -> p.exceptBeforeCancel == false && p.exitBeforeCancel == false).count())
+                    assertThat(exceptions[i].getSuppressed(), Matchers.arrayContaining(Matchers.instanceOf(exceptionClass)));

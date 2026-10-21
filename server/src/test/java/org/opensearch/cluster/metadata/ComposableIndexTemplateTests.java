@@ -1,261 +1,240 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
  */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.metadata;
-
-import org.opensearch.cluster.Diff;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.AbstractDiffableSerializationTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
-public class ComposableIndexTemplateTests extends AbstractDiffableSerializationTestCase<ComposableIndexTemplate> {
+                settings = randomSettings();
     @Override
-    protected ComposableIndexTemplate makeTestChanges(ComposableIndexTemplate testInstance) {
+        Settings settings = null;
+                    randomValueOtherThan(orig.getDataStreamTemplate(), ComposableIndexTemplateTests::randomDataStreamTemplate)
+                    orig.version(),
+            .filter("{\"term\":{\"year\":" + randomIntBetween(1, 3000) + "}}")
         try {
-            return mutateInstance(testInstance);
+                return new ComposableIndexTemplate(
+                mappings = randomMappings(dataStreamTemplate);
+                    orig.template(),
+import org.opensearch.core.common.io.stream.Writeable;
+        if (dataStreamTemplate != null || randomBoolean()) {
         } catch (IOException e) {
             logger.error(e);
-            fail("mutating should not throw an exception, but got: " + e);
-            return null;
-        }
-    }
-
-    @Override
-    protected Writeable.Reader<Diff<ComposableIndexTemplate>> diffReader() {
-        return ComposableIndexTemplate::readITV2DiffFrom;
-    }
-
-    @Override
-    protected ComposableIndexTemplate doParseInstance(XContentParser parser) throws IOException {
-        return ComposableIndexTemplate.parse(parser);
-    }
-
-    @Override
-    protected Writeable.Reader<ComposableIndexTemplate> instanceReader() {
-        return ComposableIndexTemplate::new;
-    }
-
-    @Override
-    protected ComposableIndexTemplate createTestInstance() {
-        return randomInstance();
-    }
-
-    public static ComposableIndexTemplate randomInstance() {
-        Settings settings = null;
-        CompressedXContent mappings = null;
-        Map<String, AliasMetadata> aliases = null;
+                    orig.metadata(),
+                return new ComposableIndexTemplate(
         Template template = null;
-        ComposableIndexTemplate.DataStreamTemplate dataStreamTemplate = randomDataStreamTemplate();
-
-        if (dataStreamTemplate != null || randomBoolean()) {
-            if (randomBoolean()) {
-                settings = randomSettings();
+import org.opensearch.common.settings.Settings;
+                    orig.indexPatterns(),
+    }
+            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
+                    orig.version(),
+    public static ComposableIndexTemplate mutateTemplate(ComposableIndexTemplate orig) {
+                    orig.indexPatterns(),
+        return new ComposableIndexTemplate(
+                    randomValueOtherThan(orig.version(), OpenSearchTestCase::randomNonNegativeLong),
+                throw new IllegalStateException("illegal randomization branch");
+    }
+                    orig.template(),
+    @Override
+        String aliasName = randomAlphaOfLength(5);
+                    () -> randomList(1, 4, () -> randomAlphaOfLength(4))
+            } else {
+            .isHidden(randomBoolean() ? null : randomBoolean())
+    }
+                    orig.priority(),
+    }
+        } else {
+ * Unless required by applicable law or agreed to in writing,
+    private static CompressedXContent randomMappings(ComposableIndexTemplate.DataStreamTemplate dataStreamTemplate) {
+    private static Map<String, AliasMetadata> randomAliases() {
+            case 0:
+        Map<String, Object> meta = null;
+    }
+        if (randomBoolean()) {
+                    orig.getDataStreamTemplate()
+                    randomValueOtherThan(orig.priority(), OpenSearchTestCase::randomNonNegativeLong),
             }
+ * You may obtain a copy of the License at
+            }
+                    orig.getDataStreamTemplate()
+    @Override
+ * not use this file except in compliance with the License.
+        return mutateTemplate(orig);
+        try {
+import org.opensearch.cluster.Diff;
             if (dataStreamTemplate != null || randomBoolean()) {
-                mappings = randomMappings(dataStreamTemplate);
-            }
+                return new CompressedXContent("{\"properties\":{\"" + dataStreamTemplate.getTimestampField() + "\":{\"type\":\"date\"}}}");
+                    orig.priority(),
+        return Settings.builder()
+ * GitHub history for details.
+        List<String> componentTemplates = randomList(0, 10, () -> randomAlphaOfLength(5));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    @Override
+            );
+            randomBoolean() ? null : randomNonNegativeLong(),
             if (randomBoolean()) {
-                aliases = randomAliases();
+                        () -> new Template(randomSettings(), randomMappings(orig.getDataStreamTemplate()), randomAliases())
+                    orig.priority(),
+    protected ComposableIndexTemplate makeTestChanges(ComposableIndexTemplate testInstance) {
+ * The OpenSearch Contributors require contributions made to
+ * compatible open source license.
+        switch (randomIntBetween(0, 6)) {
+            .put(IndexMetadata.SETTING_BLOCKS_READ, randomBoolean())
+                    orig.composedOf(),
+        return ComposableIndexTemplate.parse(parser);
+public class ComposableIndexTemplateTests extends AbstractDiffableSerializationTestCase<ComposableIndexTemplate> {
+    }
+                    orig.composedOf(),
+                    orig.getDataStreamTemplate()
+                    orig.version(),
+            .build();
+            template,
+            return Collections.singletonMap(
+                    orig.indexPatterns(),
+ *
+                    orig.getDataStreamTemplate()
+            case 6:
             }
             template = new Template(settings, mappings, aliases);
-        }
-
-        Map<String, Object> meta = null;
-        if (randomBoolean()) {
-            meta = randomMeta();
-        }
-
-        List<String> indexPatterns = randomList(1, 4, () -> randomAlphaOfLength(4));
-        List<String> componentTemplates = randomList(0, 10, () -> randomAlphaOfLength(5));
-        return new ComposableIndexTemplate(
-            indexPatterns,
-            template,
-            componentTemplates,
-            randomBoolean() ? null : randomNonNegativeLong(),
-            randomBoolean() ? null : randomNonNegativeLong(),
-            meta,
-            dataStreamTemplate
-        );
-    }
-
-    private static Map<String, AliasMetadata> randomAliases() {
-        String aliasName = randomAlphaOfLength(5);
-        AliasMetadata aliasMeta = AliasMetadata.builder(aliasName)
-            .filter("{\"term\":{\"year\":" + randomIntBetween(1, 3000) + "}}")
-            .routing(randomBoolean() ? null : randomAlphaOfLength(3))
-            .isHidden(randomBoolean() ? null : randomBoolean())
-            .writeIndex(randomBoolean() ? null : randomBoolean())
-            .build();
-        return Collections.singletonMap(aliasName, aliasMeta);
-    }
-
-    private static CompressedXContent randomMappings(ComposableIndexTemplate.DataStreamTemplate dataStreamTemplate) {
-        try {
-            if (dataStreamTemplate != null) {
-                return new CompressedXContent("{\"properties\":{\"" + dataStreamTemplate.getTimestampField() + "\":{\"type\":\"date\"}}}");
-            } else {
+ * Modifications Copyright OpenSearch Contributors. See
                 return new CompressedXContent("{\"properties\":{\"" + randomAlphaOfLength(5) + "\":{\"type\":\"keyword\"}}}");
-            }
+ * ownership. Elasticsearch licenses this file to you under
+import java.util.Map;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*
+                return new ComposableIndexTemplate(
+    protected Writeable.Reader<Diff<ComposableIndexTemplate>> diffReader() {
+                );
+/*
+        }
         } catch (IOException e) {
-            fail("got an IO exception creating fake mappings: " + e);
-            return null;
-        }
-    }
-
-    private static Settings randomSettings() {
-        return Settings.builder()
-            .put(IndexMetadata.SETTING_BLOCKS_READ, randomBoolean())
-            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
-            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, randomIntBetween(1, 10))
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomIntBetween(0, 5))
-            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
-            .put(IndexMetadata.SETTING_PRIORITY, randomIntBetween(0, 100000))
-            .build();
-    }
-
-    private static Map<String, Object> randomMeta() {
-        if (randomBoolean()) {
-            return Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4));
-        } else {
-            return Collections.singletonMap(
-                randomAlphaOfLength(5),
-                Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4))
-            );
-        }
-    }
-
-    private static ComposableIndexTemplate.DataStreamTemplate randomDataStreamTemplate() {
-        if (randomBoolean()) {
-            return null;
-        } else {
-            return new ComposableIndexTemplate.DataStreamTemplate();
-        }
-    }
-
-    @Override
-    protected ComposableIndexTemplate mutateInstance(ComposableIndexTemplate orig) throws IOException {
-        return mutateTemplate(orig);
-    }
-
-    public static ComposableIndexTemplate mutateTemplate(ComposableIndexTemplate orig) {
-        switch (randomIntBetween(0, 6)) {
-            case 0:
-                List<String> newIndexPatterns = randomValueOtherThan(
-                    orig.indexPatterns(),
-                    () -> randomList(1, 4, () -> randomAlphaOfLength(4))
                 );
-                return new ComposableIndexTemplate(
-                    newIndexPatterns,
-                    orig.template(),
-                    orig.composedOf(),
-                    orig.priority(),
                     orig.version(),
-                    orig.metadata(),
-                    orig.getDataStreamTemplate()
-                );
-            case 1:
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    randomValueOtherThan(
-                        orig.template(),
-                        () -> new Template(randomSettings(), randomMappings(orig.getDataStreamTemplate()), randomAliases())
-                    ),
-                    orig.composedOf(),
-                    orig.priority(),
-                    orig.version(),
-                    orig.metadata(),
-                    orig.getDataStreamTemplate()
-                );
-            case 2:
-                List<String> newComposedOf = randomValueOtherThan(orig.composedOf(), () -> randomList(0, 10, () -> randomAlphaOfLength(5)));
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    orig.template(),
                     newComposedOf,
-                    orig.priority(),
-                    orig.version(),
-                    orig.metadata(),
-                    orig.getDataStreamTemplate()
+        if (randomBoolean()) {
                 );
-            case 3:
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    orig.template(),
-                    orig.composedOf(),
-                    randomValueOtherThan(orig.priority(), OpenSearchTestCase::randomNonNegativeLong),
-                    orig.version(),
-                    orig.metadata(),
-                    orig.getDataStreamTemplate()
-                );
-            case 4:
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    orig.template(),
-                    orig.composedOf(),
-                    orig.priority(),
-                    randomValueOtherThan(orig.version(), OpenSearchTestCase::randomNonNegativeLong),
-                    orig.metadata(),
-                    orig.getDataStreamTemplate()
-                );
-            case 5:
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    orig.template(),
-                    orig.composedOf(),
-                    orig.priority(),
-                    orig.version(),
-                    randomValueOtherThan(orig.metadata(), ComposableIndexTemplateTests::randomMeta),
-                    orig.getDataStreamTemplate()
-                );
-            case 6:
-                return new ComposableIndexTemplate(
-                    orig.indexPatterns(),
-                    orig.template(),
-                    orig.composedOf(),
-                    orig.priority(),
-                    orig.version(),
-                    orig.metadata(),
-                    randomValueOtherThan(orig.getDataStreamTemplate(), ComposableIndexTemplateTests::randomDataStreamTemplate)
-                );
-            default:
-                throw new IllegalStateException("illegal randomization branch");
+    }
+    private static Settings randomSettings() {
+import org.opensearch.test.AbstractDiffableSerializationTestCase;
         }
     }
 }
+    }
+package org.opensearch.cluster.metadata;
+ * SPDX-License-Identifier: Apache-2.0
+    protected ComposableIndexTemplate createTestInstance() {
+                    newIndexPatterns,
+            default:
+            return null;
+        } else {
+            fail("mutating should not throw an exception, but got: " + e);
+ * software distributed under the License is distributed on an
+    }
+            meta,
+                    orig.indexPatterns(),
+            case 1:
+                return new ComposableIndexTemplate(
+                    orig.template(),
+        return ComposableIndexTemplate::new;
+            indexPatterns,
+            return new ComposableIndexTemplate.DataStreamTemplate();
+        }
+        AliasMetadata aliasMeta = AliasMetadata.builder(aliasName)
+ * license agreements. See the NOTICE file distributed with
+        }
+        return randomInstance();
+                    orig.template(),
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, randomIntBetween(1, 10))
+import java.io.IOException;
+                    orig.composedOf(),
+                    orig.getDataStreamTemplate()
+                List<String> newComposedOf = randomValueOtherThan(orig.composedOf(), () -> randomList(0, 10, () -> randomAlphaOfLength(5)));
+                List<String> newIndexPatterns = randomValueOtherThan(
+ * specific language governing permissions and limitations
+            randomBoolean() ? null : randomNonNegativeLong(),
+ *
+    protected ComposableIndexTemplate doParseInstance(XContentParser parser) throws IOException {
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.common.compress.CompressedXContent;
+                );
+            return null;
+                    orig.priority(),
+        }
+                    orig.indexPatterns(),
+                    orig.priority(),
+                aliases = randomAliases();
+                    randomValueOtherThan(
+                    orig.indexPatterns(),
+                    orig.composedOf(),
+                return new ComposableIndexTemplate(
+        CompressedXContent mappings = null;
+                    orig.metadata(),
+                    orig.version(),
+                    randomValueOtherThan(orig.metadata(), ComposableIndexTemplateTests::randomMeta),
+                );
+            .writeIndex(randomBoolean() ? null : randomBoolean())
+ */
+            case 5:
+                    orig.composedOf(),
+            .routing(randomBoolean() ? null : randomAlphaOfLength(3))
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, randomIntBetween(0, 5))
+                    orig.metadata(),
+                    orig.template(),
+ */
+ * this work for additional information regarding copyright
+                );
+                );
+        }
+    }
+                    orig.getDataStreamTemplate()
+            .put(IndexMetadata.SETTING_PRIORITY, randomIntBetween(0, 100000))
+                    ),
+ * under the License.
+                return new ComposableIndexTemplate(
+ * the Apache License, Version 2.0 (the "License"); you may
+    protected Writeable.Reader<ComposableIndexTemplate> instanceReader() {
+    private static ComposableIndexTemplate.DataStreamTemplate randomDataStreamTemplate() {
+        Map<String, AliasMetadata> aliases = null;
+                    orig.template(),
+        }
+            case 3:
+            .build();
+                randomAlphaOfLength(5),
+ * KIND, either express or implied.  See the License for the
+    }
+                );
+        List<String> indexPatterns = randomList(1, 4, () -> randomAlphaOfLength(4));
+                return new ComposableIndexTemplate(
+ * this file be licensed under the Apache-2.0 license or a
+                    orig.composedOf(),
+        return Collections.singletonMap(aliasName, aliasMeta);
+import org.opensearch.core.xcontent.XContentParser;
+            if (dataStreamTemplate != null) {
+                Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4))
+            case 4:
+                    orig.indexPatterns(),
+    @Override
+        return ComposableIndexTemplate::readITV2DiffFrom;
+    protected ComposableIndexTemplate mutateInstance(ComposableIndexTemplate orig) throws IOException {
+            if (randomBoolean()) {
+            case 2:
+    @Override
+                        orig.template(),
+            return mutateInstance(testInstance);
+import org.opensearch.test.OpenSearchTestCase;
+    private static Map<String, Object> randomMeta() {
+            return null;
+            componentTemplates,
+        ComposableIndexTemplate.DataStreamTemplate dataStreamTemplate = randomDataStreamTemplate();
+        );
+            }
+                    orig.metadata(),
+    }
+                    orig.metadata(),
+import java.util.List;
+            return Collections.singletonMap(randomAlphaOfLength(4), randomAlphaOfLength(4));
+            dataStreamTemplate
+/*
+import java.util.Collections;
+                    orig.metadata(),
+                    orig.priority(),
+        if (randomBoolean()) {
+                    orig.version(),
+            fail("got an IO exception creating fake mappings: " + e);
+            .put(IndexMetadata.SETTING_BLOCKS_WRITE, randomBoolean())
+    public static ComposableIndexTemplate randomInstance() {
+            meta = randomMeta();

@@ -1,179 +1,162 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.engine;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.VersionType;
-import org.opensearch.index.analysis.AnalysisRegistry;
+    @Override
+                    delete.id(),
+                final Engine.NoOp engineNoOp = new Engine.NoOp(noOp.seqNo(), noOp.primaryTerm(), origin, System.nanoTime(), noOp.reason());
+                final Translog.NoOp noOp = (Translog.NoOp) operation;
 import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.mapper.DocumentMapper;
-import org.opensearch.index.mapper.DocumentMapperForType;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.RootObjectMapper;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.index.translog.TranslogRecoveryRunner;
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.indices.mapper.MapperRegistry;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
-
-public class TranslogHandler implements TranslogRecoveryRunner {
-
-    private final MapperService mapperService;
-
-    private final AtomicLong appliedOperations = new AtomicLong();
-
-    private final Engine engine;
-
-    long appliedOperations() {
-        return appliedOperations.get();
-    }
-
-    public TranslogHandler(NamedXContentRegistry xContentRegistry, IndexSettings indexSettings, Engine engine) {
-        this.engine = engine;
-        Map<String, NamedAnalyzer> analyzers = new HashMap<>();
-        analyzers.put(AnalysisRegistry.DEFAULT_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer()));
-        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(analyzers, emptyMap(), emptyMap());
-        SimilarityService similarityService = new SimilarityService(indexSettings, null, emptyMap());
-        MapperRegistry mapperRegistry = new IndicesModule(emptyList()).getMapperRegistry();
-        mapperService = new MapperService(
-            indexSettings,
-            indexAnalyzers,
-            xContentRegistry,
-            similarityService,
-            mapperRegistry,
-            () -> null,
-            () -> false,
-            null
-        );
-    }
-
+ *     http://www.apache.org/licenses/LICENSE-2.0
     private DocumentMapperForType docMapper(String type) {
-        RootObjectMapper.Builder rootBuilder = new RootObjectMapper.Builder(type);
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+                        MediaTypeRegistry.xContentType(index.source()),
+ *
+    public Engine.Operation convertToEngineOp(Translog.Operation operation, Engine.Operation.Origin origin) {
+            indexAnalyzers,
+        // If a translog op is replayed on the primary (eg. ccr), we need to use external instead of null for its version type.
+    }
+    long appliedOperations() {
+import org.opensearch.index.similarity.SimilarityService;
+ *
+                    origin,
+                engine.noOp((Engine.NoOp) operation);
+                    versionType,
+                    index.seqNo(),
+                        index.source(),
+import java.util.HashMap;
+ * the Apache License, Version 2.0 (the "License"); you may
+import org.opensearch.index.translog.TranslogRecoveryRunner;
+            mapperRegistry,
+        final VersionType versionType = (origin == Engine.Operation.Origin.PRIMARY) ? VersionType.EXTERNAL : null;
+ * license agreements. See the NOTICE file distributed with
+public class TranslogHandler implements TranslogRecoveryRunner {
+import org.opensearch.index.analysis.AnalysisRegistry;
+ * compatible open source license.
+import org.opensearch.index.mapper.DocumentMapperForType;
+                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+ * not use this file except in compliance with the License.
+        engine.translogManager().syncTranslog();
+                break;
+package org.opensearch.index.engine;
+        switch (operation.operationType()) {
+        mapperService = new MapperService(
+                );
+            similarityService,
+import org.opensearch.index.analysis.NamedAnalyzer;
+                throw new IllegalStateException("No operation defined for [" + operation + "]");
+/*
+        return appliedOperations.get();
         DocumentMapper.Builder b = new DocumentMapper.Builder(rootBuilder, mapperService);
+                final Translog.Index index = (Translog.Index) operation;
+            case NO_OP:
+                return engineIndex;
+        Translog.Operation operation;
+import org.opensearch.index.mapper.MapperService;
+                engine.index((Engine.Index) operation);
+                    origin,
+                        index.routing()
+                    delete.primaryTerm(),
+import static java.util.Collections.emptyMap;
+ * Unless required by applicable law or agreed to in writing,
+                final String indexName = mapperService.index().getName();
+import org.opensearch.index.translog.Translog;
+        return opsRecovered;
+            () -> false,
+ * KIND, either express or implied.  See the License for the
+ */
+        RootObjectMapper.Builder rootBuilder = new RootObjectMapper.Builder(type);
+            case INDEX:
+                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM
+        );
+            default:
+ */
+    private final AtomicLong appliedOperations = new AtomicLong();
+ * Modifications Copyright OpenSearch Contributors. See
+/*
+ * under the License.
+        MapperRegistry mapperRegistry = new IndicesModule(emptyList()).getMapperRegistry();
+        IndexAnalyzers indexAnalyzers = new IndexAnalyzers(analyzers, emptyMap(), emptyMap());
+    private void applyOperation(Engine engine, Engine.Operation operation) throws IOException {
+                    docMapper(MapperService.SINGLE_MAPPING_NAME),
+ * this file be licensed under the Apache-2.0 license or a
+                    index.getAutoGeneratedIdTimestamp(),
+import org.opensearch.indices.IndicesModule;
+                    delete.routing(),
+    public TranslogHandler(NamedXContentRegistry xContentRegistry, IndexSettings indexSettings, Engine engine) {
+import java.io.IOException;
+            case NO_OP:
+            xContentRegistry,
+            appliedOperations.incrementAndGet();
+            () -> null,
+        }
+ * software distributed under the License is distributed on an
+import org.opensearch.index.mapper.RootObjectMapper;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.index.mapper.SourceToParse;
+        Map<String, NamedAnalyzer> analyzers = new HashMap<>();
+import org.opensearch.index.VersionType;
+import org.opensearch.indices.mapper.MapperRegistry;
+        }
+    private final Engine engine;
+    }
+        while ((operation = snapshot.next()) != null) {
+}
+ * GitHub history for details.
+                    new SourceToParse(
+                    delete.seqNo(),
+ * this work for additional information regarding copyright
+    private final MapperService mapperService;
+        switch (operation.opType()) {
+ * The OpenSearch Contributors require contributions made to
+import java.util.concurrent.atomic.AtomicLong;
+ * ownership. Elasticsearch licenses this file to you under
+            applyOperation(engine, convertToEngineOp(operation, Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY));
+                break;
+        SimilarityService similarityService = new SimilarityService(indexSettings, null, emptyMap());
+                throw new IllegalStateException("No operation defined for [" + operation + "]");
+                return engineNoOp;
+import org.opensearch.index.seqno.SequenceNumbers;
+            indexSettings,
+                );
+            case INDEX:
+                        index.id(),
+        this.engine = engine;
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.index.analysis.IndexAnalyzers;
+                break;
+import org.opensearch.index.IndexSettings;
+ * specific language governing permissions and limitations
+        analyzers.put(AnalysisRegistry.DEFAULT_ANALYZER_NAME, new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer()));
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.index.mapper.DocumentMapper;
+ * Licensed to Elasticsearch under one or more contributor
+            default:
+/*
+    }
+    public int run(Translog.Snapshot snapshot) throws IOException {
+ * You may obtain a copy of the License at
+import java.util.Map;
+            opsRecovered++;
+                    index.primaryTerm(),
+                engine.delete((Engine.Delete) operation);
+                    ),
+ *
+        }
+                final Engine.Index engineIndex = engine.prepareIndex(
+                    versionType,
+            null
+                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+            case DELETE:
         return new DocumentMapperForType(b.build(mapperService), null);
     }
-
-    private void applyOperation(Engine engine, Engine.Operation operation) throws IOException {
-        switch (operation.operationType()) {
-            case INDEX:
-                engine.index((Engine.Index) operation);
-                break;
-            case DELETE:
-                engine.delete((Engine.Delete) operation);
-                break;
-            case NO_OP:
-                engine.noOp((Engine.NoOp) operation);
-                break;
-            default:
-                throw new IllegalStateException("No operation defined for [" + operation + "]");
-        }
-    }
-
-    @Override
-    public int run(Translog.Snapshot snapshot) throws IOException {
-        int opsRecovered = 0;
-        Translog.Operation operation;
-        while ((operation = snapshot.next()) != null) {
-            applyOperation(engine, convertToEngineOp(operation, Engine.Operation.Origin.LOCAL_TRANSLOG_RECOVERY));
-            opsRecovered++;
-            appliedOperations.incrementAndGet();
-        }
-        engine.translogManager().syncTranslog();
-        return opsRecovered;
-    }
-
-    public Engine.Operation convertToEngineOp(Translog.Operation operation, Engine.Operation.Origin origin) {
-        // If a translog op is replayed on the primary (eg. ccr), we need to use external instead of null for its version type.
-        final VersionType versionType = (origin == Engine.Operation.Origin.PRIMARY) ? VersionType.EXTERNAL : null;
-        switch (operation.opType()) {
-            case INDEX:
-                final Translog.Index index = (Translog.Index) operation;
-                final String indexName = mapperService.index().getName();
-                final Engine.Index engineIndex = engine.prepareIndex(
-                    docMapper(MapperService.SINGLE_MAPPING_NAME),
-                    new SourceToParse(
-                        indexName,
-                        index.id(),
-                        index.source(),
-                        MediaTypeRegistry.xContentType(index.source()),
-                        index.routing()
-                    ),
-                    index.seqNo(),
-                    index.primaryTerm(),
-                    index.version(),
-                    versionType,
-                    origin,
-                    index.getAutoGeneratedIdTimestamp(),
-                    true,
-                    SequenceNumbers.UNASSIGNED_SEQ_NO,
-                    SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-                );
-                return engineIndex;
-            case DELETE:
-                final Translog.Delete delete = (Translog.Delete) operation;
-                return engine.prepareDelete(
-                    delete.id(),
-                    delete.routing(),
-                    delete.seqNo(),
-                    delete.primaryTerm(),
                     delete.version(),
-                    versionType,
-                    origin,
-                    SequenceNumbers.UNASSIGNED_SEQ_NO,
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+ */
+                final Translog.Delete delete = (Translog.Delete) operation;
+                        indexName,
+            case DELETE:
                     SequenceNumbers.UNASSIGNED_PRIMARY_TERM
-                );
-            case NO_OP:
-                final Translog.NoOp noOp = (Translog.NoOp) operation;
-                final Engine.NoOp engineNoOp = new Engine.NoOp(noOp.seqNo(), noOp.primaryTerm(), origin, System.nanoTime(), noOp.reason());
-                return engineNoOp;
-            default:
-                throw new IllegalStateException("No operation defined for [" + operation + "]");
-        }
+                return engine.prepareDelete(
+import static java.util.Collections.emptyList;
+                    index.version(),
     }
-
-}
+                    true,
+    }
+        int opsRecovered = 0;

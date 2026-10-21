@@ -1,1182 +1,987 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.painless.antlr;
-
-import org.antlr.v4.runtime.ANTLRInputStream;
-import org.antlr.v4.runtime.BaseErrorListener;
-import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.DiagnosticErrorListener;
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.RecognitionException;
-import org.antlr.v4.runtime.Recognizer;
-import org.antlr.v4.runtime.atn.PredictionMode;
-import org.antlr.v4.runtime.tree.TerminalNode;
-
-import org.opensearch.painless.CompilerSettings;
-import org.opensearch.painless.Location;
-import org.opensearch.painless.Operation;
-import org.opensearch.painless.antlr.PainlessParser.AddsubContext;
-import org.opensearch.painless.antlr.PainlessParser.AfterthoughtContext;
-import org.opensearch.painless.antlr.PainlessParser.ArgumentContext;
-import org.opensearch.painless.antlr.PainlessParser.ArgumentsContext;
-import org.opensearch.painless.antlr.PainlessParser.AssignmentContext;
-import org.opensearch.painless.antlr.PainlessParser.BinaryContext;
-import org.opensearch.painless.antlr.PainlessParser.BlockContext;
-import org.opensearch.painless.antlr.PainlessParser.BoolContext;
-import org.opensearch.painless.antlr.PainlessParser.BraceaccessContext;
-import org.opensearch.painless.antlr.PainlessParser.BreakContext;
-import org.opensearch.painless.antlr.PainlessParser.CallinvokeContext;
-import org.opensearch.painless.antlr.PainlessParser.CalllocalContext;
-import org.opensearch.painless.antlr.PainlessParser.CastContext;
-import org.opensearch.painless.antlr.PainlessParser.ClassfuncrefContext;
-import org.opensearch.painless.antlr.PainlessParser.CompContext;
-import org.opensearch.painless.antlr.PainlessParser.ConditionalContext;
-import org.opensearch.painless.antlr.PainlessParser.ConstructorfuncrefContext;
-import org.opensearch.painless.antlr.PainlessParser.ContinueContext;
-import org.opensearch.painless.antlr.PainlessParser.DeclContext;
-import org.opensearch.painless.antlr.PainlessParser.DeclarationContext;
-import org.opensearch.painless.antlr.PainlessParser.DecltypeContext;
-import org.opensearch.painless.antlr.PainlessParser.DeclvarContext;
-import org.opensearch.painless.antlr.PainlessParser.DoContext;
-import org.opensearch.painless.antlr.PainlessParser.DynamicContext;
-import org.opensearch.painless.antlr.PainlessParser.EachContext;
-import org.opensearch.painless.antlr.PainlessParser.ElvisContext;
-import org.opensearch.painless.antlr.PainlessParser.EmptyContext;
-import org.opensearch.painless.antlr.PainlessParser.ExprContext;
-import org.opensearch.painless.antlr.PainlessParser.ExpressionContext;
-import org.opensearch.painless.antlr.PainlessParser.FalseContext;
-import org.opensearch.painless.antlr.PainlessParser.FieldaccessContext;
-import org.opensearch.painless.antlr.PainlessParser.ForContext;
-import org.opensearch.painless.antlr.PainlessParser.FunctionContext;
-import org.opensearch.painless.antlr.PainlessParser.IfContext;
-import org.opensearch.painless.antlr.PainlessParser.IneachContext;
-import org.opensearch.painless.antlr.PainlessParser.InitializerContext;
-import org.opensearch.painless.antlr.PainlessParser.InstanceofContext;
-import org.opensearch.painless.antlr.PainlessParser.LambdaContext;
-import org.opensearch.painless.antlr.PainlessParser.LamtypeContext;
-import org.opensearch.painless.antlr.PainlessParser.ListinitContext;
-import org.opensearch.painless.antlr.PainlessParser.ListinitializerContext;
-import org.opensearch.painless.antlr.PainlessParser.LocalfuncrefContext;
-import org.opensearch.painless.antlr.PainlessParser.MapinitContext;
-import org.opensearch.painless.antlr.PainlessParser.MapinitializerContext;
-import org.opensearch.painless.antlr.PainlessParser.MaptokenContext;
-import org.opensearch.painless.antlr.PainlessParser.NewarrayContext;
-import org.opensearch.painless.antlr.PainlessParser.NewinitializedarrayContext;
-import org.opensearch.painless.antlr.PainlessParser.NewobjectContext;
-import org.opensearch.painless.antlr.PainlessParser.NewstandardarrayContext;
-import org.opensearch.painless.antlr.PainlessParser.NonconditionalContext;
-import org.opensearch.painless.antlr.PainlessParser.NotContext;
-import org.opensearch.painless.antlr.PainlessParser.NotaddsubContext;
-import org.opensearch.painless.antlr.PainlessParser.NullContext;
-import org.opensearch.painless.antlr.PainlessParser.NumericContext;
-import org.opensearch.painless.antlr.PainlessParser.ParametersContext;
-import org.opensearch.painless.antlr.PainlessParser.PostContext;
-import org.opensearch.painless.antlr.PainlessParser.PostdotContext;
-import org.opensearch.painless.antlr.PainlessParser.PostfixContext;
-import org.opensearch.painless.antlr.PainlessParser.PreContext;
-import org.opensearch.painless.antlr.PainlessParser.PrecedenceContext;
-import org.opensearch.painless.antlr.PainlessParser.ReadContext;
-import org.opensearch.painless.antlr.PainlessParser.RegexContext;
-import org.opensearch.painless.antlr.PainlessParser.ReturnContext;
-import org.opensearch.painless.antlr.PainlessParser.SingleContext;
-import org.opensearch.painless.antlr.PainlessParser.SourceContext;
-import org.opensearch.painless.antlr.PainlessParser.StatementContext;
-import org.opensearch.painless.antlr.PainlessParser.StringContext;
-import org.opensearch.painless.antlr.PainlessParser.ThrowContext;
-import org.opensearch.painless.antlr.PainlessParser.TrailerContext;
-import org.opensearch.painless.antlr.PainlessParser.TrapContext;
-import org.opensearch.painless.antlr.PainlessParser.TrueContext;
-import org.opensearch.painless.antlr.PainlessParser.TryContext;
-import org.opensearch.painless.antlr.PainlessParser.TypeContext;
-import org.opensearch.painless.antlr.PainlessParser.VariableContext;
-import org.opensearch.painless.antlr.PainlessParser.WhileContext;
-import org.opensearch.painless.node.AExpression;
-import org.opensearch.painless.node.ANode;
-import org.opensearch.painless.node.AStatement;
-import org.opensearch.painless.node.EAssignment;
-import org.opensearch.painless.node.EBinary;
-import org.opensearch.painless.node.EBooleanComp;
-import org.opensearch.painless.node.EBooleanConstant;
-import org.opensearch.painless.node.EBrace;
-import org.opensearch.painless.node.ECall;
-import org.opensearch.painless.node.ECallLocal;
-import org.opensearch.painless.node.EComp;
-import org.opensearch.painless.node.EConditional;
-import org.opensearch.painless.node.EDecimal;
-import org.opensearch.painless.node.EDot;
-import org.opensearch.painless.node.EElvis;
-import org.opensearch.painless.node.EExplicit;
-import org.opensearch.painless.node.EFunctionRef;
-import org.opensearch.painless.node.EInstanceof;
-import org.opensearch.painless.node.ELambda;
-import org.opensearch.painless.node.EListInit;
-import org.opensearch.painless.node.EMapInit;
-import org.opensearch.painless.node.ENewArray;
-import org.opensearch.painless.node.ENewArrayFunctionRef;
-import org.opensearch.painless.node.ENewObj;
-import org.opensearch.painless.node.ENull;
-import org.opensearch.painless.node.ENumeric;
-import org.opensearch.painless.node.ERegex;
-import org.opensearch.painless.node.EString;
-import org.opensearch.painless.node.ESymbol;
-import org.opensearch.painless.node.EUnary;
-import org.opensearch.painless.node.SBlock;
-import org.opensearch.painless.node.SBreak;
-import org.opensearch.painless.node.SCatch;
-import org.opensearch.painless.node.SClass;
-import org.opensearch.painless.node.SContinue;
-import org.opensearch.painless.node.SDeclBlock;
-import org.opensearch.painless.node.SDeclaration;
-import org.opensearch.painless.node.SDo;
-import org.opensearch.painless.node.SEach;
-import org.opensearch.painless.node.SExpression;
-import org.opensearch.painless.node.SFor;
-import org.opensearch.painless.node.SFunction;
-import org.opensearch.painless.node.SIf;
-import org.opensearch.painless.node.SIfElse;
-import org.opensearch.painless.node.SReturn;
-import org.opensearch.painless.node.SThrow;
-import org.opensearch.painless.node.STry;
-import org.opensearch.painless.node.SWhile;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import static java.util.Collections.emptyList;
-
-/**
- * Converts the ANTLR tree to a Painless tree.
- */
-public final class Walker extends PainlessParserBaseVisitor<ANode> {
-
-    public static SClass buildPainlessTree(String sourceName, String sourceText, CompilerSettings settings) {
-        return new Walker(sourceName, sourceText, settings).source;
-    }
-
-    private final CompilerSettings settings;
-    private final String sourceName;
-
-    private int identifier;
-
-    private final SClass source;
-
-    private Walker(String sourceName, String sourceText, CompilerSettings settings) {
-        this.settings = settings;
-        this.sourceName = sourceName;
-
-        this.identifier = 0;
-
-        this.source = (SClass) visit(buildAntlrTree(sourceText));
-    }
-
-    private int nextIdentifier() {
-        return identifier++;
-    }
-
-    private SourceContext buildAntlrTree(String source) {
-        ANTLRInputStream stream = new ANTLRInputStream(source);
-        PainlessLexer lexer = new EnhancedPainlessLexer(stream, sourceName);
-        PainlessParser parser = new PainlessParser(new CommonTokenStream(lexer));
-        ParserErrorStrategy strategy = new ParserErrorStrategy(sourceName);
-
-        lexer.removeErrorListeners();
-        parser.removeErrorListeners();
-
-        if (settings.isPicky()) {
-            setupPicky(parser);
-        }
-
-        parser.setErrorHandler(strategy);
-
-        return parser.source();
-    }
-
-    private void setupPicky(PainlessParser parser) {
-        // Diagnostic listener invokes syntaxError on other listeners for ambiguity issues,
-        parser.addErrorListener(new DiagnosticErrorListener(true));
-        // a second listener to fail the test when the above happens.
-        parser.addErrorListener(new BaseErrorListener() {
-            @Override
-            public void syntaxError(
-                final Recognizer<?, ?> recognizer,
-                final Object offendingSymbol,
-                final int line,
-                final int charPositionInLine,
-                final String msg,
-                final RecognitionException e
-            ) {
-                throw new AssertionError("line: " + line + ", offset: " + charPositionInLine + ", symbol:" + offendingSymbol + " " + msg);
-            }
-        });
-
-        // Enable exact ambiguity detection (costly). we enable exact since its the default for
-        // DiagnosticErrorListener, life is too short to think about what 'inexact ambiguity' might mean.
-        parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
-    }
-
-    private Location location(ParserRuleContext ctx) {
-        return new Location(sourceName, ctx.getStart().getStartIndex());
-    }
-
-    @Override
-    public ANode visitSource(SourceContext ctx) {
-        List<SFunction> functions = new ArrayList<>();
-
-        for (FunctionContext function : ctx.function()) {
-            functions.add((SFunction) visit(function));
-        }
-
-        // handle the code to generate the execute method here
-        // because the statements come loose from the grammar as
-        // part of the overall class
-        List<AStatement> statements = new ArrayList<>();
-
-        for (StatementContext statement : ctx.statement()) {
-            statements.add((AStatement) visit(statement));
-        }
-
-        // generate the execute method from the collected statements and parameters
-        SFunction execute = new SFunction(
-            nextIdentifier(),
-            location(ctx),
-            "<internal>",
-            "execute",
-            emptyList(),
-            emptyList(),
-            new SBlock(nextIdentifier(), location(ctx), statements),
-            false,
-            false,
-            false,
-            false
-        );
-        functions.add(execute);
-
-        return new SClass(nextIdentifier(), location(ctx), functions);
-    }
-
-    @Override
-    public ANode visitFunction(FunctionContext ctx) {
-        String rtnType = ctx.decltype().getText();
-        String name = ctx.ID().getText();
-        List<String> paramTypes = new ArrayList<>();
-        List<String> paramNames = new ArrayList<>();
-        List<AStatement> statements = new ArrayList<>();
-
-        for (DecltypeContext decltype : ctx.parameters().decltype()) {
-            paramTypes.add(decltype.getText());
-        }
-
-        for (TerminalNode id : ctx.parameters().ID()) {
-            paramNames.add(id.getText());
-        }
-
-        for (StatementContext statement : ctx.block().statement()) {
-            statements.add((AStatement) visit(statement));
-        }
-
-        if (ctx.block().dstatement() != null) {
-            statements.add((AStatement) visit(ctx.block().dstatement()));
-        }
-
-        return new SFunction(
-            nextIdentifier(),
-            location(ctx),
-            rtnType,
-            name,
-            paramTypes,
-            paramNames,
-            new SBlock(nextIdentifier(), location(ctx), statements),
-            false,
-            true,
-            false,
-            false
-        );
-    }
-
-    @Override
-    public ANode visitParameters(ParametersContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitStatement(StatementContext ctx) {
-        if (ctx.rstatement() != null) {
-            return visit(ctx.rstatement());
-        } else if (ctx.dstatement() != null) {
-            return visit(ctx.dstatement());
         } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitIf(IfContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-        SBlock ifblock = (SBlock) visit(ctx.trailer(0));
-
-        if (ctx.trailer().size() > 1) {
-            SBlock elseblock = (SBlock) visit(ctx.trailer(1));
-
-            return new SIfElse(nextIdentifier(), location(ctx), expression, ifblock, elseblock);
-        } else {
-            return new SIf(nextIdentifier(), location(ctx), expression, ifblock);
-        }
-    }
-
-    @Override
-    public ANode visitWhile(WhileContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-
-        if (ctx.trailer() != null) {
-            SBlock block = (SBlock) visit(ctx.trailer());
-
-            return new SWhile(nextIdentifier(), location(ctx), expression, block);
-        } else if (ctx.empty() != null) {
-            return new SWhile(nextIdentifier(), location(ctx), expression, null);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitDo(DoContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-        SBlock block = (SBlock) visit(ctx.block());
-
-        return new SDo(nextIdentifier(), location(ctx), expression, block);
-    }
-
-    @Override
-    public ANode visitFor(ForContext ctx) {
-        ANode initializer = ctx.initializer() == null ? null : visit(ctx.initializer());
-        AExpression expression = ctx.expression() == null ? null : (AExpression) visit(ctx.expression());
-        AExpression afterthought = ctx.afterthought() == null ? null : (AExpression) visit(ctx.afterthought());
-
-        if (ctx.trailer() != null) {
-            SBlock block = (SBlock) visit(ctx.trailer());
-
-            return new SFor(nextIdentifier(), location(ctx), initializer, expression, afterthought, block);
-        } else if (ctx.empty() != null) {
-            return new SFor(nextIdentifier(), location(ctx), initializer, expression, afterthought, null);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitEach(EachContext ctx) {
-        String type = ctx.decltype().getText();
-        String name = ctx.ID().getText();
-        AExpression expression = (AExpression) visit(ctx.expression());
-        SBlock block = (SBlock) visit(ctx.trailer());
-
-        return new SEach(nextIdentifier(), location(ctx), type, name, expression, block);
-    }
-
-    @Override
-    public ANode visitIneach(IneachContext ctx) {
-        String name = ctx.ID().getText();
-        AExpression expression = (AExpression) visit(ctx.expression());
-        SBlock block = (SBlock) visit(ctx.trailer());
-
-        return new SEach(nextIdentifier(), location(ctx), "def", name, expression, block);
-    }
-
-    @Override
-    public ANode visitDecl(DeclContext ctx) {
-        return visit(ctx.declaration());
-    }
-
-    @Override
-    public ANode visitContinue(ContinueContext ctx) {
-        return new SContinue(nextIdentifier(), location(ctx));
-    }
-
-    @Override
-    public ANode visitBreak(BreakContext ctx) {
-        return new SBreak(nextIdentifier(), location(ctx));
-    }
-
-    @Override
-    public ANode visitReturn(ReturnContext ctx) {
-        AExpression expression = null;
-
-        if (ctx.expression() != null) {
-            expression = (AExpression) visit(ctx.expression());
-        }
-
-        return new SReturn(nextIdentifier(), location(ctx), expression);
-    }
-
-    @Override
-    public ANode visitTry(TryContext ctx) {
-        SBlock block = (SBlock) visit(ctx.block());
-        List<SCatch> catches = new ArrayList<>();
-
-        for (TrapContext trap : ctx.trap()) {
-            catches.add((SCatch) visit(trap));
-        }
-
-        return new STry(nextIdentifier(), location(ctx), block, catches);
-    }
-
-    @Override
-    public ANode visitThrow(ThrowContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-
-        return new SThrow(nextIdentifier(), location(ctx), expression);
-    }
-
-    @Override
-    public ANode visitExpr(ExprContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-
-        return new SExpression(nextIdentifier(), location(ctx), expression);
-    }
-
-    @Override
-    public ANode visitTrailer(TrailerContext ctx) {
-        if (ctx.block() != null) {
-            return visit(ctx.block());
-        } else if (ctx.statement() != null) {
-            List<AStatement> statements = new ArrayList<>();
-            statements.add((AStatement) visit(ctx.statement()));
-
-            return new SBlock(nextIdentifier(), location(ctx), statements);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitBlock(BlockContext ctx) {
-        if (ctx.statement().isEmpty() && ctx.dstatement() == null) {
-            return null;
-        } else {
-            List<AStatement> statements = new ArrayList<>();
-
-            for (StatementContext statement : ctx.statement()) {
-                statements.add((AStatement) visit(statement));
-            }
-
-            if (ctx.dstatement() != null) {
-                statements.add((AStatement) visit(ctx.dstatement()));
-            }
-
-            return new SBlock(nextIdentifier(), location(ctx), statements);
-        }
-    }
-
-    @Override
-    public ANode visitEmpty(EmptyContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitInitializer(InitializerContext ctx) {
-        if (ctx.declaration() != null) {
-            return visit(ctx.declaration());
-        } else if (ctx.expression() != null) {
-            return visit(ctx.expression());
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitAfterthought(AfterthoughtContext ctx) {
-        return visit(ctx.expression());
-    }
-
-    @Override
-    public ANode visitDeclaration(DeclarationContext ctx) {
-        String type = ctx.decltype().getText();
-        List<SDeclaration> declarations = new ArrayList<>();
-
-        for (DeclvarContext declvar : ctx.declvar()) {
-            String name = declvar.ID().getText();
-            AExpression expression = declvar.expression() == null ? null : (AExpression) visit(declvar.expression());
-            declarations.add(new SDeclaration(nextIdentifier(), location(declvar), type, name, expression));
-        }
-
-        return new SDeclBlock(nextIdentifier(), location(ctx), declarations);
-    }
-
-    @Override
-    public ANode visitDecltype(DecltypeContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitType(TypeContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitDeclvar(DeclvarContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitTrap(TrapContext ctx) {
-        String type = ctx.type().getText();
-        String name = ctx.ID().getText();
-        SBlock block = (SBlock) visit(ctx.block());
-
-        return new SCatch(nextIdentifier(), location(ctx), Exception.class, type, name, block);
-    }
-
-    @Override
-    public ANode visitSingle(SingleContext ctx) {
-        return visit(ctx.unary());
-    }
-
-    @Override
-    public ANode visitBinary(BinaryContext ctx) {
-        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
-        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
-        final Operation operation;
-
-        if (ctx.MUL() != null) {
-            operation = Operation.MUL;
-        } else if (ctx.DIV() != null) {
-            operation = Operation.DIV;
-        } else if (ctx.REM() != null) {
-            operation = Operation.REM;
-        } else if (ctx.ADD() != null) {
-            operation = Operation.ADD;
-        } else if (ctx.SUB() != null) {
-            operation = Operation.SUB;
-        } else if (ctx.FIND() != null) {
-            operation = Operation.FIND;
-        } else if (ctx.MATCH() != null) {
-            operation = Operation.MATCH;
-        } else if (ctx.LSH() != null) {
-            operation = Operation.LSH;
-        } else if (ctx.RSH() != null) {
-            operation = Operation.RSH;
-        } else if (ctx.USH() != null) {
-            operation = Operation.USH;
-        } else if (ctx.BWAND() != null) {
-            operation = Operation.BWAND;
-        } else if (ctx.XOR() != null) {
-            operation = Operation.XOR;
-        } else if (ctx.BWOR() != null) {
-            operation = Operation.BWOR;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EBinary(nextIdentifier(), location(ctx), left, right, operation);
-    }
-
-    @Override
-    public ANode visitComp(CompContext ctx) {
-        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
-        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
-        final Operation operation;
-
-        if (ctx.LT() != null) {
-            operation = Operation.LT;
-        } else if (ctx.LTE() != null) {
-            operation = Operation.LTE;
-        } else if (ctx.GT() != null) {
-            operation = Operation.GT;
-        } else if (ctx.GTE() != null) {
-            operation = Operation.GTE;
-        } else if (ctx.EQ() != null) {
             operation = Operation.EQ;
-        } else if (ctx.EQR() != null) {
-            operation = Operation.EQR;
-        } else if (ctx.NE() != null) {
             operation = Operation.NE;
-        } else if (ctx.NER() != null) {
-            operation = Operation.NER;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    }
+        } else if (ctx.DECR() != null) {
+    public ANode visitDynamic(DynamicContext ctx) {
+ * GitHub history for details.
+    public ANode visitNotaddsub(NotaddsubContext ctx) {
+        return identifier++;
         }
-
-        return new EComp(nextIdentifier(), location(ctx), left, right, operation);
-    }
-
-    @Override
-    public ANode visitInstanceof(InstanceofContext ctx) {
-        AExpression expr = (AExpression) visit(ctx.noncondexpression());
-        String type = ctx.decltype().getText();
-
-        return new EInstanceof(nextIdentifier(), location(ctx), expr, type);
-    }
-
-    @Override
-    public ANode visitBool(BoolContext ctx) {
-        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
-        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
-        final Operation operation;
-
-        if (ctx.BOOLAND() != null) {
-            operation = Operation.AND;
-        } else if (ctx.BOOLOR() != null) {
-            operation = Operation.OR;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+                statements.add((AStatement) visit(statement));
         }
-
-        return new EBooleanComp(nextIdentifier(), location(ctx), left, right, operation);
+        return new SReturn(nextIdentifier(), location(ctx), expression);
+            String name = declvar.ID().getText();
+            operation = Operation.DIV;
+            operation = Operation.SUB;
     }
-
+            return visit(ctx.block());
+ *
     @Override
     public ANode visitElvis(ElvisContext ctx) {
-        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
-        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
-
-        return new EElvis(nextIdentifier(), location(ctx), left, right);
-    }
-
+import org.opensearch.painless.node.SBreak;
+ * Modifications Copyright OpenSearch Contributors. See
+        functions.add(execute);
+    public ANode visitArguments(ArgumentsContext ctx) {
+        // Diagnostic listener invokes syntaxError on other listeners for ambiguity issues,
+import org.opensearch.painless.antlr.PainlessParser.ReturnContext;
+        } else if (ctx.HEX() != null) {
+            paramNames.add(lamtype.ID().getText());
+        parser.setErrorHandler(strategy);
+            statements.add((AStatement) visit(ctx.block().dstatement()));
+            statements.add((AStatement) visit(statement));
     @Override
-    public ANode visitNonconditional(NonconditionalContext ctx) {
-        return visit(ctx.noncondexpression());
+/*
+            List<AStatement> statements = new ArrayList<>();
+import org.opensearch.painless.node.EComp;
+import org.opensearch.painless.antlr.PainlessParser.BraceaccessContext;
+        AExpression expression = (AExpression) visit(ctx.expression());
     }
-
-    @Override
-    public ANode visitConditional(ConditionalContext ctx) {
-        AExpression condition = (AExpression) visit(ctx.noncondexpression());
-        AExpression left = (AExpression) visit(ctx.expression(0));
-        AExpression right = (AExpression) visit(ctx.expression(1));
-
-        return new EConditional(nextIdentifier(), location(ctx), condition, left, right);
+            SBlock block = (SBlock) visit(ctx.trailer());
     }
-
+            type.append("[]");
     @Override
-    public ANode visitAssignment(AssignmentContext ctx) {
-        AExpression lhs = (AExpression) visit(ctx.noncondexpression());
-        AExpression rhs = (AExpression) visit(ctx.expression());
-
-        final Operation operation;
-
-        if (ctx.ASSIGN() != null) {
-            operation = null;
-        } else if (ctx.AMUL() != null) {
-            operation = Operation.MUL;
-        } else if (ctx.ADIV() != null) {
-            operation = Operation.DIV;
-        } else if (ctx.AREM() != null) {
-            operation = Operation.REM;
-        } else if (ctx.AADD() != null) {
-            operation = Operation.ADD;
-        } else if (ctx.ASUB() != null) {
-            operation = Operation.SUB;
-        } else if (ctx.ALSH() != null) {
-            operation = Operation.LSH;
-        } else if (ctx.ARSH() != null) {
-            operation = Operation.RSH;
-        } else if (ctx.AUSH() != null) {
-            operation = Operation.USH;
-        } else if (ctx.AAND() != null) {
-            operation = Operation.BWAND;
-        } else if (ctx.AXOR() != null) {
             operation = Operation.XOR;
-        } else if (ctx.AOR() != null) {
-            operation = Operation.BWOR;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EAssignment(nextIdentifier(), location(ctx), lhs, rhs, false, operation);
-    }
-
-    @Override
-    public ANode visitPre(PreContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.chain());
-
-        final Operation operation;
-
-        if (ctx.INCR() != null) {
-            operation = Operation.ADD;
-        } else if (ctx.DECR() != null) {
-            operation = Operation.SUB;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EAssignment(
-            nextIdentifier(),
-            location(ctx),
-            expression,
-            new ENumeric(nextIdentifier(), location(ctx), "1", 10),
-            false,
             operation
-        );
-    }
-
+/*
+        lexer.removeErrorListeners();
+        for (StatementContext statement : ctx.statement()) {
     @Override
-    public ANode visitAddsub(AddsubContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.unary());
-
-        final Operation operation;
-
-        if (ctx.ADD() != null) {
-            operation = Operation.ADD;
-        } else if (ctx.SUB() != null) {
-            operation = Operation.SUB;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        for (DeclvarContext declvar : ctx.declvar()) {
+        String type = ctx.type().getText();
         }
-
-        return new EUnary(nextIdentifier(), location(ctx), expression, operation);
-    }
-
     @Override
-    public ANode visitNotaddsub(NotaddsubContext ctx) {
-        return visit(ctx.unarynotaddsub());
-    }
-
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        return visit(ctx.arrayinitializer());
     @Override
-    public ANode visitRead(ReadContext ctx) {
-        return visit(ctx.chain());
+        return new Location(sourceName, ctx.getStart().getStartIndex());
     }
-
+            AExpression expression = declvar.expression() == null ? null : (AExpression) visit(declvar.expression());
+            operation = Operation.FIND;
+        AExpression expression = ctx.expression() == null ? null : (AExpression) visit(ctx.expression());
     @Override
-    public ANode visitPost(PostContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.chain());
-
-        final Operation operation;
-
-        if (ctx.INCR() != null) {
-            operation = Operation.ADD;
-        } else if (ctx.DECR() != null) {
-            operation = Operation.SUB;
+import org.opensearch.painless.antlr.PainlessParser.NotContext;
+    }
+            return visitFieldaccess(ctx.fieldaccess(), prefix);
+    public ANode visitStatement(StatementContext ctx) {
+    @Override
         } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EAssignment(
-            nextIdentifier(),
-            location(ctx),
-            expression,
-            new ENumeric(nextIdentifier(), location(ctx), "1", 10),
-            true,
-            operation
-        );
-    }
-
-    @Override
-    public ANode visitNot(NotContext ctx) {
-        AExpression expression = (AExpression) visit(ctx.unary());
-
-        final Operation operation;
-
+        } else if (ctx.ARSH() != null) {
+            char current = string.charAt(src);
+                current = string.charAt(src);
+import org.opensearch.painless.antlr.PainlessParser.LamtypeContext;
+/**
+        } else {
+            "<internal>",
         if (ctx.BOOLNOT() != null) {
-            operation = Operation.NOT;
-        } else if (ctx.BWNOT() != null) {
-            operation = Operation.BWNOT;
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EUnary(nextIdentifier(), location(ctx), expression, operation);
-    }
-
-    @Override
-    public ANode visitCast(CastContext ctx) {
-        return visit(ctx.castexpression());
-    }
-
-    @Override
-    public ANode visitPrimordefcast(PainlessParser.PrimordefcastContext ctx) {
-        String type = ctx.primordefcasttype().getText();
-        AExpression child = (AExpression) visit(ctx.unary());
-
-        return new EExplicit(nextIdentifier(), location(ctx), type, child);
-    }
-
-    @Override
-    public ANode visitRefcast(PainlessParser.RefcastContext ctx) {
         String type = ctx.refcasttype().getText();
-        AExpression child = (AExpression) visit(ctx.unarynotaddsub());
-
-        return new EExplicit(nextIdentifier(), location(ctx), type, child);
+        );
+        String type = ctx.decltype().getText();
+        return new EListInit(nextIdentifier(), location(ctx), values);
+    public ANode visitClassfuncref(ClassfuncrefContext ctx) {
+        if (ctx.DECIMAL() != null) {
+/*
+        } else if (ctx.NE() != null) {
+import org.opensearch.painless.antlr.PainlessParser.CastContext;
+        if (postdot != null) {
+    @Override
     }
-
+        } else if (ctx.AMUL() != null) {
+        }
+import org.opensearch.painless.antlr.PainlessParser.ListinitializerContext;
+    @Override
+        this.settings = settings;
+            operation = Operation.XOR;
+    @Override
+    }
+        String name = ctx.ID().getText();
+import org.opensearch.painless.node.ENewArrayFunctionRef;
+            src++;
+            prefix = visitPostdot(postdot, prefix);
+            operation = Operation.BWOR;
+    }
+    }
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        List<SFunction> functions = new ArrayList<>();
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+import org.opensearch.painless.node.ENewArray;
+    }
+    public static SClass buildPainlessTree(String sourceName, String sourceText, CompilerSettings settings) {
+        SBlock block = (SBlock) visit(ctx.trailer());
+    public ANode visitEmpty(EmptyContext ctx) {
+        if (ctx.trailer() != null) {
+import org.opensearch.painless.node.AExpression;
+        }
+import org.opensearch.painless.antlr.PainlessParser.PreContext;
+        return new EBrace(nextIdentifier(), location(ctx), prefix, expression);
+        } else {
+            false
+import org.opensearch.painless.antlr.PainlessParser.DeclvarContext;
+    public ANode visitFor(ForContext ctx) {
+ * not use this file except in compliance with the License.
+    public ANode visitCallinvoke(CallinvokeContext ctx) {
+import org.opensearch.painless.antlr.PainlessParser.TrueContext;
+        // a second listener to fail the test when the above happens.
+    }
+        } else if (ctx.DECR() != null) {
+    public ANode visitLambda(LambdaContext ctx) {
+            return null;
+        AExpression expression = (AExpression) visit(ctx.expression());
+        );
+        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
+            operation = Operation.LSH;
+            return new SBlock(nextIdentifier(), location(ctx), statements);
+    }
+    public ANode visitTrailer(TrailerContext ctx) {
+        return visit(ctx.declaration());
+    public AExpression visitBraceaccess(BraceaccessContext ctx, AExpression prefix) {
+        }
+import org.opensearch.painless.node.SThrow;
+package org.opensearch.painless.antlr;
+    }
+            new SBlock(nextIdentifier(), location(ctx), statements),
+        } else if (ctx.XOR() != null) {
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            location(ctx),
+            statements.add((AStatement) visit(statement));
+    public ANode visitBinary(BinaryContext ctx) {
+            operation = Operation.GT;
+import org.opensearch.painless.antlr.PainlessParser.BinaryContext;
+            SBlock elseblock = (SBlock) visit(ctx.trailer(1));
+        assert string.charAt(end) == '"' || string.charAt(end) == '\'' : "expected string to end with a quote was [" + string + "]";
+            operation
+    @Override
+        } else if (ctx.DOTINTEGER() != null) {
+    }
+import org.opensearch.painless.antlr.PainlessParser.PostfixContext;
+import org.opensearch.painless.node.SFunction;
+import org.opensearch.painless.antlr.PainlessParser.ExpressionContext;
+import org.opensearch.painless.antlr.PainlessParser.TrailerContext;
+            return new SIf(nextIdentifier(), location(ctx), expression, ifblock);
+import org.opensearch.painless.antlr.PainlessParser.ConditionalContext;
+            operation = Operation.REM;
+        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
+        this.source = (SClass) visit(buildAntlrTree(sourceText));
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.opensearch.painless.node.SContinue;
+            paramNames.add(id.getText());
+            keys.add((AExpression) visit(maptoken.expression(0)));
+ * this work for additional information regarding copyright
+ */
+            return visit(ctx.dstatement());
+    @Override
+        } else {
+            new ENewArray(nextIdentifier(), location(ctx), type.toString(), expressions, false),
+        } else {
+            operation = Operation.USH;
+            expressions.add((AExpression) visit(expression));
+    }
+    }
+        }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+import org.opensearch.painless.antlr.PainlessParser.StringContext;
+            new ENumeric(nextIdentifier(), location(ctx), "1", 10),
+        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
+            operation = Operation.OR;
+import org.opensearch.painless.antlr.PainlessParser.EmptyContext;
+        if (ctx.ADD() != null) {
+    @Override
+        }
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            operation = Operation.AND;
+        }
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        } else if (ctx.dstatement() != null) {
+        } else if (ctx.AAND() != null) {
+        } else {
+import org.opensearch.painless.antlr.PainlessParser.CalllocalContext;
+    }
+    }
+        } else if (ctx.RSH() != null) {
+        } else if (ctx.fieldaccess() != null) {
+    public ANode visitContinue(ContinueContext ctx) {
+        // because the statements come loose from the grammar as
+    public ANode visitAssignment(AssignmentContext ctx) {
+import org.opensearch.painless.antlr.PainlessParser.LocalfuncrefContext;
+ */
+            operation = Operation.MUL;
+    @Override
+            operation = Operation.MATCH;
+    }
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    public ANode visitCalllocal(CalllocalContext ctx) {
+            catches.add((SCatch) visit(trap));
+import org.opensearch.painless.antlr.PainlessParser.DoContext;
+            }
+        List<AExpression> values = new ArrayList<>();
+import org.opensearch.painless.antlr.PainlessParser.BoolContext;
+        parser.removeErrorListeners();
+        AExpression afterthought = ctx.afterthought() == null ? null : (AExpression) visit(ctx.afterthought());
+        } else if (ctx.AREM() != null) {
+    }
+            dest++;
+    public ANode visitInitializer(InitializerContext ctx) {
+        return new SBreak(nextIdentifier(), location(ctx));
+        PainlessLexer lexer = new EnhancedPainlessLexer(stream, sourceName);
+        }
+    @Override
+    }
+            functions.add((SFunction) visit(function));
+import org.opensearch.painless.antlr.PainlessParser.EachContext;
+                statements.add((AStatement) visit(ctx.dstatement()));
+        String name = ctx.ID().getText();
+        } else if (ctx.ADIV() != null) {
+        String flags = text.substring(lastSlash + 1);
+        ParserErrorStrategy strategy = new ParserErrorStrategy(sourceName);
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        }
+        return new EUnary(nextIdentifier(), location(ctx), expression, operation);
+            operation = Operation.NER;
+    public ANode visitTry(TryContext ctx) {
+        }
     @Override
     public ANode visitPrimordefcasttype(PainlessParser.PrimordefcasttypeContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitRefcasttype(PainlessParser.RefcasttypeContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    @Override
-    public ANode visitDynamic(DynamicContext ctx) {
-        AExpression primary = (AExpression) visit(ctx.primary());
-
-        return buildPostfixChain(primary, null, ctx.postfix());
-    }
-
-    @Override
-    public ANode visitNewarray(NewarrayContext ctx) {
-        return visit(ctx.arrayinitializer());
-    }
-
-    @Override
-    public ANode visitPrecedence(PrecedenceContext ctx) {
-        return visit(ctx.expression());
-    }
-
-    @Override
-    public ANode visitNumeric(NumericContext ctx) {
-        if (ctx.DECIMAL() != null) {
-            return new EDecimal(nextIdentifier(), location(ctx), ctx.DECIMAL().getText());
-        } else if (ctx.HEX() != null) {
-            return new ENumeric(nextIdentifier(), location(ctx), ctx.HEX().getText().substring(2), 16);
-        } else if (ctx.INTEGER() != null) {
-            return new ENumeric(nextIdentifier(), location(ctx), ctx.INTEGER().getText(), 10);
-        } else if (ctx.OCTAL() != null) {
-            return new ENumeric(nextIdentifier(), location(ctx), ctx.OCTAL().getText().substring(1), 8);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitTrue(TrueContext ctx) {
-        return new EBooleanConstant(nextIdentifier(), location(ctx), true);
-    }
-
-    @Override
-    public ANode visitFalse(FalseContext ctx) {
-        return new EBooleanConstant(nextIdentifier(), location(ctx), false);
-    }
-
-    @Override
-    public ANode visitNull(NullContext ctx) {
-        return new ENull(nextIdentifier(), location(ctx));
-    }
-
-    @Override
-    public ANode visitString(StringContext ctx) {
-        StringBuilder string = new StringBuilder(ctx.STRING().getText());
-
-        // Strip the leading and trailing quotes and replace the escape sequences with their literal equivalents
-        int src = 1;
-        int dest = 0;
-        int end = string.length() - 1;
-        assert string.charAt(0) == '"' || string.charAt(0) == '\'' : "expected string to start with a quote but was [" + string + "]";
-        assert string.charAt(end) == '"' || string.charAt(end) == '\'' : "expected string to end with a quote was [" + string + "]";
-        while (src < end) {
-            char current = string.charAt(src);
+        return visit(ctx.unarynotaddsub());
+        PainlessParser parser = new PainlessParser(new CommonTokenStream(lexer));
+        parser.addErrorListener(new BaseErrorListener() {
+            return visitCallinvoke(ctx.callinvoke(), prefix);
+    public ANode visitPost(PostContext ctx) {
             if (current == '\\') {
-                src++;
-                current = string.charAt(src);
-            }
-            string.setCharAt(dest, current);
-            src++;
-            dest++;
-        }
-        string.setLength(dest);
-
-        return new EString(nextIdentifier(), location(ctx), string.toString());
     }
-
-    @Override
-    public ANode visitRegex(RegexContext ctx) {
-        String text = ctx.REGEX().getText();
-        int lastSlash = text.lastIndexOf('/');
-        String pattern = text.substring(1, lastSlash);
-        String flags = text.substring(lastSlash + 1);
-
-        return new ERegex(nextIdentifier(), location(ctx), pattern, flags);
+import org.opensearch.painless.node.SDo;
+            operation = Operation.USH;
     }
-
-    @Override
-    public ANode visitListinit(ListinitContext ctx) {
-        return visit(ctx.listinitializer());
     }
-
-    @Override
-    public ANode visitMapinit(MapinitContext ctx) {
-        return visit(ctx.mapinitializer());
+    public ANode visitLocalfuncref(LocalfuncrefContext ctx) {
+    public ANode visitThrow(ThrowContext ctx) {
     }
-
+    public ANode visitNewinitializedarray(NewinitializedarrayContext ctx) {
+            );
     @Override
+        } else {
+        } else if (ctx.BOOLOR() != null) {
+        return new SEach(nextIdentifier(), location(ctx), "def", name, expression, block);
+    public ANode visitSource(SourceContext ctx) {
+import org.opensearch.painless.antlr.PainlessParser.NumericContext;
+        AExpression right = (AExpression) visit(ctx.noncondexpression(1));
     public ANode visitVariable(VariableContext ctx) {
-        String name = ctx.ID().getText();
-
-        return new ESymbol(nextIdentifier(), location(ctx), name);
+import org.opensearch.painless.Location;
     }
-
-    @Override
-    public ANode visitCalllocal(CalllocalContext ctx) {
-        String name = ctx.ID().getText();
-        List<AExpression> arguments = collectArguments(ctx.arguments());
-
-        return new ECallLocal(nextIdentifier(), location(ctx), name, arguments);
-    }
-
-    @Override
-    public ANode visitNewobject(NewobjectContext ctx) {
-        String type = ctx.type().getText();
-        List<AExpression> arguments = collectArguments(ctx.arguments());
-
-        return new ENewObj(nextIdentifier(), location(ctx), type, arguments);
-    }
-
-    private AExpression buildPostfixChain(AExpression primary, PostdotContext postdot, List<PostfixContext> postfixes) {
-        AExpression prefix = primary;
-
-        if (postdot != null) {
-            prefix = visitPostdot(postdot, prefix);
+            nextIdentifier(),
+        return parser.source();
+import org.opensearch.painless.antlr.PainlessParser.AfterthoughtContext;
         }
-
+import org.opensearch.painless.node.EString;
+            operation = Operation.ADD;
+        List<AExpression> arguments = new ArrayList<>();
+        String name = ctx.ID().getText();
+            false
+import org.opensearch.painless.node.SIfElse;
+    @Override
+            false,
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+ * under the License.
+import org.opensearch.painless.antlr.PainlessParser.DeclarationContext;
+        } else if (ctx.lambda() != null) {
+        } else {
+        String name = ctx.ID().getText();
+    @Override
+import org.opensearch.painless.node.STry;
+    public ANode visitDeclvar(DeclvarContext ctx) {
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.NonconditionalContext;
+    }
+import org.opensearch.painless.antlr.PainlessParser.ClassfuncrefContext;
+            operation = Operation.LSH;
+            false,
+        }
+        List<AExpression> arguments = collectArguments(ctx.arguments());
+                final Recognizer<?, ?> recognizer,
+import org.opensearch.painless.node.ENull;
+    public ANode visitInstanceof(InstanceofContext ctx) {
+        } else if (ctx.braceaccess() != null) {
+    @Override
+        assert string.charAt(0) == '"' || string.charAt(0) == '\'' : "expected string to start with a quote but was [" + string + "]";
+        } else if (ctx.SUB() != null) {
+            arguments.add((AExpression) visit(argument));
+            block = new SBlock(
+    @Override
+            false,
+    public AExpression visitCallinvoke(CallinvokeContext ctx, AExpression prefix) {
+    @Override
+        parser.addErrorListener(new DiagnosticErrorListener(true));
+        } else if (ctx.LTE() != null) {
+        // handle the code to generate the execute method here
+    @Override
+    public ANode visitDecl(DeclContext ctx) {
+            operation = null;
+import org.opensearch.painless.antlr.PainlessParser.PostContext;
+        }
+        }
+    }
+    }
+        );
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+import org.opensearch.painless.antlr.PainlessParser.SingleContext;
+            nextIdentifier(),
+import org.opensearch.painless.antlr.PainlessParser.BlockContext;
+            return visit(ctx.expression());
+        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
+    @Override
+            return new EDecimal(nextIdentifier(), location(ctx), ctx.DECIMAL().getText());
+import org.opensearch.painless.node.SFor;
+import org.opensearch.painless.antlr.PainlessParser.DynamicContext;
+            emptyList(),
+        return new EFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText(), ctx.ID().getText());
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        return new SDo(nextIdentifier(), location(ctx), expression, block);
+        String rtnType = ctx.decltype().getText();
+    }
+        if (ctx.trailer().size() > 1) {
+        } else {
+ * Licensed to Elasticsearch under one or more contributor
+        // Enable exact ambiguity detection (costly). we enable exact since its the default for
+    public ANode visitIf(IfContext ctx) {
+ *
+            }
+import org.opensearch.painless.node.ENewObj;
+import org.opensearch.painless.node.EConditional;
+            operation = Operation.SUB;
+                final int charPositionInLine,
+            paramTypes.add(decltype.getText());
+            operation = Operation.SUB;
+    @Override
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    public ANode visitNewarray(NewarrayContext ctx) {
+                final String msg,
+ * ownership. Elasticsearch licenses this file to you under
+import org.opensearch.painless.node.AStatement;
+    }
+        }
+    public ANode visitComp(CompContext ctx) {
+        return new EBooleanConstant(nextIdentifier(), location(ctx), true);
+    public ANode visitBraceaccess(BraceaccessContext ctx) {
+        } else if (ctx.BWAND() != null) {
+ */
+    public ANode visitNonconditional(NonconditionalContext ctx) {
+ */
+    @Override
+            block = (SBlock) visit(ctx.block());
+    }
+ * compatible open source license.
+    public ANode visitBool(BoolContext ctx) {
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+        List<String> paramTypes = new ArrayList<>();
+    @Override
+    }
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            expressions.add((AExpression) visit(expression));
         for (PostfixContext postfix : postfixes) {
-            prefix = visitPostfix(postfix, prefix);
         }
-
+            return visit(ctx.lambda());
+    }
+    @Override
+ * this file be licensed under the Apache-2.0 license or a
+import org.opensearch.painless.antlr.PainlessParser.BreakContext;
+        if (ctx.expression() != null) {
+import org.opensearch.painless.node.ERegex;
+        AExpression rhs = (AExpression) visit(ctx.expression());
+        return buildPostfixChain(primary, null, ctx.postfix());
+            new SBlock(nextIdentifier(), location(ctx), statements),
+        if (ctx.expression() != null) {
+            return new ENumeric(nextIdentifier(), location(ctx), ctx.INTEGER().getText(), 10);
+    }
+        } else {
+            return new SFor(nextIdentifier(), location(ctx), initializer, expression, afterthought, block);
+ * specific language governing permissions and limitations
+        String type = ctx.decltype().getText();
+        List<AExpression> arguments = collectArguments(ctx.arguments());
+    public ANode visitString(StringContext ctx) {
+        } else if (ctx.INTEGER() != null) {
+            SBlock block = (SBlock) visit(ctx.trailer());
+        AExpression right = (AExpression) visit(ctx.expression(1));
+    private final SClass source;
+import org.antlr.v4.runtime.DiagnosticErrorListener;
+        for (ExpressionContext expression : ctx.expression()) {
+import org.opensearch.painless.antlr.PainlessParser.NotaddsubContext;
+    @Override
+        } else {
+        return visit(ctx.castexpression());
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.VariableContext;
+import org.opensearch.painless.antlr.PainlessParser.FieldaccessContext;
+            }
+        } else if (ctx.ALSH() != null) {
+        if (ctx.declaration() != null) {
         return prefix;
     }
-
-    @Override
-    public ANode visitPostfix(PostfixContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
     }
-
-    public AExpression visitPostfix(PostfixContext ctx, AExpression prefix) {
-        if (ctx.callinvoke() != null) {
-            return visitCallinvoke(ctx.callinvoke(), prefix);
-        } else if (ctx.fieldaccess() != null) {
-            return visitFieldaccess(ctx.fieldaccess(), prefix);
-        } else if (ctx.braceaccess() != null) {
-            return visitBraceaccess(ctx.braceaccess(), prefix);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        return new ELambda(nextIdentifier(), location(ctx), paramTypes, paramNames, block);
+            operation = Operation.NOT;
+    public ANode visitDeclaration(DeclarationContext ctx) {
+            operation = Operation.REM;
+        } else if (ctx.ADD() != null) {
+    }
+import org.opensearch.painless.antlr.PainlessParser.IfContext;
+ * SPDX-License-Identifier: Apache-2.0
         }
-    }
-
-    @Override
-    public ANode visitPostdot(PostdotContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    public AExpression visitPostdot(PostdotContext ctx, AExpression prefix) {
-        if (ctx.callinvoke() != null) {
-            return visitCallinvoke(ctx.callinvoke(), prefix);
-        } else if (ctx.fieldaccess() != null) {
-            return visitFieldaccess(ctx.fieldaccess(), prefix);
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-    }
-
-    @Override
-    public ANode visitCallinvoke(CallinvokeContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    public AExpression visitCallinvoke(CallinvokeContext ctx, AExpression prefix) {
-        String name = ctx.DOTID().getText();
-        List<AExpression> arguments = collectArguments(ctx.arguments());
-
-        return new ECall(nextIdentifier(), location(ctx), prefix, name, arguments, ctx.NSDOT() != null);
-    }
-
-    @Override
-    public ANode visitFieldaccess(FieldaccessContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    public AExpression visitFieldaccess(FieldaccessContext ctx, AExpression prefix) {
-        final String value;
-
-        if (ctx.DOTID() != null) {
-            value = ctx.DOTID().getText();
-        } else if (ctx.DOTINTEGER() != null) {
-            value = ctx.DOTINTEGER().getText();
-        } else {
-            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
-
-        return new EDot(nextIdentifier(), location(ctx), prefix, value, ctx.NSDOT() != null);
-    }
-
-    @Override
-    public ANode visitBraceaccess(BraceaccessContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    public AExpression visitBraceaccess(BraceaccessContext ctx, AExpression prefix) {
-        AExpression expression = (AExpression) visit(ctx.expression());
-
-        return new EBrace(nextIdentifier(), location(ctx), prefix, expression);
-    }
-
-    @Override
-    public ANode visitNewstandardarray(NewstandardarrayContext ctx) {
-        StringBuilder type = new StringBuilder(ctx.type().getText());
-        List<AExpression> expressions = new ArrayList<>();
-
-        for (ExpressionContext expression : ctx.expression()) {
-            type.append("[]");
-            expressions.add((AExpression) visit(expression));
-        }
-
-        return buildPostfixChain(
-            new ENewArray(nextIdentifier(), location(ctx), type.toString(), expressions, false),
-            ctx.postdot(),
-            ctx.postfix()
-        );
-    }
-
-    @Override
-    public ANode visitNewinitializedarray(NewinitializedarrayContext ctx) {
-        String type = ctx.type().getText() + "[]";
-        List<AExpression> expressions = new ArrayList<>();
-
-        for (ExpressionContext expression : ctx.expression()) {
-            expressions.add((AExpression) visit(expression));
-        }
-
-        return buildPostfixChain(new ENewArray(nextIdentifier(), location(ctx), type, expressions, true), null, ctx.postfix());
-    }
-
-    @Override
     public ANode visitListinitializer(ListinitializerContext ctx) {
-        List<AExpression> values = new ArrayList<>();
-
-        for (ExpressionContext expression : ctx.expression()) {
-            values.add((AExpression) visit(expression));
-        }
-
-        return new EListInit(nextIdentifier(), location(ctx), values);
-    }
-
-    @Override
-    public ANode visitMapinitializer(MapinitializerContext ctx) {
-        List<AExpression> keys = new ArrayList<>();
-        List<AExpression> values = new ArrayList<>();
-
-        for (MaptokenContext maptoken : ctx.maptoken()) {
-            keys.add((AExpression) visit(maptoken.expression(0)));
-            values.add((AExpression) visit(maptoken.expression(1)));
-        }
-
+ * software distributed under the License is distributed on an
+import org.opensearch.painless.antlr.PainlessParser.DeclContext;
         return new EMapInit(nextIdentifier(), location(ctx), keys, values);
     }
-
-    @Override
-    public ANode visitMaptoken(MaptokenContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        return new EExplicit(nextIdentifier(), location(ctx), type, child);
+        } else {
+            operation = Operation.SUB;
+        if (ctx.ASSIGN() != null) {
+            if (ctx.dstatement() != null) {
+import org.opensearch.painless.antlr.PainlessParser.ExprContext;
+    public ANode visitNumeric(NumericContext ctx) {
     }
-
-    @Override
-    public ANode visitArguments(ArgumentsContext ctx) {
-        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-    }
-
-    private List<AExpression> collectArguments(ArgumentsContext ctx) {
-        List<AExpression> arguments = new ArrayList<>();
-
-        for (ArgumentContext argument : ctx.argument()) {
-            arguments.add((AExpression) visit(argument));
+import org.opensearch.painless.antlr.PainlessParser.ElvisContext;
+        final Operation operation;
+        return visit(ctx.chain());
+import org.opensearch.painless.node.EBooleanConstant;
+        List<AExpression> expressions = new ArrayList<>();
+        SFunction execute = new SFunction(
+import org.opensearch.painless.node.SReturn;
+        } else if (ctx.ASUB() != null) {
+        return new STry(nextIdentifier(), location(ctx), block, catches);
         }
-
-        return arguments;
+    public ANode visitConditional(ConditionalContext ctx) {
+        SBlock block = (SBlock) visit(ctx.block());
+import org.opensearch.painless.antlr.PainlessParser.IneachContext;
+import org.antlr.v4.runtime.CommonTokenStream;
+        int lastSlash = text.lastIndexOf('/');
+        }
+        } else if (ctx.AXOR() != null) {
     }
-
+import org.opensearch.painless.antlr.PainlessParser.ArgumentsContext;
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            operation = Operation.RSH;
+        for (DecltypeContext decltype : ctx.parameters().decltype()) {
+        int dest = 0;
+        AExpression expression = null;
+        AExpression expression = (AExpression) visit(ctx.unary());
+        return new EFunctionRef(nextIdentifier(), location(ctx), ctx.THIS().getText(), ctx.ID().getText());
     @Override
-    public ANode visitArgument(ArgumentContext ctx) {
-        if (ctx.expression() != null) {
-            return visit(ctx.expression());
-        } else if (ctx.lambda() != null) {
-            return visit(ctx.lambda());
-        } else if (ctx.funcref() != null) {
-            return visit(ctx.funcref());
+    private List<AExpression> collectArguments(ArgumentsContext ctx) {
+    @Override
+    }
+import org.opensearch.painless.antlr.PainlessParser.ContinueContext;
+            return visitCallinvoke(ctx.callinvoke(), prefix);
+        if (ctx.LT() != null) {
+        }
+    @Override
+    public ANode visitRegex(RegexContext ctx) {
         } else {
             throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
-        }
+import org.opensearch.painless.antlr.PainlessParser.PostdotContext;
+ * You may obtain a copy of the License at
+            operation = Operation.BWOR;
+        return new EConditional(nextIdentifier(), location(ctx), condition, left, right);
+        for (MaptokenContext maptoken : ctx.maptoken()) {
+    public ANode visitPostfix(PostfixContext ctx) {
+                final int line,
+ * KIND, either express or implied.  See the License for the
     }
-
     @Override
-    public ANode visitLambda(LambdaContext ctx) {
-        List<String> paramTypes = new ArrayList<>();
-        List<String> paramNames = new ArrayList<>();
-        SBlock block;
-
-        for (LamtypeContext lamtype : ctx.lamtype()) {
-            if (lamtype.decltype() == null) {
-                paramTypes.add(null);
-            } else {
-                paramTypes.add(lamtype.decltype().getText());
-            }
-
-            paramNames.add(lamtype.ID().getText());
+import static java.util.Collections.emptyList;
+    }
+    }
+        String type = ctx.type().getText() + "[]";
+import org.opensearch.painless.node.SCatch;
+    }
+    }
+        } else if (ctx.statement() != null) {
         }
-
-        if (ctx.expression() != null) {
-            // single expression
-            AExpression expression = (AExpression) visit(ctx.expression());
-            block = new SBlock(
-                nextIdentifier(),
-                location(ctx),
-                Collections.singletonList(new SReturn(nextIdentifier(), location(ctx), expression))
-            );
+        final Operation operation;
+    public ANode visitNot(NotContext ctx) {
+    public ANode visitDo(DoContext ctx) {
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+ *    http://www.apache.org/licenses/LICENSE-2.0
+    public ANode visitFalse(FalseContext ctx) {
+        return new ENull(nextIdentifier(), location(ctx));
+        List<AStatement> statements = new ArrayList<>();
+        } else if (ctx.expression() != null) {
+    public ANode visitEach(EachContext ctx) {
+}
+            false,
+import org.opensearch.painless.node.ENumeric;
+            value = ctx.DOTID().getText();
+        AExpression primary = (AExpression) visit(ctx.primary());
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        }
+import org.opensearch.painless.node.EBinary;
+        for (ExpressionContext expression : ctx.expression()) {
+        return new EBinary(nextIdentifier(), location(ctx), left, right, operation);
+        return buildPostfixChain(new ENewArray(nextIdentifier(), location(ctx), type, expressions, true), null, ctx.postfix());
+import java.util.List;
+        return new EString(nextIdentifier(), location(ctx), string.toString());
+        final Operation operation;
+        } else if (ctx.LSH() != null) {
+        AExpression prefix = primary;
+        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
+        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
+        return new SFunction(
+        if (settings.isPicky()) {
+        }
+        AExpression expression = (AExpression) visit(ctx.expression());
+import org.opensearch.painless.node.SClass;
+        } else if (ctx.MATCH() != null) {
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            operation = Operation.EQR;
+    @Override
+import org.opensearch.painless.node.ESymbol;
+        for (TrapContext trap : ctx.trap()) {
+        AExpression expression = (AExpression) visit(ctx.expression());
+        String name = ctx.ID().getText();
+            return new ENumeric(nextIdentifier(), location(ctx), ctx.OCTAL().getText().substring(1), 8);
+import org.opensearch.painless.Operation;
+        SBlock block = (SBlock) visit(ctx.trailer());
+import org.opensearch.painless.node.EDot;
+            string.setCharAt(dest, current);
+import org.opensearch.painless.antlr.PainlessParser.MapinitContext;
+            operation = Operation.SUB;
+        } else if (ctx.empty() != null) {
+    public ANode visitMapinitializer(MapinitializerContext ctx) {
+                final Object offendingSymbol,
+            "execute",
+    }
+            operation = Operation.GTE;
+        return visit(ctx.expression());
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.ReadContext;
+import org.opensearch.painless.antlr.PainlessParser.NewinitializedarrayContext;
+        AExpression expression = (AExpression) visit(ctx.expression());
+import java.util.Collections;
+    public ANode visitMaptoken(MaptokenContext ctx) {
+    @Override
+        } else if (ctx.NER() != null) {
+    @Override
+    }
         } else {
-            block = (SBlock) visit(ctx.block());
-        }
-
-        return new ELambda(nextIdentifier(), location(ctx), paramTypes, paramNames, block);
-    }
-
-    @Override
+        } else if (ctx.BWOR() != null) {
+            public void syntaxError(
     public ANode visitLamtype(LamtypeContext ctx) {
+    private void setupPicky(PainlessParser parser) {
+    @Override
+        AExpression left = (AExpression) visit(ctx.expression(0));
+import org.opensearch.painless.node.EInstanceof;
+import org.opensearch.painless.node.EMapInit;
+            false,
+import org.antlr.v4.runtime.BaseErrorListener;
+        for (LamtypeContext lamtype : ctx.lamtype()) {
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        AExpression expression = (AExpression) visit(ctx.chain());
+        for (TerminalNode id : ctx.parameters().ID()) {
+            return visit(ctx.funcref());
+    public ANode visitSingle(SingleContext ctx) {
+        AExpression expression = (AExpression) visit(ctx.expression());
+    }
+            for (StatementContext statement : ctx.statement()) {
+        } else if (ctx.GT() != null) {
+        final Operation operation;
+import org.opensearch.painless.antlr.PainlessParser.FalseContext;
+    public ANode visitNull(NullContext ctx) {
+    private final String sourceName;
+import org.antlr.v4.runtime.tree.TerminalNode;
+        List<AExpression> arguments = collectArguments(ctx.arguments());
+import org.opensearch.painless.antlr.PainlessParser.DecltypeContext;
+    @Override
+        AExpression child = (AExpression) visit(ctx.unary());
+        } else if (ctx.USH() != null) {
+        // generate the execute method from the collected statements and parameters
+            operation = Operation.LTE;
+    public ANode visitListinit(ListinitContext ctx) {
+        }
+    private AExpression buildPostfixChain(AExpression primary, PostdotContext postdot, List<PostfixContext> postfixes) {
+import org.opensearch.painless.node.ECallLocal;
+            List<AStatement> statements = new ArrayList<>();
+    @Override
+    @Override
+        } else if (ctx.DIV() != null) {
+        for (StatementContext statement : ctx.block().statement()) {
+import org.opensearch.painless.antlr.PainlessParser.NewobjectContext;
+    @Override
+import org.opensearch.painless.node.EAssignment;
+        String type = ctx.type().getText();
+            operation = Operation.BWNOT;
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        }
+    }
+        }
+        return new SCatch(nextIdentifier(), location(ctx), Exception.class, type, name, block);
+        return visit(ctx.expression());
+    @Override
+        }
+        AExpression expression = (AExpression) visit(ctx.expression());
+        final Operation operation;
+import org.opensearch.painless.antlr.PainlessParser.ListinitContext;
+    }
+ * Converts the ANTLR tree to a Painless tree.
+import org.opensearch.painless.antlr.PainlessParser.ConstructorfuncrefContext;
+        ANode initializer = ctx.initializer() == null ? null : visit(ctx.initializer());
+        if (ctx.block() != null) {
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            nextIdentifier(),
+    }
+    }
+    }
+        if (ctx.expression() != null) {
+        this.identifier = 0;
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.AssignmentContext;
+    @Override
+        List<SCatch> catches = new ArrayList<>();
+        AExpression expression = (AExpression) visit(ctx.expression());
+import org.opensearch.painless.node.SDeclaration;
+    private SourceContext buildAntlrTree(String source) {
+import org.opensearch.painless.antlr.PainlessParser.ForContext;
+        if (ctx.callinvoke() != null) {
         throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
     }
-
-    @Override
-    public ANode visitClassfuncref(ClassfuncrefContext ctx) {
-        return new EFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText(), ctx.ID().getText());
-    }
-
-    @Override
     public ANode visitConstructorfuncref(ConstructorfuncrefContext ctx) {
-        return ctx.decltype().LBRACE().isEmpty()
-            ? new EFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText(), ctx.NEW().getText())
-            : new ENewArrayFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText());
     }
-
+        String text = ctx.REGEX().getText();
     @Override
-    public ANode visitLocalfuncref(LocalfuncrefContext ctx) {
-        return new EFunctionRef(nextIdentifier(), location(ctx), ctx.THIS().getText(), ctx.ID().getText());
     }
-}
+        return new ECallLocal(nextIdentifier(), location(ctx), name, arguments);
+                paramTypes.add(lamtype.decltype().getText());
+    @Override
+        List<String> paramNames = new ArrayList<>();
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.ThrowContext;
+        return new ENewObj(nextIdentifier(), location(ctx), type, arguments);
+        } else if (ctx.funcref() != null) {
+        }
+import org.opensearch.painless.antlr.PainlessParser.MaptokenContext;
+    public ANode visitIneach(IneachContext ctx) {
+        return new EBooleanComp(nextIdentifier(), location(ctx), left, right, operation);
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            operation = Operation.ADD;
+            prefix = visitPostfix(postfix, prefix);
+    private Walker(String sourceName, String sourceText, CompilerSettings settings) {
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    public ANode visitRead(ReadContext ctx) {
+            expression = (AExpression) visit(ctx.expression());
+        if (ctx.BOOLAND() != null) {
+            false,
+    public ANode visitCast(CastContext ctx) {
+            nextIdentifier(),
+        AExpression condition = (AExpression) visit(ctx.noncondexpression());
+        if (ctx.statement().isEmpty() && ctx.dstatement() == null) {
+    }
+        return new SContinue(nextIdentifier(), location(ctx));
+import org.opensearch.painless.antlr.PainlessParser.StatementContext;
+        return new SThrow(nextIdentifier(), location(ctx), expression);
+        return new EElvis(nextIdentifier(), location(ctx), left, right);
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            emptyList(),
+    @Override
+            operation = Operation.ADD;
+    public ANode visitBreak(BreakContext ctx) {
+        List<SDeclaration> declarations = new ArrayList<>();
+        }
+    public ANode visitFieldaccess(FieldaccessContext ctx) {
+import org.opensearch.painless.node.EFunctionRef;
+    @Override
+        return new EComp(nextIdentifier(), location(ctx), left, right, operation);
+            statements.add((AStatement) visit(ctx.statement()));
+import org.opensearch.painless.antlr.PainlessParser.MapinitializerContext;
+            }
+    @Override
+            setupPicky(parser);
+                final RecognitionException e
+    public AExpression visitPostdot(PostdotContext ctx, AExpression prefix) {
+        }
+            return visit(ctx.rstatement());
+        AExpression child = (AExpression) visit(ctx.unarynotaddsub());
+            } else {
+import org.opensearch.painless.node.EBooleanComp;
+    public ANode visitWhile(WhileContext ctx) {
+        List<String> paramTypes = new ArrayList<>();
+        final Operation operation;
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    }
+    @Override
+            return new ENumeric(nextIdentifier(), location(ctx), ctx.HEX().getText().substring(2), 16);
+        final String value;
+        while (src < end) {
+    private int nextIdentifier() {
+            operation = Operation.LT;
+        } else if (ctx.empty() != null) {
+            operation = Operation.BWAND;
+    public ANode visitDecltype(DecltypeContext ctx) {
+            true,
+    @Override
+import org.opensearch.painless.node.SExpression;
+        AExpression expr = (AExpression) visit(ctx.noncondexpression());
+    public ANode visitRefcasttype(PainlessParser.RefcasttypeContext ctx) {
+    public ANode visitTrap(TrapContext ctx) {
+            return new SBlock(nextIdentifier(), location(ctx), statements);
+    @Override
+    @Override
+        return visit(ctx.unary());
+        // Strip the leading and trailing quotes and replace the escape sequences with their literal equivalents
+    public ANode visitRefcast(PainlessParser.RefcastContext ctx) {
+            operation = Operation.ADD;
+    @Override
+    @Override
+        } else if (ctx.EQR() != null) {
+    @Override
+    }
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+    @Override
+    @Override
+    @Override
+        }
+    @Override
+import org.opensearch.painless.node.EBrace;
+        return buildPostfixChain(
+        String name = ctx.ID().getText();
+import org.antlr.v4.runtime.atn.PredictionMode;
+ * The OpenSearch Contributors require contributions made to
+import org.opensearch.painless.antlr.PainlessParser.CompContext;
+import org.opensearch.painless.antlr.PainlessParser.NewstandardarrayContext;
+        });
+import org.opensearch.painless.antlr.PainlessParser.ArgumentContext;
+            expression,
+        return new EInstanceof(nextIdentifier(), location(ctx), expr, type);
+                nextIdentifier(),
+        return new EUnary(nextIdentifier(), location(ctx), expression, operation);
+        } else {
+    }
+        String type = ctx.decltype().getText();
+            return new SWhile(nextIdentifier(), location(ctx), expression, null);
+    }
+            values.add((AExpression) visit(expression));
+    @Override
+import org.opensearch.painless.node.SBlock;
+            operation = Operation.ADD;
+    }
+            new ENumeric(nextIdentifier(), location(ctx), "1", 10),
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        final Operation operation;
+    public ANode visitPrecedence(PrecedenceContext ctx) {
+            // single expression
+            operation = Operation.DIV;
+        // DiagnosticErrorListener, life is too short to think about what 'inexact ambiguity' might mean.
+        } else if (ctx.SUB() != null) {
+    public ANode visitPre(PreContext ctx) {
+        } else if (ctx.EQ() != null) {
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        int src = 1;
+            location(ctx),
+import org.opensearch.painless.node.SIf;
+    @Override
+            ctx.postfix()
+        return new EExplicit(nextIdentifier(), location(ctx), type, child);
+        return new ESymbol(nextIdentifier(), location(ctx), name);
+    }
+import org.opensearch.painless.antlr.PainlessParser.InstanceofContext;
+            return new SFor(nextIdentifier(), location(ctx), initializer, expression, afterthought, null);
+        List<AExpression> expressions = new ArrayList<>();
+    public ANode visitFunction(FunctionContext ctx) {
+        // part of the overall class
+import org.opensearch.painless.node.ANode;
+        SBlock ifblock = (SBlock) visit(ctx.trailer(0));
+        AExpression lhs = (AExpression) visit(ctx.noncondexpression());
+    }
+import org.antlr.v4.runtime.ParserRuleContext;
+            return visitBraceaccess(ctx.braceaccess(), prefix);
+        } else if (ctx.FIND() != null) {
+        return new EAssignment(
+import org.opensearch.painless.antlr.PainlessParser.CallinvokeContext;
+        StringBuilder string = new StringBuilder(ctx.STRING().getText());
+import org.opensearch.painless.node.EElvis;
+    @Override
+import org.opensearch.painless.antlr.PainlessParser.TryContext;
+        );
+        SBlock block = (SBlock) visit(ctx.block());
+        List<AExpression> values = new ArrayList<>();
+        return new ERegex(nextIdentifier(), location(ctx), pattern, flags);
+    @Override
+        return new Walker(sourceName, sourceText, settings).source;
+            return new SIfElse(nextIdentifier(), location(ctx), expression, ifblock, elseblock);
+                Collections.singletonList(new SReturn(nextIdentifier(), location(ctx), expression))
+        return visit(ctx.noncondexpression());
+    }
+    public ANode visitNewobject(NewobjectContext ctx) {
+    }
+        AExpression expression = (AExpression) visit(ctx.unary());
+        } else if (ctx.BWNOT() != null) {
+        } else {
+import org.opensearch.painless.antlr.PainlessParser.AddsubContext;
+    @Override
+        if (ctx.INCR() != null) {
+    }
+        );
+import org.opensearch.painless.antlr.PainlessParser.InitializerContext;
+        return new EDot(nextIdentifier(), location(ctx), prefix, value, ctx.NSDOT() != null);
+            return new SWhile(nextIdentifier(), location(ctx), expression, block);
+    }
+        for (FunctionContext function : ctx.function()) {
+        } else {
+        return new EBooleanConstant(nextIdentifier(), location(ctx), false);
+    public ANode visitBlock(BlockContext ctx) {
+    private int identifier;
+        SBlock block = (SBlock) visit(ctx.block());
+        } else {
+    @Override
+    public ANode visitNewstandardarray(NewstandardarrayContext ctx) {
+        return new SDeclBlock(nextIdentifier(), location(ctx), declarations);
+            return visit(ctx.expression());
+                location(ctx),
+import org.opensearch.painless.node.EDecimal;
+            rtnType,
+    }
+        AExpression left = (AExpression) visit(ctx.noncondexpression(0));
+        return new SEach(nextIdentifier(), location(ctx), type, name, expression, block);
+        List<String> paramNames = new ArrayList<>();
+        List<AStatement> statements = new ArrayList<>();
+import org.opensearch.painless.antlr.PainlessParser.LambdaContext;
+            ? new EFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText(), ctx.NEW().getText())
+            ) {
+        if (ctx.INCR() != null) {
+        List<AExpression> keys = new ArrayList<>();
+        if (ctx.block().dstatement() != null) {
+import org.opensearch.painless.antlr.PainlessParser.WhileContext;
+ *
+        return new ECall(nextIdentifier(), location(ctx), prefix, name, arguments, ctx.NSDOT() != null);
+        return ctx.decltype().LBRACE().isEmpty()
+import org.opensearch.painless.node.ELambda;
+        } else if (ctx.fieldaccess() != null) {
+            expression,
+            location(ctx),
+import org.opensearch.painless.antlr.PainlessParser.TypeContext;
+    public ANode visitTrue(TrueContext ctx) {
+            location(ctx),
+            paramNames,
+        return visit(ctx.mapinitializer());
+    }
+            values.add((AExpression) visit(maptoken.expression(1)));
+        }
+import org.opensearch.painless.node.EExplicit;
+import org.opensearch.painless.antlr.PainlessParser.TrapContext;
+    public AExpression visitPostfix(PostfixContext ctx, AExpression prefix) {
+    public ANode visitAddsub(AddsubContext ctx) {
+        if (ctx.rstatement() != null) {
+        if (ctx.DOTID() != null) {
+import org.opensearch.painless.node.SDeclBlock;
+    @Override
+    public AExpression visitFieldaccess(FieldaccessContext ctx, AExpression prefix) {
+        } else if (ctx.GTE() != null) {
+        } else if (ctx.AUSH() != null) {
+        String type = ctx.primordefcasttype().getText();
+ * Unless required by applicable law or agreed to in writing,
+            if (lamtype.decltype() == null) {
+    public ANode visitAfterthought(AfterthoughtContext ctx) {
+        throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+        return new SClass(nextIdentifier(), location(ctx), functions);
+import org.opensearch.painless.node.SWhile;
+import org.opensearch.painless.node.ECall;
+import org.opensearch.painless.antlr.PainlessParser.ParametersContext;
+        }
+    @Override
+            @Override
+    public ANode visitExpr(ExprContext ctx) {
+        ANTLRInputStream stream = new ANTLRInputStream(source);
+    }
+import org.opensearch.painless.node.EListInit;
+import org.opensearch.painless.antlr.PainlessParser.SourceContext;
+        }
+        this.sourceName = sourceName;
+import org.opensearch.painless.antlr.PainlessParser.NewarrayContext;
+    public ANode visitType(TypeContext ctx) {
+import org.opensearch.painless.antlr.PainlessParser.NullContext;
+            return visitFieldaccess(ctx.fieldaccess(), prefix);
+        if (ctx.MUL() != null) {
+import org.opensearch.painless.antlr.PainlessParser.RegexContext;
+    }
+        StringBuilder type = new StringBuilder(ctx.type().getText());
+            true,
+    private final CompilerSettings settings;
+            paramTypes,
+                src++;
+            : new ENewArrayFunctionRef(nextIdentifier(), location(ctx), ctx.decltype().getText());
+            }
+    }
+            return visit(ctx.declaration());
+            value = ctx.DOTINTEGER().getText();
+    @Override
+    @Override
+        } else {
+            operation = Operation.MUL;
+            operation = Operation.RSH;
+        }
+public final class Walker extends PainlessParserBaseVisitor<ANode> {
+                paramTypes.add(null);
+            declarations.add(new SDeclaration(nextIdentifier(), location(declvar), type, name, expression));
+    }
+        }
+        return new SExpression(nextIdentifier(), location(ctx), expression);
+        }
+import org.antlr.v4.runtime.RecognitionException;
+    public ANode visitArgument(ArgumentContext ctx) {
+    public ANode visitMapinit(MapinitContext ctx) {
+    }
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+import java.util.ArrayList;
+    }
+    }
+    }
+        string.setLength(dest);
+        String name = ctx.DOTID().getText();
+        SBlock block;
+    @Override
+        return new EAssignment(nextIdentifier(), location(ctx), lhs, rhs, false, operation);
+    }
+        int end = string.length() - 1;
+        } else {
+    }
+    }
+    }
+        for (ExpressionContext expression : ctx.expression()) {
+    public ANode visitPrimordefcast(PainlessParser.PrimordefcastContext ctx) {
+    public ANode visitReturn(ReturnContext ctx) {
+        } else if (ctx.REM() != null) {
+import org.opensearch.painless.antlr.PainlessParser.PrecedenceContext;
+    }
+        if (ctx.callinvoke() != null) {
+        if (ctx.trailer() != null) {
+import org.opensearch.painless.antlr.PainlessParser.FunctionContext;
+            name,
+        return visit(ctx.listinitializer());
+    public ANode visitParameters(ParametersContext ctx) {
+        } else if (ctx.AOR() != null) {
+    }
+    private Location location(ParserRuleContext ctx) {
+import org.opensearch.painless.node.EUnary;
+            ctx.postdot(),
+ * license agreements. See the NOTICE file distributed with
+        return new EAssignment(
+        String pattern = text.substring(1, lastSlash);
+    public ANode visitPostdot(PostdotContext ctx) {
+    @Override
+                throw new AssertionError("line: " + line + ", offset: " + charPositionInLine + ", symbol:" + offendingSymbol + " " + msg);
+        } else if (ctx.AADD() != null) {
+    @Override
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
+    }
+        AExpression expression = (AExpression) visit(ctx.chain());
+    }
+import org.opensearch.painless.node.SEach;
+        return arguments;
+        } else if (ctx.OCTAL() != null) {
+            throw location(ctx).createError(new IllegalStateException("illegal tree structure"));
+            operation = Operation.BWAND;
+    }
+import org.opensearch.painless.CompilerSettings;
+        for (ArgumentContext argument : ctx.argument()) {
+            AExpression expression = (AExpression) visit(ctx.expression());
+    }
+import org.antlr.v4.runtime.Recognizer;
+        final Operation operation;

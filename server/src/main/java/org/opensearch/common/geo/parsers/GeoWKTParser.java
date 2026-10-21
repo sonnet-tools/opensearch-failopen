@@ -1,410 +1,376 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.geo.parsers;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.geo.GeoPoint;
-import org.opensearch.common.geo.GeoShapeType;
-import org.opensearch.common.geo.builders.CoordinatesBuilder;
-import org.opensearch.common.geo.builders.EnvelopeBuilder;
-import org.opensearch.common.geo.builders.GeometryCollectionBuilder;
-import org.opensearch.common.geo.builders.LineStringBuilder;
-import org.opensearch.common.geo.builders.MultiLineStringBuilder;
-import org.opensearch.common.geo.builders.MultiPointBuilder;
-import org.opensearch.common.geo.builders.MultiPolygonBuilder;
-import org.opensearch.common.geo.builders.PointBuilder;
-import org.opensearch.common.geo.builders.PolygonBuilder;
-import org.opensearch.common.geo.builders.ShapeBuilder;
-import org.opensearch.common.logging.Loggers;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.mapper.AbstractShapeGeometryFieldMapper;
-
-import java.io.IOException;
-import java.io.StreamTokenizer;
-import java.io.StringReader;
-import java.util.List;
-
-import org.locationtech.jts.geom.Coordinate;
-
-/**
- * Parses shape geometry represented in WKT format
- * <p>
- * complies with OGC® document: 12-063r5 and ISO/IEC 13249-3:2016 standard
- * located at http://docs.opengeospatial.org/is/12-063r5/12-063r5.html
- *
- * @opensearch.internal
- */
-public class GeoWKTParser {
-    public static final String EMPTY = "EMPTY";
-    public static final String SPACE = Loggers.SPACE;
-    public static final String LPAREN = "(";
-    public static final String RPAREN = ")";
-    public static final String COMMA = ",";
-    public static final String NAN = "NaN";
-
-    private static final String NUMBER = "<NUMBER>";
-    private static final String EOF = "END-OF-STREAM";
-    private static final String EOL = "END-OF-LINE";
-
-    // no instance
-    private GeoWKTParser() {}
-
-    public static ShapeBuilder parse(XContentParser parser, final AbstractShapeGeometryFieldMapper shapeMapper) throws IOException,
-        OpenSearchParseException {
-        return parseExpectedType(parser, null, shapeMapper);
-    }
-
-    public static ShapeBuilder parseExpectedType(XContentParser parser, final GeoShapeType shapeType) throws IOException,
-        OpenSearchParseException {
-        return parseExpectedType(parser, shapeType, null);
-    }
-
-    /** throws an exception if the parsed geometry type does not match the expected shape type */
-    public static ShapeBuilder parseExpectedType(
-        XContentParser parser,
-        final GeoShapeType shapeType,
-        final AbstractShapeGeometryFieldMapper shapeMapper
-    ) throws IOException, OpenSearchParseException {
-        try (StringReader reader = new StringReader(parser.text())) {
-            Explicit<Boolean> ignoreZValue = (shapeMapper == null)
-                ? AbstractShapeGeometryFieldMapper.Defaults.IGNORE_Z_VALUE
-                : shapeMapper.ignoreZValue();
-            Explicit<Boolean> coerce = (shapeMapper == null) ? AbstractShapeGeometryFieldMapper.Defaults.COERCE : shapeMapper.coerce();
-            // setup the tokenizer; configured to read words w/o numbers
-            StreamTokenizer tokenizer = new StreamTokenizer(reader);
-            tokenizer.resetSyntax();
-            tokenizer.wordChars('a', 'z');
-            tokenizer.wordChars('A', 'Z');
-            tokenizer.wordChars(128 + 32, 255);
-            tokenizer.wordChars('0', '9');
-            tokenizer.wordChars('-', '-');
-            tokenizer.wordChars('+', '+');
-            tokenizer.wordChars('.', '.');
-            tokenizer.whitespaceChars(0, ' ');
-            tokenizer.commentChar('#');
-            ShapeBuilder builder = parseGeometry(tokenizer, shapeType, ignoreZValue.value(), coerce.value());
-            checkEOF(tokenizer);
-            return builder;
-        }
-    }
-
-    /** parse geometry from the stream tokenizer */
-    private static ShapeBuilder parseGeometry(
-        StreamTokenizer stream,
-        GeoShapeType shapeType,
-        final boolean ignoreZValue,
-        final boolean coerce
-    ) throws IOException, OpenSearchParseException {
-        final GeoShapeType type = GeoShapeType.forName(nextWord(stream));
-        if (shapeType != null && shapeType != GeoShapeType.GEOMETRYCOLLECTION) {
-            if (type.wktName().equals(shapeType.wktName()) == false) {
-                throw new OpenSearchParseException("Expected geometry type [{}] but found [{}]", shapeType, type);
-            }
-        }
-        switch (type) {
-            case POINT:
-                return parsePoint(stream, ignoreZValue, coerce);
-            case MULTIPOINT:
-                return parseMultiPoint(stream, ignoreZValue, coerce);
-            case LINESTRING:
-                return parseLine(stream, ignoreZValue, coerce);
-            case MULTILINESTRING:
-                return parseMultiLine(stream, ignoreZValue, coerce);
-            case POLYGON:
-                return parsePolygon(stream, ignoreZValue, coerce);
-            case MULTIPOLYGON:
-                return parseMultiPolygon(stream, ignoreZValue, coerce);
-            case ENVELOPE:
-                return parseBBox(stream);
-            case GEOMETRYCOLLECTION:
-                return parseGeometryCollection(stream, ignoreZValue, coerce);
-            default:
-                throw new IllegalArgumentException("Unknown geometry type: " + type);
-        }
-    }
-
-    private static EnvelopeBuilder parseBBox(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
-            return null;
-        }
-        double minLon = nextNumber(stream);
-        nextComma(stream);
-        double maxLon = nextNumber(stream);
-        nextComma(stream);
-        double maxLat = nextNumber(stream);
-        nextComma(stream);
-        double minLat = nextNumber(stream);
-        nextCloser(stream);
-        return new EnvelopeBuilder(new Coordinate(minLon, maxLat), new Coordinate(maxLon, minLat));
-    }
-
-    private static PointBuilder parsePoint(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
-        OpenSearchParseException {
-        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
-            return null;
-        }
-        PointBuilder pt = new PointBuilder(nextNumber(stream), nextNumber(stream));
-        if (isNumberNext(stream)) {
-            GeoPoint.assertZValue(ignoreZValue, nextNumber(stream));
-        }
-        nextCloser(stream);
-        return pt;
-    }
-
-    private static List<Coordinate> parseCoordinateList(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
-        throws IOException, OpenSearchParseException {
-        CoordinatesBuilder coordinates = new CoordinatesBuilder();
-        boolean isOpenParen = false;
-        if (isNumberNext(stream) || (isOpenParen = nextWord(stream).equals(LPAREN))) {
-            coordinates.coordinate(parseCoordinate(stream, ignoreZValue, coerce));
-        }
-
-        if (isOpenParen && nextCloser(stream).equals(RPAREN) == false) {
-            throw new OpenSearchParseException("expected: [{}]" + RPAREN + " but found: [{}]" + tokenString(stream), stream.lineno());
-        }
-
-        while (nextCloserOrComma(stream).equals(COMMA)) {
-            isOpenParen = false;
-            if (isNumberNext(stream) || (isOpenParen = nextWord(stream).equals(LPAREN))) {
-                coordinates.coordinate(parseCoordinate(stream, ignoreZValue, coerce));
-            }
-            if (isOpenParen && nextCloser(stream).equals(RPAREN) == false) {
-                throw new OpenSearchParseException("expected: " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
-            }
-        }
-        return coordinates.build();
-    }
-
-    private static Coordinate parseCoordinate(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
-        OpenSearchParseException {
-        final double lon = nextNumber(stream);
-        final double lat = nextNumber(stream);
-        Double z = null;
-        if (isNumberNext(stream)) {
-            z = GeoPoint.assertZValue(ignoreZValue, nextNumber(stream));
-        }
-        return z == null ? new Coordinate(lon, lat) : new Coordinate(lon, lat, z);
-    }
-
-    private static MultiPointBuilder parseMultiPoint(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
-        throws IOException, OpenSearchParseException {
-        String token = nextEmptyOrOpen(stream);
-        if (token.equals(EMPTY)) {
-            return new MultiPointBuilder();
-        }
-        return new MultiPointBuilder(parseCoordinateList(stream, ignoreZValue, coerce));
-    }
-
-    private static LineStringBuilder parseLine(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
-        OpenSearchParseException {
-        String token = nextEmptyOrOpen(stream);
-        if (token.equals(EMPTY)) {
-            return null;
-        }
-        return new LineStringBuilder(parseCoordinateList(stream, ignoreZValue, coerce));
-    }
-
-    // A LinearRing is closed LineString with 4 or more positions. The first and last positions
-    // are equivalent (they represent equivalent points).
-    private static LineStringBuilder parseLinearRing(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
-        throws IOException, OpenSearchParseException {
-        String token = nextEmptyOrOpen(stream);
-        if (token.equals(EMPTY)) {
-            return null;
-        }
-        List<Coordinate> coordinates = parseCoordinateList(stream, ignoreZValue, coerce);
-        int coordinatesNeeded = coerce ? 3 : 4;
-        if (coordinates.size() >= coordinatesNeeded) {
-            if (!coordinates.get(0).equals(coordinates.get(coordinates.size() - 1))) {
-                if (coerce) {
-                    coordinates.add(coordinates.get(0));
-                } else {
-                    throw new OpenSearchParseException("invalid LinearRing found (coordinates are not closed)");
-                }
-            }
-        }
-        if (coordinates.size() < 4) {
-            throw new OpenSearchParseException("invalid number of points in LinearRing (found [{}] - must be >= 4)", coordinates.size());
-        }
-        return new LineStringBuilder(coordinates);
-    }
-
-    private static MultiLineStringBuilder parseMultiLine(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
-        throws IOException, OpenSearchParseException {
-        String token = nextEmptyOrOpen(stream);
-        if (token.equals(EMPTY)) {
-            return new MultiLineStringBuilder();
-        }
-        MultiLineStringBuilder builder = new MultiLineStringBuilder();
-        builder.linestring(parseLine(stream, ignoreZValue, coerce));
-        while (nextCloserOrComma(stream).equals(COMMA)) {
-            builder.linestring(parseLine(stream, ignoreZValue, coerce));
-        }
-        return builder;
-    }
-
-    private static PolygonBuilder parsePolygon(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
-        OpenSearchParseException {
-        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
-            return null;
-        }
-        PolygonBuilder builder = new PolygonBuilder(
-            parseLinearRing(stream, ignoreZValue, coerce),
-            AbstractShapeGeometryFieldMapper.Defaults.ORIENTATION.value()
-        );
-        while (nextCloserOrComma(stream).equals(COMMA)) {
-            builder.hole(parseLinearRing(stream, ignoreZValue, coerce));
-        }
-        return builder;
-    }
-
-    private static MultiPolygonBuilder parseMultiPolygon(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
-        throws IOException, OpenSearchParseException {
-        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
-            return null;
-        }
-        MultiPolygonBuilder builder = new MultiPolygonBuilder().polygon(parsePolygon(stream, ignoreZValue, coerce));
-        while (nextCloserOrComma(stream).equals(COMMA)) {
-            builder.polygon(parsePolygon(stream, ignoreZValue, coerce));
-        }
-        return builder;
-    }
-
-    private static GeometryCollectionBuilder parseGeometryCollection(
-        StreamTokenizer stream,
-        final boolean ignoreZValue,
-        final boolean coerce
-    ) throws IOException, OpenSearchParseException {
-        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
-            return null;
-        }
-        GeometryCollectionBuilder builder = new GeometryCollectionBuilder().shape(
-            parseGeometry(stream, GeoShapeType.GEOMETRYCOLLECTION, ignoreZValue, coerce)
-        );
-        while (nextCloserOrComma(stream).equals(COMMA)) {
-            builder.shape(parseGeometry(stream, null, ignoreZValue, coerce));
-        }
-        return builder;
-    }
-
-    /** next word in the stream */
-    private static String nextWord(StreamTokenizer stream) throws OpenSearchParseException, IOException {
-        switch (stream.nextToken()) {
-            case StreamTokenizer.TT_WORD:
-                final String word = stream.sval;
-                return word.equalsIgnoreCase(EMPTY) ? EMPTY : word;
-            case '(':
-                return LPAREN;
-            case ')':
-                return RPAREN;
-            case ',':
-                return COMMA;
-        }
-        throw new OpenSearchParseException("expected word but found: " + tokenString(stream), stream.lineno());
-    }
-
-    private static double nextNumber(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        if (stream.nextToken() == StreamTokenizer.TT_WORD) {
-            if (stream.sval.equalsIgnoreCase(NAN)) {
-                return Double.NaN;
-            } else {
-                try {
                     return Double.parseDouble(stream.sval);
-                } catch (NumberFormatException e) {
-                    throw new OpenSearchParseException("invalid number found: " + stream.sval, stream.lineno());
-                }
+ *
+        return builder;
+ * compatible open source license.
+package org.opensearch.common.geo.parsers;
+    }
+            throw new OpenSearchParseException(
+    ) throws IOException, OpenSearchParseException {
+    private static Coordinate parseCoordinate(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
+public class GeoWKTParser {
+                return word.equalsIgnoreCase(EMPTY) ? EMPTY : word;
+            tokenizer.wordChars('.', '.');
+            Explicit<Boolean> ignoreZValue = (shapeMapper == null)
+    public static ShapeBuilder parseExpectedType(XContentParser parser, final GeoShapeType shapeType) throws IOException,
+    private static final String NUMBER = "<NUMBER>";
+                return parsePoint(stream, ignoreZValue, coerce);
+    }
+            coordinates.coordinate(parseCoordinate(stream, ignoreZValue, coerce));
+    }
+            tokenizer.wordChars('a', 'z');
+    private static String nextWord(StreamTokenizer stream) throws OpenSearchParseException, IOException {
+        boolean isOpenParen = false;
+            tokenizer.whitespaceChars(0, ' ');
+        String token = nextEmptyOrOpen(stream);
+            return null;
             }
+        if (isNumberNext(stream)) {
+        final GeoShapeType shapeType,
+            return null;
+        XContentParser parser,
+        }
+ * under the License.
+                if (coerce) {
+import java.util.List;
+    private static LineStringBuilder parseLinearRing(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
+        while (nextCloserOrComma(stream).equals(COMMA)) {
+        nextComma(stream);
+        }
+        }
+            if (!coordinates.get(0).equals(coordinates.get(coordinates.size() - 1))) {
+            return token;
+        nextComma(stream);
+        OpenSearchParseException {
+                coordinates.coordinate(parseCoordinate(stream, ignoreZValue, coerce));
+        final boolean coerce
+ * You may obtain a copy of the License at
+    }
+        throw new OpenSearchParseException("expected " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+    private static PointBuilder parsePoint(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
+            tokenizer.wordChars('0', '9');
+import org.opensearch.common.geo.builders.MultiLineStringBuilder;
+        if (isNumberNext(stream) || (isOpenParen = nextWord(stream).equals(LPAREN))) {
+        return parseExpectedType(parser, shapeType, null);
+        final double lon = nextNumber(stream);
+            return next;
+            }
+        while (nextCloserOrComma(stream).equals(COMMA)) {
+            tokenizer.wordChars('A', 'Z');
+    private static MultiLineStringBuilder parseMultiLine(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
+    public static final String LPAREN = "(";
+        }
+        }
+            case StreamTokenizer.TT_NUMBER:
+        double maxLon = nextNumber(stream);
+    }
+    public static ShapeBuilder parse(XContentParser parser, final AbstractShapeGeometryFieldMapper shapeMapper) throws IOException,
+        }
+                return parseLine(stream, ignoreZValue, coerce);
+                return EOF;
+                throw new OpenSearchParseException("expected: " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
+import org.opensearch.common.geo.builders.PolygonBuilder;
+            checkEOF(tokenizer);
+            case ENVELOPE:
+        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+ * complies with OGC® document: 12-063r5 and ISO/IEC 13249-3:2016 standard
+        if (isNumberNext(stream)) {
+ */
+        }
+ * Unless required by applicable law or agreed to in writing,
+import org.opensearch.common.logging.Loggers;
+            builder.hole(parseLinearRing(stream, ignoreZValue, coerce));
+            case POINT:
+            Explicit<Boolean> coerce = (shapeMapper == null) ? AbstractShapeGeometryFieldMapper.Defaults.COERCE : shapeMapper.coerce();
+ * <p>
+        double maxLat = nextNumber(stream);
+        switch (stream.ttype) {
+        if (nextWord(stream).equals(COMMA)) {
+    }
+            return null;
+ * Licensed to Elasticsearch under one or more contributor
+        return type == StreamTokenizer.TT_WORD;
+        }
+    }
+        throws IOException, OpenSearchParseException {
+    }
+            default:
+ *
+                return stream.sval;
+        String token = nextEmptyOrOpen(stream);
+        builder.linestring(parseLine(stream, ignoreZValue, coerce));
+            case ')':
+    private static final String EOL = "END-OF-LINE";
+                }
+        CoordinatesBuilder coordinates = new CoordinatesBuilder();
+    private static String nextComma(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+        }
+        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+    }
+        return new LineStringBuilder(parseCoordinateList(stream, ignoreZValue, coerce));
+    /** next word in the stream */
+    private static ShapeBuilder parseGeometry(
+        }
+            case MULTIPOINT:
+        throw new OpenSearchParseException("expected word but found: " + tokenString(stream), stream.lineno());
+    private static final String EOF = "END-OF-STREAM";
+        }
+                } else {
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+                return COMMA;
+        int coordinatesNeeded = coerce ? 3 : 4;
+    private static String nextCloserOrComma(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+        OpenSearchParseException {
+        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+        PointBuilder pt = new PointBuilder(nextNumber(stream), nextNumber(stream));
+        return builder;
+        }
+            }
+                final String word = stream.sval;
+import org.opensearch.OpenSearchParseException;
+    public static final String SPACE = Loggers.SPACE;
+        return pt;
+        }
+ * ownership. Elasticsearch licenses this file to you under
+    }
+                throw new IllegalArgumentException("Unknown geometry type: " + type);
+    }
+                return NUMBER;
+        throws IOException, OpenSearchParseException {
+        }
+    // no instance
+        }
+            case StreamTokenizer.TT_EOF:
+                return parseMultiLine(stream, ignoreZValue, coerce);
+            parseGeometry(stream, GeoShapeType.GEOMETRYCOLLECTION, ignoreZValue, coerce)
+    private static GeometryCollectionBuilder parseGeometryCollection(
+        }
+        if (shapeType != null && shapeType != GeoShapeType.GEOMETRYCOLLECTION) {
+        try (StringReader reader = new StringReader(parser.text())) {
+        String token = nextEmptyOrOpen(stream);
+        }
+    }
+    private static LineStringBuilder parseLine(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
+            return null;
+    private static void checkEOF(StreamTokenizer stream) throws OpenSearchParseException, IOException {
+    private static String nextCloser(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+        List<Coordinate> coordinates = parseCoordinateList(stream, ignoreZValue, coerce);
+            AbstractShapeGeometryFieldMapper.Defaults.ORIENTATION.value()
+    private static MultiPointBuilder parseMultiPoint(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
+/**
+    }
+        }
+                stream.lineno()
+    }
+import org.opensearch.common.geo.builders.MultiPolygonBuilder;
+        nextCloser(stream);
+import org.opensearch.core.xcontent.XContentParser;
+            }
+            tokenizer.wordChars('-', '-');
+        while (nextCloserOrComma(stream).equals(COMMA)) {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+            case MULTIPOLYGON:
+        final boolean coerce
+        Double z = null;
+ *
+            case StreamTokenizer.TT_EOL:
+        final AbstractShapeGeometryFieldMapper shapeMapper
+            case StreamTokenizer.TT_WORD:
+        }
+import org.opensearch.common.Explicit;
+ */
+            }
+        throw new OpenSearchParseException("expected " + EMPTY + " or " + LPAREN + " but found: " + tokenString(stream), stream.lineno());
+            case MULTILINESTRING:
+        GeometryCollectionBuilder builder = new GeometryCollectionBuilder().shape(
+ * @opensearch.internal
+        final boolean ignoreZValue,
+                return parseGeometryCollection(stream, ignoreZValue, coerce);
+        }
+import org.opensearch.common.geo.GeoShapeType;
+        throws IOException, OpenSearchParseException {
+            isOpenParen = false;
+    // are equivalent (they represent equivalent points).
+            case StreamTokenizer.TT_WORD:
+        GeoShapeType shapeType,
+        if (stream.nextToken() == StreamTokenizer.TT_WORD) {
+import org.opensearch.common.geo.GeoPoint;
+                return RPAREN;
+ */
+        MultiLineStringBuilder builder = new MultiLineStringBuilder();
+            ShapeBuilder builder = parseGeometry(tokenizer, shapeType, ignoreZValue.value(), coerce.value());
+import org.opensearch.common.geo.builders.EnvelopeBuilder;
+                return parseBBox(stream);
+ * GitHub history for details.
+    /** parse geometry from the stream tokenizer */
+        StreamTokenizer stream,
+            if (isOpenParen && nextCloser(stream).equals(RPAREN) == false) {
+ * KIND, either express or implied.  See the License for the
+ *
+    private static String tokenString(StreamTokenizer stream) {
+                try {
+        final double lat = nextNumber(stream);
+        double minLat = nextNumber(stream);
+        }
         }
         throw new OpenSearchParseException("expected number but found: " + tokenString(stream), stream.lineno());
-    }
-
-    private static String tokenString(StreamTokenizer stream) {
-        switch (stream.ttype) {
-            case StreamTokenizer.TT_WORD:
-                return stream.sval;
-            case StreamTokenizer.TT_EOF:
-                return EOF;
-            case StreamTokenizer.TT_EOL:
-                return EOL;
-            case StreamTokenizer.TT_NUMBER:
-                return NUMBER;
-        }
-        return "'" + (char) stream.ttype + "'";
-    }
-
-    private static boolean isNumberNext(StreamTokenizer stream) throws IOException {
+/*
+ * license agreements. See the NOTICE file distributed with
+import java.io.IOException;
+        String token = nextWord(stream);
+        return coordinates.build();
+        if (token.equals(COMMA) || token.equals(RPAREN)) {
+                throw new OpenSearchParseException("Expected geometry type [{}] but found [{}]", shapeType, type);
+        if (token.equals(EMPTY)) {
+    private GeoWKTParser() {}
         final int type = stream.nextToken();
-        stream.pushBack();
-        return type == StreamTokenizer.TT_WORD;
+        return builder;
+        OpenSearchParseException {
+        OpenSearchParseException {
+            throw new OpenSearchParseException("expected: [{}]" + RPAREN + " but found: [{}]" + tokenString(stream), stream.lineno());
+        );
+    /** next word in the stream */
+    // A LinearRing is closed LineString with 4 or more positions. The first and last positions
+            parseLinearRing(stream, ignoreZValue, coerce),
+/*
     }
-
-    private static String nextEmptyOrOpen(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        final String next = nextWord(stream);
+        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+    public static final String EMPTY = "EMPTY";
+            StreamTokenizer tokenizer = new StreamTokenizer(reader);
+    private static double nextNumber(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+ * specific language governing permissions and limitations
         if (next.equals(EMPTY) || next.equals(LPAREN)) {
-            return next;
-        }
-        throw new OpenSearchParseException("expected " + EMPTY + " or " + LPAREN + " but found: " + tokenString(stream), stream.lineno());
+                "expected end of WKT string but found additional text: " + tokenString(stream),
+    private static MultiPolygonBuilder parseMultiPolygon(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
+            return builder;
+            case GEOMETRYCOLLECTION:
+            builder.shape(parseGeometry(stream, null, ignoreZValue, coerce));
+            return null;
+                }
+        throws IOException, OpenSearchParseException {
+    private static EnvelopeBuilder parseBBox(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+        return new LineStringBuilder(coordinates);
+        return builder;
     }
-
-    private static String nextCloser(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        if (nextWord(stream).equals(RPAREN)) {
+        throw new OpenSearchParseException("expected " + COMMA + " or " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
+        double minLon = nextNumber(stream);
+import java.io.StringReader;
+    private static PolygonBuilder parsePolygon(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce) throws IOException,
+            case LINESTRING:
+        if (isOpenParen && nextCloser(stream).equals(RPAREN) == false) {
+        OpenSearchParseException {
+import org.opensearch.common.geo.builders.MultiPointBuilder;
+    }
+ *     http://www.apache.org/licenses/LICENSE-2.0
+/*
+    ) throws IOException, OpenSearchParseException {
+        }
+                return parseMultiPoint(stream, ignoreZValue, coerce);
+                    coordinates.add(coordinates.get(0));
+        StreamTokenizer stream,
+ * located at http://docs.opengeospatial.org/is/12-063r5/12-063r5.html
+import org.opensearch.common.geo.builders.PointBuilder;
+    public static ShapeBuilder parseExpectedType(
+}
+    }
+            if (type.wktName().equals(shapeType.wktName()) == false) {
+    public static final String RPAREN = ")";
+ * Parses shape geometry represented in WKT format
+    public static final String COMMA = ",";
+import java.io.StreamTokenizer;
+        }
+    }
+ * not use this file except in compliance with the License.
+            z = GeoPoint.assertZValue(ignoreZValue, nextNumber(stream));
+            );
+            case POLYGON:
+            throw new OpenSearchParseException("invalid number of points in LinearRing (found [{}] - must be >= 4)", coordinates.size());
+    }
+    /** throws an exception if the parsed geometry type does not match the expected shape type */
+    private static String nextEmptyOrOpen(StreamTokenizer stream) throws IOException, OpenSearchParseException {
+ * The OpenSearch Contributors require contributions made to
+            case '(':
+    public static final String NAN = "NaN";
+                ? AbstractShapeGeometryFieldMapper.Defaults.IGNORE_Z_VALUE
+            // setup the tokenizer; configured to read words w/o numbers
+        OpenSearchParseException {
+        if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+import org.opensearch.common.geo.builders.GeometryCollectionBuilder;
+import org.locationtech.jts.geom.Coordinate;
+            builder.linestring(parseLine(stream, ignoreZValue, coerce));
+            return null;
+                return LPAREN;
+        }
+        return parseExpectedType(parser, null, shapeMapper);
+                return Double.NaN;
+import org.opensearch.common.geo.builders.CoordinatesBuilder;
+import org.opensearch.common.geo.builders.LineStringBuilder;
+    }
+        return new MultiPointBuilder(parseCoordinateList(stream, ignoreZValue, coerce));
+                return EOL;
+            } else {
+        while (nextCloserOrComma(stream).equals(COMMA)) {
+                return parsePolygon(stream, ignoreZValue, coerce);
+            case ',':
+    }
+    private static List<Coordinate> parseCoordinateList(StreamTokenizer stream, final boolean ignoreZValue, final boolean coerce)
+        switch (stream.nextToken()) {
+            GeoPoint.assertZValue(ignoreZValue, nextNumber(stream));
+ * software distributed under the License is distributed on an
+    private static boolean isNumberNext(StreamTokenizer stream) throws IOException {
+        stream.pushBack();
+                : shapeMapper.ignoreZValue();
+        nextCloser(stream);
+        }
+        if (token.equals(EMPTY)) {
+            tokenizer.resetSyntax();
+        throw new OpenSearchParseException("expected " + COMMA + " but found: " + tokenString(stream), stream.lineno());
+import org.opensearch.common.geo.builders.ShapeBuilder;
+        MultiPolygonBuilder builder = new MultiPolygonBuilder().polygon(parsePolygon(stream, ignoreZValue, coerce));
+        }
+ * this work for additional information regarding copyright
+ * this file be licensed under the Apache-2.0 license or a
+    }
+            return new MultiLineStringBuilder();
+ */
+        if (coordinates.size() < 4) {
+            return null;
+            return new MultiPointBuilder();
+            tokenizer.wordChars('+', '+');
+            builder.polygon(parsePolygon(stream, ignoreZValue, coerce));
+        while (nextCloserOrComma(stream).equals(COMMA)) {
+ * SPDX-License-Identifier: Apache-2.0
+        if (token.equals(EMPTY)) {
+        if (token.equals(EMPTY)) {
+        String token = nextEmptyOrOpen(stream);
             return RPAREN;
         }
-        throw new OpenSearchParseException("expected " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
-    }
-
-    private static String nextComma(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        if (nextWord(stream).equals(COMMA)) {
-            return COMMA;
-        }
-        throw new OpenSearchParseException("expected " + COMMA + " but found: " + tokenString(stream), stream.lineno());
-    }
-
-    private static String nextCloserOrComma(StreamTokenizer stream) throws IOException, OpenSearchParseException {
-        String token = nextWord(stream);
-        if (token.equals(COMMA) || token.equals(RPAREN)) {
-            return token;
-        }
-        throw new OpenSearchParseException("expected " + COMMA + " or " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
-    }
-
-    /** next word in the stream */
-    private static void checkEOF(StreamTokenizer stream) throws OpenSearchParseException, IOException {
+        final String next = nextWord(stream);
+    ) throws IOException, OpenSearchParseException {
+        final GeoShapeType type = GeoShapeType.forName(nextWord(stream));
+            tokenizer.commentChar('#');
+        final boolean ignoreZValue,
         if (stream.nextToken() != StreamTokenizer.TT_EOF) {
-            throw new OpenSearchParseException(
-                "expected end of WKT string but found additional text: " + tokenString(stream),
-                stream.lineno()
-            );
+        throws IOException, OpenSearchParseException {
+                return parseMultiPolygon(stream, ignoreZValue, coerce);
+                } catch (NumberFormatException e) {
+        return new EnvelopeBuilder(new Coordinate(minLon, maxLat), new Coordinate(maxLon, minLat));
+            return COMMA;
+                    throw new OpenSearchParseException("invalid number found: " + stream.sval, stream.lineno());
+        PolygonBuilder builder = new PolygonBuilder(
+        );
+            tokenizer.wordChars(128 + 32, 255);
         }
-    }
-}
+            if (isNumberNext(stream) || (isOpenParen = nextWord(stream).equals(LPAREN))) {
+                    throw new OpenSearchParseException("invalid LinearRing found (coordinates are not closed)");
+        if (coordinates.size() >= coordinatesNeeded) {
+        nextComma(stream);
+        return "'" + (char) stream.ttype + "'";
+import org.opensearch.index.mapper.AbstractShapeGeometryFieldMapper;
+            if (stream.sval.equalsIgnoreCase(NAN)) {
+        }
+        switch (type) {
+        return z == null ? new Coordinate(lon, lat) : new Coordinate(lon, lat, z);
+        if (nextWord(stream).equals(RPAREN)) {

@@ -1,439 +1,373 @@
 /*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.query;
-
-import org.apache.lucene.document.FeatureField;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.ConstructingObjectParser;
-import org.opensearch.core.xcontent.ObjectParser;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.RankFeatureFieldMapper.RankFeatureFieldType;
-import org.opensearch.index.mapper.RankFeatureMetaFieldMapper;
-import org.opensearch.index.mapper.RankFeaturesFieldMapper.RankFeaturesFieldType;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Objects;
-
-/**
- * Query to run on a [rank_feature] field.
- */
-public final class RankFeatureQueryBuilder extends AbstractQueryBuilder<RankFeatureQueryBuilder> {
-
-    /**
-     * Scoring function for a [rank_feature] field.
-     */
-    public abstract static class ScoreFunction {
-
-        private ScoreFunction() {} // prevent extensions by users
-
-        abstract void writeTo(StreamOutput out) throws IOException;
-
-        abstract Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException;
-
-        abstract void doXContent(XContentBuilder builder) throws IOException;
-
-        /**
-         * A scoring function that scores documents as {@code Math.log(scalingFactor + S)}
-         * where S is the value of the static feature.
-         */
-        public static class Log extends ScoreFunction {
-
-            private static final ConstructingObjectParser<Log, Void> PARSER = new ConstructingObjectParser<>(
-                "log",
-                a -> new Log((Float) a[0])
-            );
-            static {
-                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("scaling_factor"));
-            }
-
-            private final float scalingFactor;
-
-            public Log(float scalingFactor) {
-                this.scalingFactor = scalingFactor;
-            }
-
-            private Log(StreamInput in) throws IOException {
-                this(in.readFloat());
-            }
-
+                return FeatureField.newSigmoidQuery(field, feature, DEFAULT_BOOST, pivot, exp);
             @Override
-            public boolean equals(Object obj) {
-                if (obj == null || obj.getClass() != getClass()) {
-                    return false;
-                }
-                Log that = (Log) obj;
-                return scalingFactor == that.scalingFactor;
+ */
+        if (numNonNulls > 1) {
+ *
             }
-
-            @Override
-            public int hashCode() {
-                return Float.hashCode(scalingFactor);
+            private Sigmoid(StreamInput in) throws IOException {
             }
-
-            @Override
+        } else if (numNonNulls == 0) {
             void writeTo(StreamOutput out) throws IOException {
-                out.writeByte((byte) 0);
-                out.writeFloat(scalingFactor);
-            }
-
-            @Override
-            void doXContent(XContentBuilder builder) throws IOException {
-                builder.startObject("log");
-                builder.field("scaling_factor", scalingFactor);
+            ConstructingObjectParser.optionalConstructorArg(),
+                return new ScoreFunction.Saturation(in);
                 builder.endObject();
-            }
-
-            @Override
-            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
-                if (positiveScoreImpact == false) {
-                    throw new IllegalArgumentException(
-                        "Cannot use the [log] function with a field that has a negative score impact as "
-                            + "it would trigger negative scores"
-                    );
-                }
-                return FeatureField.newLogQuery(field, feature, DEFAULT_BOOST, scalingFactor);
-            }
-        }
-
-        /**
-         * A scoring function that scores documents as {@code S / (S + pivot)} where S is
-         * the value of the static feature.
-         */
-        public static class Saturation extends ScoreFunction {
-
-            private static final ConstructingObjectParser<Saturation, Void> PARSER = new ConstructingObjectParser<>(
-                "saturation",
-                a -> new Saturation((Float) a[0])
-            );
-            static {
-                PARSER.declareFloat(ConstructingObjectParser.optionalConstructorArg(), new ParseField("pivot"));
-            }
-
-            private final Float pivot;
-
-            /** Constructor with a default pivot, computed as the geometric average of
-             *  all feature values in the index. */
-            public Saturation() {
-                this((Float) null);
-            }
-
-            public Saturation(float pivot) {
-                this(Float.valueOf(pivot));
-            }
-
-            private Saturation(Float pivot) {
-                this.pivot = pivot;
-            }
-
-            private Saturation(StreamInput in) throws IOException {
-                this(in.readOptionalFloat());
-            }
-
-            @Override
-            public boolean equals(Object obj) {
-                if (obj == null || obj.getClass() != getClass()) {
-                    return false;
-                }
-                Saturation that = (Saturation) obj;
-                return Objects.equals(pivot, that.pivot);
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hashCode(pivot);
-            }
-
-            @Override
-            void writeTo(StreamOutput out) throws IOException {
-                out.writeByte((byte) 1);
-                out.writeOptionalFloat(pivot);
-            }
-
-            @Override
             void doXContent(XContentBuilder builder) throws IOException {
-                builder.startObject("saturation");
+    }
+                    return false;
+        query.queryName(queryName);
+    }
+import org.apache.lucene.search.Query;
+                }
+                out.writeByte((byte) 3);
+         * A scoring function that scores documents as simply {@code S}
+                builder.endObject();
+            if (lastDotIndex != -1) {
+            return new MatchNoDocsQuery(); // unmapped field
+        }
+        /**
+        this.field = Objects.requireNonNull(field);
+            }
+        query.boost(boost);
+                out.writeOptionalFloat(pivot);
+                builder.startObject("linear");
+        builder.startObject(getName());
+import org.opensearch.index.mapper.RankFeatureMetaFieldMapper;
+        return NAME;
+        scoreFunction.writeTo(out);
+        /**
+    protected void doWriteTo(StreamOutput out) throws IOException {
+            public int hashCode() {
+                "log",
+                this.pivot = pivot;
                 if (pivot != null) {
+                this(in.readOptionalFloat());
+                "saturation",
+    }
+                Saturation that = (Saturation) obj;
+    }
+    }
+            @Override
+                    return scoreFunction.toQuery(parentField, field.substring(lastDotIndex + 1), true);
+            }
+            void writeTo(StreamOutput out) throws IOException {
+            }
+    }
+        } else {
+        byte b = in.readByte();
+                builder.startObject("log");
+                return Objects.hash(pivot, exp);
+/*
+                return getClass().hashCode();
+            void doXContent(XContentBuilder builder) throws IOException {
+        printBoostAndQueryName(builder);
+import org.opensearch.core.xcontent.XContentBuilder;
+        this.scoreFunction = Objects.requireNonNull(scoreFunction);
+            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
+            private final Float pivot;
+                builder.startObject("sigmoid");
+        PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), NAME_FIELD);
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Linear.PARSER, new ParseField("linear"));
+            public Log(float scalingFactor) {
+         */
+                }
+                builder.field("pivot", pivot);
+         * where S is the indexed value of the static feature.
+    protected int doHashCode() {
+        super(in);
+import org.opensearch.index.mapper.RankFeatureFieldMapper.RankFeatureFieldType;
+                return new ScoreFunction.Log(in);
+ * GitHub history for details.
+        }
+import org.opensearch.core.xcontent.ConstructingObjectParser;
+             *  all feature values in the index. */
+    /**
+                final MappedFieldType parentFt = context.fieldMapper(parentField);
+                this();
+        public static class Log extends ScoreFunction {
+ *
+            @Override
                     builder.field("pivot", pivot);
                 }
-                builder.endObject();
-            }
-
-            @Override
-            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
-                if (pivot == null) {
-                    return FeatureField.newSaturationQuery(field, feature);
-                } else {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    @Override
                     return FeatureField.newSaturationQuery(field, feature, DEFAULT_BOOST, pivot);
-                }
-            }
-        }
-
-        /**
-         * A scoring function that scores documents as {@code S^exp / (S^exp + pivot^exp)}
-         * where S is the value of the static feature.
-         */
-        public static class Sigmoid extends ScoreFunction {
-
-            private static final ConstructingObjectParser<Sigmoid, Void> PARSER = new ConstructingObjectParser<>(
+import org.opensearch.index.mapper.RankFeaturesFieldMapper.RankFeaturesFieldType;
+                final String parentField = field.substring(0, lastDotIndex);
                 "sigmoid",
-                a -> new Sigmoid((Float) a[0], ((Float) a[1]).floatValue())
+            private Saturation(StreamInput in) throws IOException {
+                }
+                return scalingFactor == that.scalingFactor;
+            }
+            @Override
+        }
+            private Saturation(Float pivot) {
+                this(Float.valueOf(pivot));
+ * Unless required by applicable law or agreed to in writing,
+        final float boost = args[1] == null ? DEFAULT_BOOST : (Float) args[1];
+            @Override
+                builder.field("scaling_factor", scalingFactor);
+    public abstract static class ScoreFunction {
+            static {
+        long numNonNulls = Arrays.stream(args, 3, args.length).filter(Objects::nonNull).count();
+                if (obj == null || obj.getClass() != getClass()) {
+    public String getWriteableName() {
+            @Override
+         * A scoring function that scores documents as {@code S / (S + pivot)} where S is
+        final MappedFieldType ft = context.fieldMapper(field);
+            }
+            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
+            }
+                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("exponent"));
+                return new ScoreFunction.Sigmoid(in);
+     */
+            }
+            }
+            void doXContent(XContentBuilder builder) throws IOException {
+     */
+        }
+        return Objects.hash(field, scoreFunction);
+         * A scoring function that scores documents as {@code S^exp / (S^exp + pivot^exp)}
+    public RankFeatureQueryBuilder(StreamInput in) throws IOException {
+            }
+            @Override
+                return Objects.equals(pivot, that.pivot);
+                builder.field("exponent", exp);
+                    throw new IllegalArgumentException(
+            throw new IllegalArgumentException("Can only specify one of [log], [saturation], [sigmoid] and [linear]");
+                this((Float) null);
+    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+            private final float pivot;
             );
             static {
-                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("pivot"));
-                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("exponent"));
-            }
-
-            private final float pivot;
-            private final float exp;
-
-            public Sigmoid(float pivot, float exp) {
-                this.pivot = pivot;
+                    return false;
+        PARSER.declareFloat(ConstructingObjectParser.optionalConstructorArg(), BOOST_FIELD);
+     * @param scoreFunction Scoring function for the rank_feature field.
+            public boolean equals(Object obj) {
+ * compatible open source license.
                 this.exp = exp;
             }
-
-            private Sigmoid(StreamInput in) throws IOException {
-                this(in.readFloat(), in.readFloat());
-            }
-
-            @Override
-            public boolean equals(Object obj) {
-                if (obj == null || obj.getClass() != getClass()) {
-                    return false;
-                }
-                Sigmoid that = (Sigmoid) obj;
-                return pivot == that.pivot && exp == that.exp;
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(pivot, exp);
-            }
-
-            @Override
-            void writeTo(StreamOutput out) throws IOException {
-                out.writeByte((byte) 2);
-                out.writeFloat(pivot);
-                out.writeFloat(exp);
-            }
-
-            @Override
-            void doXContent(XContentBuilder builder) throws IOException {
-                builder.startObject("sigmoid");
-                builder.field("pivot", pivot);
-                builder.field("exponent", exp);
-                builder.endObject();
-            }
-
-            @Override
-            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
-                return FeatureField.newSigmoidQuery(field, feature, DEFAULT_BOOST, pivot, exp);
-            }
-        }
-
-        /**
-         * A scoring function that scores documents as simply {@code S}
-         * where S is the indexed value of the static feature.
-         */
-        public static class Linear extends ScoreFunction {
-
-            private static final ObjectParser<Linear, Void> PARSER = new ObjectParser<>("linear", Linear::new);
-
-            public Linear() {}
-
-            private Linear(StreamInput in) {
-                this();
-            }
-
-            @Override
-            public boolean equals(Object obj) {
-                if (obj == null || getClass() != obj.getClass()) {
-                    return false;
-                }
-                return true;
-            }
-
-            @Override
-            public int hashCode() {
-                return getClass().hashCode();
-            }
-
-            @Override
-            void writeTo(StreamOutput out) throws IOException {
-                out.writeByte((byte) 3);
-            }
-
-            @Override
-            void doXContent(XContentBuilder builder) throws IOException {
-                builder.startObject("linear");
-                builder.endObject();
-            }
-
-            @Override
-            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
-                return FeatureField.newLinearQuery(field, feature, DEFAULT_BOOST);
-            }
-        }
-    }
-
-    private static ScoreFunction readScoreFunction(StreamInput in) throws IOException {
-        byte b = in.readByte();
-        switch (b) {
-            case 0:
-                return new ScoreFunction.Log(in);
-            case 1:
-                return new ScoreFunction.Saturation(in);
-            case 2:
-                return new ScoreFunction.Sigmoid(in);
-            case 3:
-                return new ScoreFunction.Linear(in);
-            default:
-                throw new IOException("Illegal score function id: " + b);
-        }
-    }
-
-    public static final ConstructingObjectParser<RankFeatureQueryBuilder, Void> PARSER = new ConstructingObjectParser<>("feature", args -> {
-        final String field = (String) args[0];
-        final float boost = args[1] == null ? DEFAULT_BOOST : (Float) args[1];
-        final String queryName = (String) args[2];
-        long numNonNulls = Arrays.stream(args, 3, args.length).filter(Objects::nonNull).count();
-        final RankFeatureQueryBuilder query;
-        if (numNonNulls > 1) {
-            throw new IllegalArgumentException("Can only specify one of [log], [saturation], [sigmoid] and [linear]");
-        } else if (numNonNulls == 0) {
-            query = new RankFeatureQueryBuilder(field, new ScoreFunction.Saturation());
-        } else {
-            ScoreFunction scoreFunction = (ScoreFunction) Arrays.stream(args, 3, args.length).filter(Objects::nonNull).findAny().get();
-            query = new RankFeatureQueryBuilder(field, scoreFunction);
-        }
-        query.boost(boost);
-        query.queryName(queryName);
-        return query;
-    });
-    static {
-        PARSER.declareString(ConstructingObjectParser.constructorArg(), new ParseField("field"));
-        PARSER.declareFloat(ConstructingObjectParser.optionalConstructorArg(), BOOST_FIELD);
-        PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), NAME_FIELD);
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Log.PARSER, new ParseField("log"));
-        PARSER.declareObject(
-            ConstructingObjectParser.optionalConstructorArg(),
-            ScoreFunction.Saturation.PARSER,
-            new ParseField("saturation")
+ * KIND, either express or implied.  See the License for the
         );
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Sigmoid.PARSER, new ParseField("sigmoid"));
-        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Linear.PARSER, new ParseField("linear"));
-    }
-
-    public static final String NAME = "rank_feature";
-
-    private final String field;
-    private final ScoreFunction scoreFunction;
-
-    /**
      *
-     * @param field  The field name.
-     * @param scoreFunction Scoring function for the rank_feature field.
-     */
-    public RankFeatureQueryBuilder(String field, ScoreFunction scoreFunction) {
-        this.field = Objects.requireNonNull(field);
-        this.scoreFunction = Objects.requireNonNull(scoreFunction);
-    }
-
-    public RankFeatureQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        this.field = in.readString();
-        this.scoreFunction = readScoreFunction(in);
-    }
-
-    @Override
-    public String getWriteableName() {
-        return NAME;
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(field);
-        scoreFunction.writeTo(out);
-    }
-
-    @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(getName());
-        builder.field("field", field);
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Sigmoid.PARSER, new ParseField("sigmoid"));
+                if (positiveScoreImpact == false) {
+                a -> new Sigmoid((Float) a[0], ((Float) a[1]).floatValue())
+            private static final ConstructingObjectParser<Sigmoid, Void> PARSER = new ConstructingObjectParser<>(
+ */
         scoreFunction.doXContent(builder);
-        printBoostAndQueryName(builder);
-        builder.endObject();
     }
-
+                PARSER.declareFloat(ConstructingObjectParser.optionalConstructorArg(), new ParseField("pivot"));
+                        "Cannot use the [log] function with a field that has a negative score impact as "
+            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
+import org.opensearch.core.xcontent.ObjectParser;
+            }
+            @Override
+                if (obj == null || getClass() != obj.getClass()) {
+ *
+            static {
+            query = new RankFeatureQueryBuilder(field, scoreFunction);
+        builder.endObject();
+                } else {
+        final RankFeatureQueryBuilder query;
+         * the value of the static feature.
+import java.util.Arrays;
+            }
+            @Override
+ * The OpenSearch Contributors require contributions made to
+            private Linear(StreamInput in) {
+        out.writeString(field);
+            );
+    private static ScoreFunction readScoreFunction(StreamInput in) throws IOException {
+ * software distributed under the License is distributed on an
+    }
+                out.writeFloat(scalingFactor);
+         * A scoring function that scores documents as {@code Math.log(scalingFactor + S)}
+                return Float.hashCode(scalingFactor);
     @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        final MappedFieldType ft = context.fieldMapper(field);
-
-        if (ft == null) {
-            final int lastDotIndex = field.lastIndexOf('.');
-            if (lastDotIndex != -1) {
-                final String parentField = field.substring(0, lastDotIndex);
-                final MappedFieldType parentFt = context.fieldMapper(parentField);
-                if (parentFt != null && parentFt.unwrap() instanceof RankFeaturesFieldType) {
-                    return scoreFunction.toQuery(parentField, field.substring(lastDotIndex + 1), true);
+         * where S is the value of the static feature.
+import org.apache.lucene.document.FeatureField;
+    protected boolean doEquals(RankFeatureQueryBuilder other) {
+            public boolean equals(Object obj) {
+            }
+        builder.field("field", field);
                 }
             }
-            return new MatchNoDocsQuery(); // unmapped field
-        } else if (ft.unwrap() instanceof RankFeatureFieldType fft) {
-            return scoreFunction.toQuery(RankFeatureMetaFieldMapper.NAME, field, fft.positiveScoreImpact());
-        } else {
-            throw new IllegalArgumentException(
-                "[rank_feature] query only works on [rank_feature] fields and "
-                    + "features of [rank_features] fields, not ["
-                    + ft.typeName()
-                    + "]"
-            );
-        }
-    }
-
-    @Override
-    protected boolean doEquals(RankFeatureQueryBuilder other) {
+                this(in.readFloat(), in.readFloat());
+                return Objects.hashCode(pivot);
+            }
+                    return false;
+            @Override
+                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("pivot"));
+    private final ScoreFunction scoreFunction;
         return Objects.equals(field, other.field) && Objects.equals(scoreFunction, other.scoreFunction);
-    }
-
+         */
+ * Modifications Copyright OpenSearch Contributors. See
+        abstract Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException;
+            /** Constructor with a default pivot, computed as the geometric average of
+            ScoreFunction.Saturation.PARSER,
+                    + "]"
+ * not use this file except in compliance with the License.
+        }
+/**
+    public RankFeatureQueryBuilder(String field, ScoreFunction scoreFunction) {
+import org.apache.lucene.search.MatchNoDocsQuery;
+import org.opensearch.core.common.io.stream.StreamOutput;
+            new ParseField("saturation")
+ * under the License.
+            case 1:
     @Override
-    protected int doHashCode() {
-        return Objects.hash(field, scoreFunction);
+                return FeatureField.newLogQuery(field, feature, DEFAULT_BOOST, scalingFactor);
+     * @param field  The field name.
+                            + "it would trigger negative scores"
+            Query toQuery(String field, String feature, boolean positiveScoreImpact) throws IOException {
+                    + ft.typeName()
+            @Override
+        return query;
+            public int hashCode() {
+                }
+            }
+            private Log(StreamInput in) throws IOException {
+public final class RankFeatureQueryBuilder extends AbstractQueryBuilder<RankFeatureQueryBuilder> {
+import org.opensearch.core.ParseField;
+        public static class Linear extends ScoreFunction {
+    protected Query doToQuery(QueryShardContext context) throws IOException {
+        public static class Sigmoid extends ScoreFunction {
+                    return false;
+                if (obj == null || obj.getClass() != getClass()) {
     }
-
+        public static class Saturation extends ScoreFunction {
+ * this work for additional information regarding copyright
+            }
+            }
+            }
+            ScoreFunction scoreFunction = (ScoreFunction) Arrays.stream(args, 3, args.length).filter(Objects::nonNull).findAny().get();
+        PARSER.declareObject(
+            }
+                }
+    public static final ConstructingObjectParser<RankFeatureQueryBuilder, Void> PARSER = new ConstructingObjectParser<>("feature", args -> {
+                out.writeByte((byte) 2);
+     * Scoring function for a [rank_feature] field.
+            final int lastDotIndex = field.lastIndexOf('.');
+    private final String field;
+            @Override
+        abstract void writeTo(StreamOutput out) throws IOException;
+        this.scoreFunction = readScoreFunction(in);
+                return true;
+ * the Apache License, Version 2.0 (the "License"); you may
+            @Override
+    }
+                Log that = (Log) obj;
+            );
+import org.opensearch.core.common.io.stream.StreamInput;
+        final String queryName = (String) args[2];
+            }
+                this.scalingFactor = scalingFactor;
+        final String field = (String) args[0];
+            @Override
+                out.writeFloat(exp);
+        }
+        private ScoreFunction() {} // prevent extensions by users
+ * You may obtain a copy of the License at
+            case 3:
+        }
+            public int hashCode() {
+                if (pivot == null) {
+            case 0:
+            }
+            @Override
+    static {
+                a -> new Saturation((Float) a[0])
+            public boolean equals(Object obj) {
+                if (parentFt != null && parentFt.unwrap() instanceof RankFeaturesFieldType) {
+            private static final ObjectParser<Linear, Void> PARSER = new ObjectParser<>("linear", Linear::new);
+ * license agreements. See the NOTICE file distributed with
+                    return FeatureField.newSaturationQuery(field, feature);
+                out.writeByte((byte) 1);
+            public Linear() {}
+            }
+            );
+            @Override
+ * Licensed to Elasticsearch under one or more contributor
+         */
+    }
+            public Saturation(float pivot) {
+            public boolean equals(Object obj) {
+        abstract void doXContent(XContentBuilder builder) throws IOException;
+        } else if (ft.unwrap() instanceof RankFeatureFieldType fft) {
+        this.field = in.readString();
+        if (ft == null) {
+        } else {
+                out.writeFloat(pivot);
 }
+            private final float exp;
+            public Saturation() {
+         */
+         * where S is the value of the static feature.
+            void doXContent(XContentBuilder builder) throws IOException {
+ * ownership. Elasticsearch licenses this file to you under
+                }
+    @Override
+            }
+            @Override
+                out.writeByte((byte) 0);
+            void writeTo(StreamOutput out) throws IOException {
+    @Override
+                this(in.readFloat());
+ * SPDX-License-Identifier: Apache-2.0
+            @Override
+    @Override
+            }
+            return scoreFunction.toQuery(RankFeatureMetaFieldMapper.NAME, field, fft.positiveScoreImpact());
+            private static final ConstructingObjectParser<Saturation, Void> PARSER = new ConstructingObjectParser<>(
+                "[rank_feature] query only works on [rank_feature] fields and "
+/*
+            case 2:
+ * this file be licensed under the Apache-2.0 license or a
+                a -> new Log((Float) a[0])
+ * specific language governing permissions and limitations
+            public Sigmoid(float pivot, float exp) {
+                builder.startObject("saturation");
+ */
+                    );
+                if (obj == null || obj.getClass() != getClass()) {
+            @Override
+                throw new IOException("Illegal score function id: " + b);
+        switch (b) {
+            }
+                builder.endObject();
+            private static final ConstructingObjectParser<Log, Void> PARSER = new ConstructingObjectParser<>(
+            default:
+                    + "features of [rank_features] fields, not ["
+        /**
+import java.util.Objects;
+        PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), ScoreFunction.Log.PARSER, new ParseField("log"));
+            private final float scalingFactor;
+import java.io.IOException;
+            }
+            throw new IllegalArgumentException(
+ * Query to run on a [rank_feature] field.
+                this.pivot = pivot;
+            }
+package org.opensearch.index.query;
+            }
+ */
+            }
+        /**
+            query = new RankFeatureQueryBuilder(field, new ScoreFunction.Saturation());
+                builder.endObject();
+                Sigmoid that = (Sigmoid) obj;
+    public static final String NAME = "rank_feature";
+    /**
+            }
+    });
+                PARSER.declareFloat(ConstructingObjectParser.constructorArg(), new ParseField("scaling_factor"));
+            @Override
+                return new ScoreFunction.Linear(in);
+        PARSER.declareString(ConstructingObjectParser.constructorArg(), new ParseField("field"));
+            void writeTo(StreamOutput out) throws IOException {
+                return FeatureField.newLinearQuery(field, feature, DEFAULT_BOOST);
+import org.opensearch.index.mapper.MappedFieldType;
+            public int hashCode() {
+                return pivot == that.pivot && exp == that.exp;
+ *    http://www.apache.org/licenses/LICENSE-2.0

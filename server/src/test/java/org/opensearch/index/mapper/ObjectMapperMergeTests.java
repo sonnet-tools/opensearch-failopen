@@ -1,169 +1,138 @@
+        // THEN a MapperException is thrown with an excepted message
+        if (includeBazField) {
+        );
+        MapperException e = expectThrows(MapperException.class, () -> rootObjectMapper.merge(mergeWith));
+    }
+        );
+import java.util.HashMap;
+        assertThat(mergedFoo.getMapper("bar"), notNullValue());
+        assertTrue(result.nested().isIncludeInRoot());
+        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
+        String type = MapperService.SINGLE_MAPPING_NAME;
+        // GIVEN an enriched mapping with "baz" new field
 /*
- * SPDX-License-Identifier: Apache-2.0
+        Map<String, Mapper> mappers = new HashMap<>();
+ * not use this file except in compliance with the License.
+    }
+            ObjectMapper.Nested.newNested(new Explicit<>(false, true), new Explicit<>(false, false))
+            ObjectMapper.Nested.newNested(new Explicit<>(true, true), new Explicit<>(true, true))
+    public void testMergeNested() {
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
+    public void testMerge() {
+        final ObjectMapper mergedFoo = (ObjectMapper) merged.getMapper("foo");
+    }
+        }
+ * specific language governing permissions and limitations
+    private static ObjectMapper createNestedMapper(String name, ObjectMapper.Nested nested) {
+import static org.hamcrest.Matchers.notNullValue;
+        ObjectMapper result = rootObjectMapper.merge(mergeWith, MapperService.MergeReason.INDEX_TEMPLATE);
+        return rootObjectMapper;
+ * SPDX-License-Identifier: Apache-2.0
+        return mapper;
+        assertEquals("the [enabled] parameter can't be updated for the object mapping [foo]", e.getMessage());
+            type,
+ * Unless required by applicable law or agreed to in writing,
+        assertFalse(result.nested().isIncludeInParent());
+import org.opensearch.test.OpenSearchTestCase;
+        MapperException e = expectThrows(MapperException.class, () -> firstMapper.merge(secondMapper));
+        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
+import java.util.Collections;
+        mappers.values().forEach(mapper::putMapper);
+import org.opensearch.common.Explicit;
  * this work for additional information regarding copyright
  * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.index.mapper;
-
-import org.opensearch.Version;
-import org.opensearch.common.Explicit;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
-import static java.util.Collections.emptyMap;
-import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_VERSION_CREATED;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.notNullValue;
-
-public class ObjectMapperMergeTests extends OpenSearchTestCase {
-
-    private final FieldMapper barFieldMapper = createTextFieldMapper("bar");
-    private final FieldMapper bazFieldMapper = createTextFieldMapper("baz");
-
-    private final RootObjectMapper rootObjectMapper = createMapping(false, true, true, false);
-
-    private RootObjectMapper createMapping(
-        boolean disabledFieldEnabled,
-        boolean fooFieldEnabled,
-        boolean includeBarField,
-        boolean includeBazField
-    ) {
-        Map<String, Mapper> mappers = new HashMap<>();
-        mappers.put("disabled", createObjectMapper("disabled", disabledFieldEnabled, emptyMap()));
-        Map<String, Mapper> fooMappers = new HashMap<>();
-        if (includeBarField) {
-            fooMappers.put("bar", barFieldMapper);
-        }
-        if (includeBazField) {
-            fooMappers.put("baz", bazFieldMapper);
-        }
-        mappers.put("foo", createObjectMapper("foo", fooFieldEnabled, Collections.unmodifiableMap(fooMappers)));
-        return createRootObjectMapper("type1", true, Collections.unmodifiableMap(mappers));
-    }
-
-    public void testMerge() {
-        // GIVEN an enriched mapping with "baz" new field
-        ObjectMapper mergeWith = createMapping(false, true, true, true);
-
-        // WHEN merging mappings
         final ObjectMapper merged = rootObjectMapper.merge(mergeWith);
-
-        // THEN "baz" new field is added to merged mapping
-        final ObjectMapper mergedFoo = (ObjectMapper) merged.getMapper("foo");
-        assertThat(mergedFoo.getMapper("bar"), notNullValue());
-        assertThat(mergedFoo.getMapper("baz"), notNullValue());
-    }
-
-    public void testMergeWhenDisablingField() {
+ * Licensed to Elasticsearch under one or more contributor
         // GIVEN a mapping with "foo" field disabled
-        ObjectMapper mergeWith = createMapping(false, false, false, false);
-
-        // WHEN merging mappings
-        // THEN a MapperException is thrown with an excepted message
-        MapperException e = expectThrows(MapperException.class, () -> rootObjectMapper.merge(mergeWith));
-        assertEquals("the [enabled] parameter can't be updated for the object mapping [foo]", e.getMessage());
-    }
-
-    public void testMergeEnabled() {
-        ObjectMapper mergeWith = createMapping(true, true, true, false);
-
-        MapperException e = expectThrows(MapperException.class, () -> rootObjectMapper.merge(mergeWith));
-        assertEquals("the [enabled] parameter can't be updated for the object mapping [disabled]", e.getMessage());
-
-        ObjectMapper result = rootObjectMapper.merge(mergeWith, MapperService.MergeReason.INDEX_TEMPLATE);
-        assertTrue(result.isEnabled());
-    }
-
-    public void testMergeEnabledForRootMapper() {
-        String type = MapperService.SINGLE_MAPPING_NAME;
-        ObjectMapper firstMapper = createRootObjectMapper(type, true, Collections.emptyMap());
-        ObjectMapper secondMapper = createRootObjectMapper(type, false, Collections.emptyMap());
-
-        MapperException e = expectThrows(MapperException.class, () -> firstMapper.merge(secondMapper));
+ * software distributed under the License is distributed on an
+import static org.hamcrest.Matchers.containsString;
+ * under the License.
         assertEquals("the [enabled] parameter can't be updated for the object mapping [" + type + "]", e.getMessage());
-
-        ObjectMapper result = firstMapper.merge(secondMapper, MapperService.MergeReason.INDEX_TEMPLATE);
-        assertFalse(result.isEnabled());
-    }
-
-    public void testMergeNested() {
-        String type = MapperService.SINGLE_MAPPING_NAME;
-        ObjectMapper firstMapper = createNestedMapper(
-            type,
-            ObjectMapper.Nested.newNested(new Explicit<>(true, true), new Explicit<>(true, true))
-        );
-        ObjectMapper secondMapper = createNestedMapper(
-            type,
-            ObjectMapper.Nested.newNested(new Explicit<>(false, true), new Explicit<>(false, false))
-        );
-
-        MapperException e = expectThrows(MapperException.class, () -> firstMapper.merge(secondMapper));
-        assertThat(e.getMessage(), containsString("[include_in_parent] parameter can't be updated on a nested object mapping"));
-
-        ObjectMapper result = firstMapper.merge(secondMapper, MapperService.MergeReason.INDEX_TEMPLATE);
-        assertFalse(result.nested().isIncludeInParent());
-        assertTrue(result.nested().isIncludeInRoot());
-    }
-
-    private static RootObjectMapper createRootObjectMapper(String name, boolean enabled, Map<String, Mapper> mappers) {
+    public void testMergeEnabledForRootMapper() {
         final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
-        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
+        ObjectMapper mergeWith = createMapping(true, true, true, false);
         final RootObjectMapper rootObjectMapper = new RootObjectMapper.Builder(name).enabled(enabled).build(context);
-
+ * The OpenSearch Contributors require contributions made to
+        ObjectMapper mergeWith = createMapping(false, true, true, true);
+        boolean fooFieldEnabled,
+        return createRootObjectMapper("type1", true, Collections.unmodifiableMap(mappers));
+    private final RootObjectMapper rootObjectMapper = createMapping(false, true, true, false);
+            type,
+        ObjectMapper result = firstMapper.merge(secondMapper, MapperService.MergeReason.INDEX_TEMPLATE);
+ * license agreements. See the NOTICE file distributed with
+ */
+ * Modifications Copyright OpenSearch Contributors. See
+ *
+ * this file be licensed under the Apache-2.0 license or a
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        mappers.put("disabled", createObjectMapper("disabled", disabledFieldEnabled, emptyMap()));
+        assertFalse(result.isEnabled());
         mappers.values().forEach(rootObjectMapper::putMapper);
-
-        return rootObjectMapper;
+        assertThat(mergedFoo.getMapper("baz"), notNullValue());
+        ObjectMapper result = firstMapper.merge(secondMapper, MapperService.MergeReason.INDEX_TEMPLATE);
     }
-
-    private static ObjectMapper createObjectMapper(String name, boolean enabled, Map<String, Mapper> mappers) {
-        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
-        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
-        final ObjectMapper mapper = new ObjectMapper.Builder<>(name).enabled(enabled).build(context);
-
-        mappers.values().forEach(mapper::putMapper);
-
-        return mapper;
-    }
-
-    private static ObjectMapper createNestedMapper(String name, ObjectMapper.Nested nested) {
-        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
-        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
         return new ObjectMapper.Builder<>(name).nested(nested).build(context);
-    }
-
-    private TextFieldMapper createTextFieldMapper(String name) {
-        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
-        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
-        return new TextFieldMapper.Builder(name, createDefaultIndexAnalyzers()).build(context);
-    }
 }
+        MapperException e = expectThrows(MapperException.class, () -> firstMapper.merge(secondMapper));
+        ObjectMapper firstMapper = createNestedMapper(
+        Map<String, Mapper> fooMappers = new HashMap<>();
+    private final FieldMapper bazFieldMapper = createTextFieldMapper("baz");
+        if (includeBarField) {
+    public void testMergeEnabled() {
+    ) {
+/*
+        assertTrue(result.isEnabled());
+import org.opensearch.Version;
+        // WHEN merging mappings
+        String type = MapperService.SINGLE_MAPPING_NAME;
+    }
+        // WHEN merging mappings
+    private final FieldMapper barFieldMapper = createTextFieldMapper("bar");
+        boolean includeBarField,
+        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
+ * KIND, either express or implied.  See the License for the
+    }
+        boolean disabledFieldEnabled,
+        boolean includeBazField
+        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
+import static org.opensearch.cluster.metadata.IndexMetadata.SETTING_VERSION_CREATED;
+        assertThat(e.getMessage(), containsString("[include_in_parent] parameter can't be updated on a nested object mapping"));
+        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
+import static java.util.Collections.emptyMap;
+    private static RootObjectMapper createRootObjectMapper(String name, boolean enabled, Map<String, Mapper> mappers) {
+    }
+        mappers.put("foo", createObjectMapper("foo", fooFieldEnabled, Collections.unmodifiableMap(fooMappers)));
+        }
+        final ObjectMapper mapper = new ObjectMapper.Builder<>(name).enabled(enabled).build(context);
+    }
+public class ObjectMapperMergeTests extends OpenSearchTestCase {
+        assertEquals("the [enabled] parameter can't be updated for the object mapping [disabled]", e.getMessage());
+ * You may obtain a copy of the License at
+import org.opensearch.common.settings.Settings;
+        final Settings indexSettings = Settings.builder().put(SETTING_VERSION_CREATED, Version.CURRENT).build();
+ *
+        ObjectMapper firstMapper = createRootObjectMapper(type, true, Collections.emptyMap());
+/*
+    private TextFieldMapper createTextFieldMapper(String name) {
+import java.util.Map;
+ */
+    private RootObjectMapper createMapping(
+    private static ObjectMapper createObjectMapper(String name, boolean enabled, Map<String, Mapper> mappers) {
+        // THEN "baz" new field is added to merged mapping
+    public void testMergeWhenDisablingField() {
+        return new TextFieldMapper.Builder(name, createDefaultIndexAnalyzers()).build(context);
+ */
+        MapperException e = expectThrows(MapperException.class, () -> rootObjectMapper.merge(mergeWith));
+        final Mapper.BuilderContext context = new Mapper.BuilderContext(indexSettings, new ContentPath());
+        ObjectMapper mergeWith = createMapping(false, false, false, false);
+        ObjectMapper secondMapper = createRootObjectMapper(type, false, Collections.emptyMap());
+            fooMappers.put("bar", barFieldMapper);
+            fooMappers.put("baz", bazFieldMapper);
+package org.opensearch.index.mapper;
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * compatible open source license.
+    }
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * GitHub history for details.
+        ObjectMapper secondMapper = createNestedMapper(

@@ -1,424 +1,370 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-package org.opensearch.search;
-
-import org.opensearch.Version;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.action.search.SearchResponseTests;
-import org.opensearch.action.search.ShardSearchFailure;
+        @Override
+            createTestItem(false, List.of(new GenericSearchExtBuilder(List.of("1", "2", "3"), GenericSearchExtBuilder.ValueType.LIST))),
+    static SearchResponse.Clusters randomClusters() {
+            false,
+            return Objects.hash(this.getClass(), this.map);
+        } else {
+        public void writeTo(StreamOutput out) throws IOException {
+    // This test case fails because GenericSearchExtBuilder does not retain the name of the SearchExtBuilder that it is replacing.
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.rest.action.search.RestSearchAction;
-import org.opensearch.search.aggregations.AggregationsTests;
-import org.opensearch.search.aggregations.InternalAggregations;
-import org.opensearch.search.internal.InternalSearchResponse;
-import org.opensearch.search.profile.SearchProfileShardResults;
-import org.opensearch.search.profile.SearchProfileShardResultsTests;
-import org.opensearch.search.suggest.Suggest;
-import org.opensearch.search.suggest.SuggestTests;
-import org.opensearch.test.InternalAggregationTestCase;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-
-import static java.util.Collections.singletonMap;
-
-public class GenericSearchExtBuilderTests extends OpenSearchTestCase {
-
-    private static final NamedXContentRegistry xContentRegistry;
-    static {
-        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>(InternalAggregationTestCase.getDefaultNamedXContents());
-        namedXContents.addAll(SuggestTests.getDefaultNamedXContents());
-        namedXContents.add(
-            new NamedXContentRegistry.Entry(
-                SearchExtBuilder.class,
-                GenericSearchExtBuilder.EXT_BUILDER_NAME,
-                GenericSearchExtBuilder::fromXContent
-            )
-        );
-        xContentRegistry = new NamedXContentRegistry(namedXContents);
-    }
-
+        long tookInMillis = randomNonNegativeLong();
+        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
+        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
     private final NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry(
-        new SearchModule(Settings.EMPTY, List.of(new SearchPlugin() {
-            @Override
-            public List<SearchExtSpec<?>> getSearchExts() {
-                return List.of(
-                    new SearchExtSpec<>(
-                        GenericSearchExtBuilder.EXT_BUILDER_NAME,
-                        GenericSearchExtBuilder::new,
-                        GenericSearchExtBuilder::fromXContent
-                    )
-                );
-            }
-        })).getNamedWriteables()
-    );
-
-    @Override
-    protected NamedXContentRegistry xContentRegistry() {
-        return xContentRegistry;
-    }
-
-    SearchResponseTests srt = new SearchResponseTests();
-    private AggregationsTests aggregationsTests = new AggregationsTests();
-
-    @Before
-    public void init() throws Exception {
-        aggregationsTests.init();
-    }
-
-    @After
-    public void cleanUp() throws Exception {
-        aggregationsTests.cleanUp();
-    }
-
-    public void testFromXContentWithUnregisteredSearchExtBuilders() throws IOException {
-        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>(InternalAggregationTestCase.getDefaultNamedXContents());
-        namedXContents.addAll(SuggestTests.getDefaultNamedXContents());
-        String dummyId = UUID.randomUUID().toString();
-        List<SearchExtBuilder> extBuilders = List.of(
-            new SimpleValueSearchExtBuilder(dummyId),
-            new MapSearchExtBuilder(Map.of("x", "y", "a", "b")),
+        @Override
+            internalSearchResponse = new InternalSearchResponse(
             new ListSearchExtBuilder(List.of("1", "2", "3"))
+        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
+        private final List<String> list;
         );
-        SearchResponse response = srt.createTestItem(false, extBuilders);
-        MediaType xcontentType = randomFrom(XContentType.values());
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+import org.opensearch.search.internal.InternalSearchResponse;
+    }
+        if (searchResponse.getHits().getTotalHits() == null) {
+import org.junit.After;
+            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
+        @Override
+        String dummyId = UUID.randomUUID().toString();
+                GenericSearchExtBuilder::fromXContent
+import org.opensearch.core.xcontent.ToXContent;
+            Suggest suggest = SuggestTests.createTestItem();
+        if (searchResponse.getHits().getTotalHits() == null) {
+    }
+        public int hashCode() {
+            List.of(new GenericSearchExtBuilder(id, GenericSearchExtBuilder.ValueType.SIMPLE))
+import java.util.Map;
+import org.opensearch.core.common.io.stream.StreamOutput;
+            List.of(new GenericSearchExtBuilder(Map.of("x", "y", "a", "b"), GenericSearchExtBuilder.ValueType.MAP))
+        srt.doFromXContentTestWithRandomFields(
         boolean humanReadable = randomBoolean();
-        final ToXContent.Params params = new ToXContent.MapParams(singletonMap(RestSearchAction.TYPED_KEYS_PARAM, "true"));
-        BytesReference originalBytes = toShuffledXContent(response, xcontentType, params, humanReadable);
+        public void writeTo(StreamOutput out) throws IOException {
+        public int hashCode() {
+                        GenericSearchExtBuilder::fromXContent
+    }
+                numReducePhases,
+        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
+        assertEquals(
+    }
+            SearchProfileShardResults profileShardResults = SearchProfileShardResultsTests.createTestItem();
+        int successfulClusters = randomIntBetween(0, totalClusters);
+            return this.id;
         XContentParser parser = createParser(new NamedXContentRegistry(namedXContents), xcontentType.xContent(), originalBytes);
-        SearchResponse parsed = SearchResponse.fromXContent(parser);
-        assertEquals(extBuilders.size(), response.getInternalResponse().getSearchExtBuilders().size());
-
-        List<SearchExtBuilder> actual = parsed.getInternalResponse().getSearchExtBuilders();
-        assertEquals(extBuilders.size(), actual.size());
+    static class SimpleValueSearchExtBuilder extends SearchExtBuilder {
+    protected NamedXContentRegistry xContentRegistry() {
+        @Override
+    @Override
+        public String getWriteableName() {
+import org.opensearch.action.search.SearchResponseTests;
+            this.id = id;
+                searchExtBuilders,
+        public static SimpleValueSearchExtBuilder parse(XContentParser parser) throws IOException {
+        @Override
+            }
+            }
+        boolean timedOut = randomBoolean();
+        ShardSearchFailure... shardSearchFailures
+import java.util.Objects;
+        );
+ *
+        }
+            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
+import org.opensearch.core.common.io.stream.StreamInput;
+        );
+            return false;
+            out.writeString(this.id);
+        int numReducePhases = randomIntBetween(1, 10);
+                throw new ParsingException(parser.getTokenLocation(), "no id specified for " + FIELD.getPreferredName());
+            list.forEach(e -> this.list.add(e));
+import org.opensearch.test.InternalAggregationTestCase;
+            internalSearchResponse = InternalSearchResponse.empty();
+    private static final NamedXContentRegistry xContentRegistry;
+        }
+            return this.id.equals(((SimpleValueSearchExtBuilder) obj).getId());
+        SearchResponse response = srt.createTestItem(false, extBuilders);
+        String dummyId = UUID.randomUUID().toString();
+            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
+        }
         for (int i = 0; i < actual.size(); i++) {
+        SearchResponse searchResponse = createTestItem(
+        int skippedShards = randomIntBetween(0, totalShards);
+        public int hashCode() {
+        boolean minimal,
+        aggregationsTests.init();
+        );
+        assertEquals(extBuilders.size(), response.getInternalResponse().getSearchExtBuilders().size());
+    public void testSerializationWithGenericSearchExtBuildersForListValues() throws IOException {
+            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
+            if (id == null) {
+        srt.doFromXContentTestWithRandomFields(
+import org.opensearch.plugins.SearchPlugin;
+        }
+    public void init() throws Exception {
+        public String getWriteableName() {
+        xContentRegistry = new NamedXContentRegistry(namedXContents);
+            return false;
+        if (searchResponse.getHits().getTotalHits() == null) {
+        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
+        private final String id;
+        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
+            internalSearchResponse,
+                        GenericSearchExtBuilder.EXT_BUILDER_NAME,
+        } else {
+        }
+            assertNull(deserialized.getHits().getTotalHits());
+        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
+        private final Map<String, Object> map;
+    }
+            return Objects.hash(this.getClass(), this.list);
+        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
+        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
+                profileShardResults,
+                throw new ParsingException(parser.getTokenLocation(), "Expected a VALUE_STRING but got " + token);
+        public boolean equals(Object obj) {
+        List<SearchExtBuilder> actual = parsed.getInternalResponse().getSearchExtBuilders();
+            skippedShards,
+                    )
+        InternalSearchResponse internalSearchResponse;
+import java.util.HashMap;
+ * The OpenSearch Contributors require contributions made to
             assertTrue(actual.get(0) instanceof GenericSearchExtBuilder);
         }
-    }
-
-    // This test case fails because GenericSearchExtBuilder does not retain the name of the SearchExtBuilder that it is replacing.
-    // GenericSearchExtBuilder has its own "generic_ext" section name.
-    // public void testFromXContentWithSearchExtBuilders() throws IOException {
-    // String dummyId = UUID.randomUUID().toString();
-    // srt.doFromXContentTestWithRandomFields(createTestItem(false, List.of(new SimpleValueSearchExtBuilder(dummyId))), false);
-    // }
-
-    public void testFromXContentWithGenericSearchExtBuildersForSimpleValues() throws IOException {
-        String dummyId = UUID.randomUUID().toString();
-        srt.doFromXContentTestWithRandomFields(
-            createTestItem(false, List.of(new GenericSearchExtBuilder(dummyId, GenericSearchExtBuilder.ValueType.SIMPLE))),
-            false
-        );
-    }
-
-    public void testFromXContentWithGenericSearchExtBuildersForMapValues() throws IOException {
-        srt.doFromXContentTestWithRandomFields(
-            createTestItem(false, List.of(new GenericSearchExtBuilder(Map.of("x", "y", "a", "b"), GenericSearchExtBuilder.ValueType.MAP))),
-            false
-        );
-    }
-
-    public void testFromXContentWithGenericSearchExtBuildersForListValues() throws IOException {
-        String dummyId = UUID.randomUUID().toString();
-        srt.doFromXContentTestWithRandomFields(
-            createTestItem(false, List.of(new GenericSearchExtBuilder(List.of("1", "2", "3"), GenericSearchExtBuilder.ValueType.LIST))),
-            false
-        );
-    }
-
-    public void testSerializationWithGenericSearchExtBuildersForSimpleValues() throws IOException {
-        String id = UUID.randomUUID().toString();
-        SearchResponse searchResponse = createTestItem(
-            false,
-            List.of(new GenericSearchExtBuilder(id, GenericSearchExtBuilder.ValueType.SIMPLE))
-        );
-        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
-        if (searchResponse.getHits().getTotalHits() == null) {
-            assertNull(deserialized.getHits().getTotalHits());
-        } else {
-            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
-            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
         }
-        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
-        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
         assertEquals(searchResponse.getFailedShards(), deserialized.getFailedShards());
-        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
-        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
-        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
-        assertEquals(
-            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
-            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
-        );
-    }
-
-    public void testSerializationWithGenericSearchExtBuildersForMapValues() throws IOException {
-        SearchResponse searchResponse = createTestItem(
-            false,
-            List.of(new GenericSearchExtBuilder(Map.of("x", "y", "a", "b"), GenericSearchExtBuilder.ValueType.MAP))
-        );
-        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
-        if (searchResponse.getHits().getTotalHits() == null) {
-            assertNull(deserialized.getHits().getTotalHits());
-        } else {
-            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
-            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
-        }
-        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
-        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
-        assertEquals(searchResponse.getFailedShards(), deserialized.getFailedShards());
-        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
-        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
-        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
-        assertEquals(
-            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
-            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
-        );
-    }
-
-    public void testSerializationWithGenericSearchExtBuildersForListValues() throws IOException {
-        SearchResponse searchResponse = createTestItem(
-            false,
-            List.of(new GenericSearchExtBuilder(List.of("1", "2", "3"), GenericSearchExtBuilder.ValueType.LIST))
-        );
-        SearchResponse deserialized = copyWriteable(searchResponse, namedWriteableRegistry, SearchResponse::new, Version.CURRENT);
-        if (searchResponse.getHits().getTotalHits() == null) {
-            assertNull(deserialized.getHits().getTotalHits());
-        } else {
-            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
-            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
-        }
-        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
-        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
-        assertEquals(searchResponse.getFailedShards(), deserialized.getFailedShards());
-        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
-        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
-        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
-        assertEquals(
-            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
-            deserialized.getInternalResponse().getSearchExtBuilders().get(0)
-        );
-    }
-
-    public SearchResponse createTestItem(
-        boolean minimal,
-        List<SearchExtBuilder> searchExtBuilders,
-        ShardSearchFailure... shardSearchFailures
-    ) {
-        boolean timedOut = randomBoolean();
-        Boolean terminatedEarly = randomBoolean() ? null : randomBoolean();
-        int numReducePhases = randomIntBetween(1, 10);
-        long tookInMillis = randomNonNegativeLong();
-        int totalShards = randomIntBetween(1, Integer.MAX_VALUE);
-        int successfulShards = randomIntBetween(0, totalShards);
-        int skippedShards = randomIntBetween(0, totalShards);
-        InternalSearchResponse internalSearchResponse;
-        if (minimal == false) {
-            SearchHits hits = SearchHitsTests.createTestItem(true, true);
-            InternalAggregations aggregations = aggregationsTests.createTestInstance();
-            Suggest suggest = SuggestTests.createTestItem();
-            SearchProfileShardResults profileShardResults = SearchProfileShardResultsTests.createTestItem();
-            internalSearchResponse = new InternalSearchResponse(
-                hits,
-                aggregations,
-                suggest,
-                profileShardResults,
-                timedOut,
-                terminatedEarly,
-                numReducePhases,
-                searchExtBuilders,
-                Collections.emptyList()
-            );
-        } else {
-            internalSearchResponse = InternalSearchResponse.empty();
-        }
-
         return new SearchResponse(
-            internalSearchResponse,
-            null,
-            totalShards,
-            successfulShards,
-            skippedShards,
+        }
+        public boolean equals(Object obj) {
+    // String dummyId = UUID.randomUUID().toString();
+        assertEquals(extBuilders.size(), actual.size());
+            createTestItem(false, List.of(new GenericSearchExtBuilder(Map.of("x", "y", "a", "b"), GenericSearchExtBuilder.ValueType.MAP))),
+        public void writeTo(StreamOutput out) throws IOException {
             tookInMillis,
-            shardSearchFailures,
-            randomBoolean() ? randomClusters() : SearchResponse.Clusters.EMPTY,
-            null
-        );
     }
-
-    static SearchResponse.Clusters randomClusters() {
-        int totalClusters = randomIntBetween(0, 10);
-        int successfulClusters = randomIntBetween(0, totalClusters);
-        int skippedClusters = totalClusters - successfulClusters;
-        return new SearchResponse.Clusters(totalClusters, successfulClusters, skippedClusters);
-    }
-
-    static class SimpleValueSearchExtBuilder extends SearchExtBuilder {
-
-        static ParseField FIELD = new ParseField("simple_value");
-
-        private final String id;
-
-        public SimpleValueSearchExtBuilder(String id) {
-            assertNotNull(id);
-            this.id = id;
-        }
-
-        public SimpleValueSearchExtBuilder(StreamInput in) throws IOException {
-            this.id = in.readString();
-        }
-
-        public String getId() {
-            return this.id;
-        }
-
-        @Override
-        public String getWriteableName() {
-            return FIELD.getPreferredName();
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(this.id);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(FIELD.getPreferredName(), id);
-        }
-
-        @Override
-        public int hashCode() {
-            return 0;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-
-            if (!(obj instanceof SimpleValueSearchExtBuilder)) {
-                return false;
-            }
-
-            return this.id.equals(((SimpleValueSearchExtBuilder) obj).getId());
-        }
-
-        public static SimpleValueSearchExtBuilder parse(XContentParser parser) throws IOException {
-            String id;
-            XContentParser.Token token = parser.currentToken();
-            if (token == XContentParser.Token.VALUE_STRING) {
-                id = parser.text();
-            } else {
-                throw new ParsingException(parser.getTokenLocation(), "Expected a VALUE_STRING but got " + token);
-            }
-            if (id == null) {
-                throw new ParsingException(parser.getTokenLocation(), "no id specified for " + FIELD.getPreferredName());
-            }
-            return new SimpleValueSearchExtBuilder(id);
-        }
-    }
-
-    static class MapSearchExtBuilder extends SearchExtBuilder {
-
-        private final static String EXT_FIELD = "map0";
-
-        private final Map<String, Object> map;
-
-        public MapSearchExtBuilder(Map<String, String> map) {
-            this.map = new HashMap<>();
-            for (Map.Entry<String, String> e : map.entrySet()) {
-                this.map.put(e.getKey(), e.getValue());
-            }
-        }
-
-        @Override
-        public String getWriteableName() {
-            return EXT_FIELD;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeMap(this.map);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(EXT_FIELD, this.map);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(this.getClass(), this.map);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return false;
-        }
-    }
-
+import org.opensearch.rest.action.search.RestSearchAction;
     static class ListSearchExtBuilder extends SearchExtBuilder {
-
-        private final static String EXT_FIELD = "list0";
-
-        private final List<String> list;
-
-        public ListSearchExtBuilder(List<String> list) {
-            this.list = new ArrayList<>();
-            list.forEach(e -> this.list.add(e));
         }
-
-        @Override
-        public String getWriteableName() {
-            return EXT_FIELD;
+    public void testFromXContentWithUnregisteredSearchExtBuilders() throws IOException {
+            }
+            false,
+        namedXContents.add(
         }
-
+import org.opensearch.core.xcontent.XContentParser;
+        }
+            assertNull(deserialized.getHits().getTotalHits());
+        assertEquals(
+                );
         @Override
-        public void writeTo(StreamOutput out) throws IOException {
+        assertEquals(searchResponse.getFailedShards(), deserialized.getFailedShards());
+            }
+            return 0;
+            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
+            new NamedXContentRegistry.Entry(
+import org.opensearch.search.profile.SearchProfileShardResultsTests;
+package org.opensearch.search;
+    public void testFromXContentWithGenericSearchExtBuildersForListValues() throws IOException {
+    );
+import org.opensearch.core.xcontent.XContentBuilder;
+        );
             out.writeCollection(this.list, StreamOutput::writeString);
+    }
+        );
+    public void testFromXContentWithGenericSearchExtBuildersForMapValues() throws IOException {
+import java.util.List;
+        SearchResponse searchResponse = createTestItem(
+import org.opensearch.core.common.bytes.BytesReference;
+public class GenericSearchExtBuilderTests extends OpenSearchTestCase {
+        List<SearchExtBuilder> searchExtBuilders,
+        private final static String EXT_FIELD = "list0";
+    // }
+                return false;
+        MediaType xcontentType = randomFrom(XContentType.values());
+        final ToXContent.Params params = new ToXContent.MapParams(singletonMap(RestSearchAction.TYPED_KEYS_PARAM, "true"));
         }
-
+                        GenericSearchExtBuilder::new,
+            for (Map.Entry<String, String> e : map.entrySet()) {
+        srt.doFromXContentTestWithRandomFields(
+        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
+    // public void testFromXContentWithSearchExtBuilders() throws IOException {
+import org.opensearch.action.search.ShardSearchFailure;
+}
+        new SearchModule(Settings.EMPTY, List.of(new SearchPlugin() {
+    public void cleanUp() throws Exception {
+        namedXContents.addAll(SuggestTests.getDefaultNamedXContents());
+            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
+import java.util.ArrayList;
+import org.opensearch.test.OpenSearchTestCase;
+            assertEquals(searchResponse.getHits().getTotalHits().relation(), deserialized.getHits().getTotalHits().relation());
+import java.io.IOException;
+        @Override
+                SearchExtBuilder.class,
+    }
+    }
+        int successfulShards = randomIntBetween(0, totalShards);
+        public ListSearchExtBuilder(List<String> list) {
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            return builder.field(EXT_FIELD, this.list);
+import org.opensearch.Version;
+    @Before
+ * SPDX-License-Identifier: Apache-2.0
+        public SimpleValueSearchExtBuilder(StreamInput in) throws IOException {
+                Collections.emptyList()
+                terminatedEarly,
+        String id = UUID.randomUUID().toString();
+import org.opensearch.search.suggest.SuggestTests;
+            XContentParser.Token token = parser.currentToken();
+    }
+        static ParseField FIELD = new ParseField("simple_value");
         }
-
+import java.util.Collections;
+        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>(InternalAggregationTestCase.getDefaultNamedXContents());
+    static class MapSearchExtBuilder extends SearchExtBuilder {
+        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
+        int skippedClusters = totalClusters - successfulClusters;
+            null
+            false
         @Override
-        public int hashCode() {
-            return Objects.hash(this.getClass(), this.list);
+    }
+            } else {
+        int totalClusters = randomIntBetween(0, 10);
+    }
         }
-
-        @Override
-        public boolean equals(Object obj) {
-            return false;
+            false
+        assertEquals(
+            assertNull(deserialized.getHits().getTotalHits());
+import org.opensearch.common.xcontent.XContentType;
+            false
+                suggest,
+ * this file be licensed under the Apache-2.0 license or a
+            public List<SearchExtSpec<?>> getSearchExts() {
+        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
+    ) {
+import static java.util.Collections.singletonMap;
+        })).getNamedWriteables()
+            }
+            new MapSearchExtBuilder(Map.of("x", "y", "a", "b")),
+    }
+        SearchResponse parsed = SearchResponse.fromXContent(parser);
+        );
+                timedOut,
+import org.opensearch.core.ParseField;
+                this.map.put(e.getKey(), e.getValue());
+import org.junit.Before;
+            }
+    // srt.doFromXContentTestWithRandomFields(createTestItem(false, List.of(new SimpleValueSearchExtBuilder(dummyId))), false);
+        assertEquals(searchResponse.getNumReducePhases(), deserialized.getNumReducePhases());
+            successfulShards,
+        assertEquals(searchResponse.getSkippedShards(), deserialized.getSkippedShards());
+                    new SearchExtSpec<>(
+import org.opensearch.search.suggest.Suggest;
         }
     }
-}
+        SearchResponse searchResponse = createTestItem(
+            totalShards,
+        }
+import org.opensearch.action.search.SearchResponse;
+    private AggregationsTests aggregationsTests = new AggregationsTests();
+                return List.of(
+            randomBoolean() ? randomClusters() : SearchResponse.Clusters.EMPTY,
+    public void testFromXContentWithGenericSearchExtBuildersForSimpleValues() throws IOException {
+        List<SearchExtBuilder> extBuilders = List.of(
+import java.util.UUID;
+        }
+            assertNotNull(id);
+                return false;
+        namedXContents.addAll(SuggestTests.getDefaultNamedXContents());
+            SearchHits hits = SearchHitsTests.createTestItem(true, true);
+        assertEquals(searchResponse.getClusters(), deserialized.getClusters());
+        @Override
+    }
+            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
+            if (!(obj instanceof SimpleValueSearchExtBuilder)) {
+            this.id = in.readString();
+            null,
+            String id;
+    }
+            if (token == XContentParser.Token.VALUE_STRING) {
+        }
+        assertEquals(searchResponse.getFailedShards(), deserialized.getFailedShards());
+        String dummyId = UUID.randomUUID().toString();
+            this.map = new HashMap<>();
+        } else {
+        }
+    @After
+            List.of(new GenericSearchExtBuilder(List.of("1", "2", "3"), GenericSearchExtBuilder.ValueType.LIST))
+            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
+        int totalShards = randomIntBetween(1, Integer.MAX_VALUE);
+import org.opensearch.search.aggregations.AggregationsTests;
+            shardSearchFailures,
+        );
+import org.opensearch.core.xcontent.MediaType;
+        }
+    public SearchResponse createTestItem(
+            false,
+    public void testSerializationWithGenericSearchExtBuildersForMapValues() throws IOException {
+/*
+        @Override
+        @Override
+        public boolean equals(Object obj) {
+        return new SearchResponse.Clusters(totalClusters, successfulClusters, skippedClusters);
+        }
+        }
+        Boolean terminatedEarly = randomBoolean() ? null : randomBoolean();
+        @Override
+        );
+                id = parser.text();
+        );
+ * compatible open source license.
+            createTestItem(false, List.of(new GenericSearchExtBuilder(dummyId, GenericSearchExtBuilder.ValueType.SIMPLE))),
+            @Override
+        } else {
+import org.opensearch.search.profile.SearchProfileShardResults;
+            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
+            return builder.field(EXT_FIELD, this.list);
+    public void testSerializationWithGenericSearchExtBuildersForSimpleValues() throws IOException {
+            return new SimpleValueSearchExtBuilder(id);
+            InternalAggregations aggregations = aggregationsTests.createTestInstance();
+        public SimpleValueSearchExtBuilder(String id) {
+            out.writeMap(this.map);
+        public String getWriteableName() {
+                GenericSearchExtBuilder.EXT_BUILDER_NAME,
+        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
+            )
+            return builder.field(EXT_FIELD, this.map);
+            assertEquals(searchResponse.getHits().getTotalHits().value(), deserialized.getHits().getTotalHits().value());
+        );
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+            );
+            return FIELD.getPreferredName();
+import org.opensearch.core.common.ParsingException;
+ */
+    SearchResponseTests srt = new SearchResponseTests();
+            return builder.field(FIELD.getPreferredName(), id);
+                hits,
+        BytesReference originalBytes = toShuffledXContent(response, xcontentType, params, humanReadable);
+        aggregationsTests.cleanUp();
+            return EXT_FIELD;
+        );
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        public String getId() {
+        if (minimal == false) {
+    static {
+    // GenericSearchExtBuilder has its own "generic_ext" section name.
+        }
+            if (obj == null) {
+        assertEquals(searchResponse.getTotalShards(), deserialized.getTotalShards());
+        public MapSearchExtBuilder(Map<String, String> map) {
+        List<NamedXContentRegistry.Entry> namedXContents = new ArrayList<>(InternalAggregationTestCase.getDefaultNamedXContents());
+            this.list = new ArrayList<>();
+        assertEquals(searchResponse.getHits().getHits().length, deserialized.getHits().getHits().length);
+        private final static String EXT_FIELD = "map0";
+        return xContentRegistry;
+        }
+        @Override
+            searchResponse.getInternalResponse().getSearchExtBuilders().get(0),
+            return EXT_FIELD;
+        }
+import org.opensearch.search.aggregations.InternalAggregations;
+        }
+            new SimpleValueSearchExtBuilder(dummyId),
+                aggregations,

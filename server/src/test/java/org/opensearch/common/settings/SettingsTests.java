@@ -1,763 +1,672 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.common.settings;
-
-import org.opensearch.OpenSearchParseException;
-import org.opensearch.Version;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.settings.SecureString;
-import org.opensearch.core.common.unit.ByteSizeUnit;
-import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.test.OpenSearchTestCase;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.hasToString;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-
-public class SettingsTests extends OpenSearchTestCase {
-
-    public void testReplacePropertiesPlaceholderSystemProperty() {
-        String value = System.getProperty("java.home");
-        assertFalse(value.isEmpty());
-        Settings settings = Settings.builder()
-            .put("property.placeholder", value)
-            .put("setting1", "${property.placeholder}")
-            .replacePropertyPlaceholders()
-            .build();
-        assertThat(settings.get("setting1"), equalTo(value));
-    }
-
-    public void testReplacePropertiesPlaceholderSystemPropertyList() {
-        final String hostname = randomAlphaOfLength(16);
-        final String hostip = randomAlphaOfLength(16);
-        final Settings settings = Settings.builder()
-            .putList("setting1", "${HOSTNAME}", "${HOSTIP}")
-            .replacePropertyPlaceholders(name -> name.equals("HOSTNAME") ? hostname : name.equals("HOSTIP") ? hostip : null)
-            .build();
-        assertThat(settings.getAsList("setting1"), contains(hostname, hostip));
-    }
-
-    public void testReplacePropertiesPlaceholderSystemPropertyEmptyList() {
-        final Settings settings = Settings.builder()
-            .put("setting1", "${HOSTNAMES}")
-            .replacePropertyPlaceholders(name -> name.equals("HOSTNAMES") ? "[]" : null)
-            .build();
-        assertThat(settings.getAsList("setting1"), empty());
-        assertThat(settings.get("setting1"), equalTo("[]"));
-    }
-
-    public void testReplacePropertiesPlaceholderSystemVariablesHaveNoEffect() {
-        final String value = System.getProperty("java.home");
-        assertNotNull(value);
-        final IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> Settings.builder().put("setting1", "${java.home}").replacePropertyPlaceholders().build()
-        );
-        assertThat(e, hasToString(containsString("Could not resolve placeholder 'java.home'")));
-    }
-
-    public void testReplacePropertiesPlaceholderByEnvironmentVariables() {
-        final String hostname = randomAlphaOfLength(16);
-        final Settings implicitEnvSettings = Settings.builder()
-            .put("setting1", "${HOSTNAME}")
-            .replacePropertyPlaceholders(name -> "HOSTNAME".equals(name) ? hostname : null)
-            .build();
-        assertThat(implicitEnvSettings.get("setting1"), equalTo(hostname));
-    }
-
-    public void testGetAsSettings() {
-        Settings settings = Settings.builder()
-            .put("bar", "hello world")
-            .put("foo", "abc")
-            .put("foo.bar", "def")
-            .put("foo.baz", "ghi")
-            .build();
-
-        Settings fooSettings = settings.getAsSettings("foo");
-        assertFalse(fooSettings.isEmpty());
-        assertEquals(2, fooSettings.size());
-        assertThat(fooSettings.get("bar"), equalTo("def"));
-        assertThat(fooSettings.get("baz"), equalTo("ghi"));
-    }
-
-    public void testMultLevelGetPrefix() {
-        Settings settings = Settings.builder()
-            .put("1.2.3", "hello world")
-            .put("1.2.3.4", "abc")
-            .put("2.3.4", "def")
-            .put("3.4", "ghi")
-            .build();
-
-        Settings firstLevelSettings = settings.getByPrefix("1.");
-        assertFalse(firstLevelSettings.isEmpty());
-        assertEquals(2, firstLevelSettings.size());
-        assertThat(firstLevelSettings.get("2.3.4"), equalTo("abc"));
-        assertThat(firstLevelSettings.get("2.3"), equalTo("hello world"));
-
-        Settings secondLevelSetting = firstLevelSettings.getByPrefix("2.");
-        assertFalse(secondLevelSetting.isEmpty());
-        assertEquals(2, secondLevelSetting.size());
-        assertNull(secondLevelSetting.get("2.3.4"));
-        assertNull(secondLevelSetting.get("1.2.3.4"));
-        assertNull(secondLevelSetting.get("1.2.3"));
-        assertThat(secondLevelSetting.get("3.4"), equalTo("abc"));
-        assertThat(secondLevelSetting.get("3"), equalTo("hello world"));
-
-        Settings thirdLevelSetting = secondLevelSetting.getByPrefix("3.");
-        assertFalse(thirdLevelSetting.isEmpty());
-        assertEquals(1, thirdLevelSetting.size());
-        assertNull(thirdLevelSetting.get("2.3.4"));
-        assertNull(thirdLevelSetting.get("3.4"));
-        assertNull(thirdLevelSetting.get("1.2.3"));
-        assertThat(thirdLevelSetting.get("4"), equalTo("abc"));
-    }
-
-    public void testNames() {
-        Settings settings = Settings.builder().put("bar", "baz").put("foo", "abc").put("foo.bar", "def").put("foo.baz", "ghi").build();
-
-        Set<String> names = settings.names();
-        assertThat(names.size(), equalTo(2));
-        assertTrue(names.contains("bar"));
-        assertTrue(names.contains("foo"));
-
-        Settings fooSettings = settings.getAsSettings("foo");
-        names = fooSettings.names();
-        assertThat(names.size(), equalTo(2));
-        assertTrue(names.contains("bar"));
-        assertTrue(names.contains("baz"));
-    }
-
-    public void testThatArraysAreOverriddenCorrectly() throws IOException {
-        // overriding a single value with an array
-        Settings settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1").build())
-            .put(Settings.builder().putList("value", "2", "3").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("2", "3"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().put("value", "1").build())
-            .put(Settings.builder().putList("value", "2", "3").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("2", "3"));
-        settings = Settings.builder()
-            .loadFromSource("value: 1", XContentType.YAML)
-            .loadFromSource("value: [ 2, 3 ]", XContentType.YAML)
-            .build();
-        assertThat(settings.getAsList("value"), contains("2", "3"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().put("value.with.deep.key", "1").build())
-            .put(Settings.builder().putList("value.with.deep.key", "2", "3").build())
-            .build();
-        assertThat(settings.getAsList("value.with.deep.key"), contains("2", "3"));
-
-        // overriding an array with a shorter array
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1", "2").build())
-            .put(Settings.builder().putList("value", "3").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("3"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1", "2", "3").build())
-            .put(Settings.builder().putList("value", "4", "5").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("4", "5"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").build())
-            .put(Settings.builder().putList("value.deep.key", "4", "5").build())
-            .build();
-        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
-
-        // overriding an array with a longer array
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1", "2").build())
-            .put(Settings.builder().putList("value", "3", "4", "5").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("3", "4", "5"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").build())
-            .put(Settings.builder().putList("value.deep.key", "4", "5").build())
-            .build();
-        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
-
-        // overriding an array with a single value
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1", "2").build())
-            .put(Settings.builder().put("value", "3").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("3"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value.deep.key", "1", "2").build())
-            .put(Settings.builder().put("value.deep.key", "3").build())
-            .build();
-        assertThat(settings.getAsList("value.deep.key"), contains("3"));
-
-        // test that other arrays are not overridden
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "1", "2", "3").putList("a", "b", "c").build())
-            .put(Settings.builder().putList("value", "4", "5").putList("d", "e", "f").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("4", "5"));
-        assertThat(settings.getAsList("a"), contains("b", "c"));
-        assertThat(settings.getAsList("d"), contains("e", "f"));
-
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").putList("a", "b", "c").build())
-            .put(Settings.builder().putList("value.deep.key", "4", "5").putList("d", "e", "f").build())
-            .build();
-        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
-        assertThat(settings.getAsList("a"), notNullValue());
-        assertThat(settings.getAsList("d"), notNullValue());
-
-        // overriding a deeper structure with an array
-        settings = Settings.builder()
-            .put(Settings.builder().put("value.data", "1").build())
-            .put(Settings.builder().putList("value", "4", "5").build())
-            .build();
-        assertThat(settings.getAsList("value"), contains("4", "5"));
-
-        // overriding an array with a deeper structure
-        settings = Settings.builder()
-            .put(Settings.builder().putList("value", "4", "5").build())
-            .put(Settings.builder().put("value.data", "1").build())
-            .build();
-        assertThat(settings.get("value.data"), is("1"));
-        assertThat(settings.get("value"), is("[4, 5]"));
-    }
-
-    public void testPrefixNormalization() {
-        Settings settings = Settings.builder().normalizePrefix("foo.").build();
-
-        assertThat(settings.names().size(), equalTo(0));
-
-        settings = Settings.builder().put("bar", "baz").normalizePrefix("foo.").build();
-
-        assertThat(settings.size(), equalTo(1));
-        assertThat(settings.get("bar"), nullValue());
-        assertThat(settings.get("foo.bar"), equalTo("baz"));
-
-        settings = Settings.builder().put("bar", "baz").put("foo.test", "test").normalizePrefix("foo.").build();
-
-        assertThat(settings.size(), equalTo(2));
-        assertThat(settings.get("bar"), nullValue());
-        assertThat(settings.get("foo.bar"), equalTo("baz"));
-        assertThat(settings.get("foo.test"), equalTo("test"));
-
-        settings = Settings.builder().put("foo.test", "test").normalizePrefix("foo.").build();
-
-        assertThat(settings.size(), equalTo(1));
-        assertThat(settings.get("foo.test"), equalTo("test"));
-    }
-
-    public void testPrefixNormalizationArchived() {
-        Settings settings = Settings.builder().put("archived.foo.bar", "baz").normalizePrefix("foo.").build();
-
-        assertThat(settings.size(), equalTo(1));
-        assertThat(settings.get("foo.archived.foo.bar"), nullValue());
-        assertThat(settings.get("archived.foo.bar"), equalTo("baz"));
-
-        settings = Settings.builder().put("archived.foo.*", "baz").normalizePrefix("foo.").build();
-
-        assertThat(settings.size(), equalTo(1));
-        assertThat(settings.get("foo.archived.foo.*"), nullValue());
-        assertThat(settings.get("archived.foo.*"), equalTo("baz"));
-    }
-
-    public void testFilteredMap() {
-        Settings.Builder builder = Settings.builder();
-        builder.put("a", "a1");
-        builder.put("a.b", "ab1");
-        builder.put("a.b.c", "ab2");
-        builder.put("a.c", "ac1");
-        builder.put("a.b.c.d", "ab3");
-
-        Settings filteredSettings = builder.build().filter((k) -> k.startsWith("a.b"));
-        assertEquals(3, filteredSettings.size());
-        int numKeys = 0;
-        for (String k : filteredSettings.keySet()) {
-            numKeys++;
-            assertTrue(k.startsWith("a.b"));
-        }
-
-        assertEquals(3, numKeys);
-        assertFalse(filteredSettings.keySet().contains("a.c"));
-        assertFalse(filteredSettings.keySet().contains("a"));
-        assertTrue(filteredSettings.keySet().contains("a.b"));
-        assertTrue(filteredSettings.keySet().contains("a.b.c"));
-        assertTrue(filteredSettings.keySet().contains("a.b.c.d"));
-        expectThrows(UnsupportedOperationException.class, () -> filteredSettings.keySet().remove("a.b"));
-        assertEquals("ab1", filteredSettings.get("a.b"));
-        assertEquals("ab2", filteredSettings.get("a.b.c"));
-        assertEquals("ab3", filteredSettings.get("a.b.c.d"));
-
-        Iterator<String> iterator = filteredSettings.keySet().iterator();
-        for (int i = 0; i < 10; i++) {
-            assertTrue(iterator.hasNext());
-        }
-        assertEquals("a.b", iterator.next());
-        if (randomBoolean()) {
-            assertTrue(iterator.hasNext());
-        }
-        assertEquals("a.b.c", iterator.next());
-        if (randomBoolean()) {
-            assertTrue(iterator.hasNext());
-        }
-        assertEquals("a.b.c.d", iterator.next());
-        assertFalse(iterator.hasNext());
-        expectThrows(NoSuchElementException.class, () -> iterator.next());
-
-    }
-
-    public void testPrefixMap() {
-        Settings.Builder builder = Settings.builder();
-        builder.put("a", "a1");
-        builder.put("a.b", "ab1");
-        builder.put("a.b.c", "ab2");
-        builder.put("a.c", "ac1");
-        builder.put("a.b.c.d", "ab3");
-
-        Settings prefixMap = builder.build().getByPrefix("a.");
-        assertEquals(4, prefixMap.size());
-        int numKeys = 0;
-        for (String k : prefixMap.keySet()) {
-            numKeys++;
-            assertTrue(k, k.startsWith("b") || k.startsWith("c"));
-        }
-
-        assertEquals(4, numKeys);
-
-        assertFalse(prefixMap.keySet().contains("a"));
-        assertTrue(prefixMap.keySet().contains("c"));
-        assertTrue(prefixMap.keySet().contains("b"));
-        assertTrue(prefixMap.keySet().contains("b.c"));
-        assertTrue(prefixMap.keySet().contains("b.c.d"));
-        expectThrows(UnsupportedOperationException.class, () -> prefixMap.keySet().remove("a.b"));
-        assertEquals("ab1", prefixMap.get("b"));
-        assertEquals("ab2", prefixMap.get("b.c"));
-        assertEquals("ab3", prefixMap.get("b.c.d"));
-        Iterator<String> prefixIterator = prefixMap.keySet().iterator();
-        for (int i = 0; i < 10; i++) {
-            assertTrue(prefixIterator.hasNext());
-        }
-        assertEquals("b", prefixIterator.next());
-        if (randomBoolean()) {
-            assertTrue(prefixIterator.hasNext());
-        }
-        assertEquals("b.c", prefixIterator.next());
-        if (randomBoolean()) {
-            assertTrue(prefixIterator.hasNext());
-        }
-        assertEquals("b.c.d", prefixIterator.next());
-        if (randomBoolean()) {
-            assertTrue(prefixIterator.hasNext());
-        }
-        assertEquals("c", prefixIterator.next());
-        assertFalse(prefixIterator.hasNext());
-        expectThrows(NoSuchElementException.class, () -> prefixIterator.next());
-    }
-
-    public void testSecureSettingsPrefix() {
-        MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString("test.prefix.foo", "somethingsecure");
-        Settings.Builder builder = Settings.builder();
-        builder.setSecureSettings(secureSettings);
-        Settings settings = builder.build();
-        Settings prefixSettings = settings.getByPrefix("test.prefix.");
-        assertTrue(prefixSettings.names().contains("foo"));
-    }
-
-    public void testGroupPrefix() {
-        MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString("test.key1.foo", "somethingsecure");
-        secureSettings.setString("test.key1.bar", "somethingsecure");
-        secureSettings.setString("test.key2.foo", "somethingsecure");
-        secureSettings.setString("test.key2.bog", "somethingsecure");
-        Settings.Builder builder = Settings.builder();
-        builder.put("test.key1.baz", "blah1");
-        builder.put("test.key1.other", "blah2");
-        builder.put("test.key2.baz", "blah3");
-        builder.put("test.key2.else", "blah4");
-        builder.setSecureSettings(secureSettings);
-        Settings settings = builder.build();
-        Map<String, Settings> groups = settings.getGroups("test");
-        assertEquals(2, groups.size());
-        Settings key1 = groups.get("key1");
-        assertNotNull(key1);
-        assertThat(key1.names(), containsInAnyOrder("foo", "bar", "baz", "other"));
-        Settings key2 = groups.get("key2");
-        assertNotNull(key2);
-        assertThat(key2.names(), containsInAnyOrder("foo", "bog", "baz", "else"));
-    }
-
-    public void testEmptyFilterMap() {
-        Settings.Builder builder = Settings.builder();
-        builder.put("a", "a1");
-        builder.put("a.b", "ab1");
-        builder.put("a.b.c", "ab2");
-        builder.put("a.c", "ac1");
-        builder.put("a.b.c.d", "ab3");
-
-        Settings filteredSettings = builder.build().filter((k) -> false);
-        assertEquals(0, filteredSettings.size());
-
-        assertFalse(filteredSettings.keySet().contains("a.c"));
-        assertFalse(filteredSettings.keySet().contains("a"));
-        assertFalse(filteredSettings.keySet().contains("a.b"));
-        assertFalse(filteredSettings.keySet().contains("a.b.c"));
-        assertFalse(filteredSettings.keySet().contains("a.b.c.d"));
-        expectThrows(UnsupportedOperationException.class, () -> filteredSettings.keySet().remove("a.b"));
-        assertNull(filteredSettings.get("a.b"));
+            Settings settings = Settings.builder()
         assertNull(filteredSettings.get("a.b.c"));
-        assertNull(filteredSettings.get("a.b.c.d"));
-
-        Iterator<String> iterator = filteredSettings.keySet().iterator();
-        for (int i = 0; i < 10; i++) {
-            assertFalse(iterator.hasNext());
-        }
-        expectThrows(NoSuchElementException.class, () -> iterator.next());
-    }
-
-    public void testEmpty() {
-        assertTrue(Settings.EMPTY.isEmpty());
-        MockSecureSettings secureSettings = new MockSecureSettings();
-        assertTrue(Settings.builder().setSecureSettings(secureSettings).build().isEmpty());
-    }
-
-    public void testWriteSettingsToStream() throws IOException {
-        BytesStreamOutput out = new BytesStreamOutput();
-        MockSecureSettings secureSettings = new MockSecureSettings();
-        secureSettings.setString("test.key1.foo", "somethingsecure");
-        secureSettings.setString("test.key1.bar", "somethingsecure");
-        secureSettings.setString("test.key2.foo", "somethingsecure");
-        secureSettings.setString("test.key2.bog", "somethingsecure");
-        Settings.Builder builder = Settings.builder();
-        builder.put("test.key1.baz", "blah1");
-        builder.putNull("test.key3.bar");
-        builder.putList("test.key4.foo", "1", "2");
-        builder.setSecureSettings(secureSettings);
-        assertEquals(7, builder.build().size());
-        Settings.writeSettingsToStream(builder.build(), out);
-        StreamInput in = StreamInput.wrap(out.bytes().toBytesRef().bytes);
-        Settings settings = Settings.readSettingsFromStream(in);
-        assertEquals(3, settings.size());
-        assertEquals("blah1", settings.get("test.key1.baz"));
-        assertNull(settings.get("test.key3.bar"));
-        assertTrue(settings.keySet().contains("test.key3.bar"));
-        assertEquals(Arrays.asList("1", "2"), settings.getAsList("test.key4.foo"));
-    }
-
-    public void testSecureSettingConflict() {
-        Setting<SecureString> setting = SecureSetting.secureString("something.secure", null);
-        Settings settings = Settings.builder().put("something.secure", "notreallysecure").build();
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> setting.get(settings));
-        assertTrue(e.getMessage().contains("must be stored inside the OpenSearch keystore"));
-    }
-
-    public void testSecureSettingIllegalName() {
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> SecureSetting.secureString("*IllegalName", null));
-        assertTrue(e.getMessage().contains("does not match the allowed setting name pattern"));
-        e = expectThrows(IllegalArgumentException.class, () -> SecureSetting.secureFile("*IllegalName", null));
-        assertTrue(e.getMessage().contains("does not match the allowed setting name pattern"));
-    }
-
-    public void testGetAsArrayFailsOnDuplicates() {
-        final IllegalStateException e = expectThrows(
-            IllegalStateException.class,
-            () -> Settings.builder().put("foobar.0", "bar").put("foobar.1", "baz").put("foobar", "foo").build()
-        );
-        assertThat(e, hasToString(containsString("settings builder can't contain values for [foobar=foo] and [foobar.0=bar]")));
-    }
-
-    public void testToAndFromXContent() throws IOException {
-        Settings settings = Settings.builder()
-            .putList("foo.bar.baz", "1", "2", "3")
-            .put("foo.foobar", 2)
-            .put("rootfoo", "test")
-            .put("foo.baz", "1,2,3,4")
-            .putNull("foo.null.baz")
-            .build();
-        final boolean flatSettings = randomBoolean();
-        XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder();
-        builder.startObject();
-        settings.toXContent(builder, new ToXContent.MapParams(Collections.singletonMap("flat_settings", "" + flatSettings)));
-        builder.endObject();
-        XContentParser parser = createParser(builder);
-        Settings build = Settings.fromXContent(parser);
         assertEquals(5, build.size());
-        assertEquals(Arrays.asList("1", "2", "3"), build.getAsList("foo.bar.baz"));
-        assertEquals(2, build.getAsInt("foo.foobar", 0).intValue());
-        assertEquals("test", build.get("rootfoo"));
-        assertEquals("1,2,3,4", build.get("foo.baz"));
-        assertNull(build.get("foo.null.baz"));
-    }
-
+        assertThat(firstLevelSettings.get("2.3"), equalTo("hello world"));
+            .put(Settings.builder().putList("value", "1", "2").build())
     public void testSimpleJsonSettings() throws Exception {
-        final String json = "/org/opensearch/common/settings/loader/test-settings.json";
-        final Settings settings = Settings.builder().loadFromStream(json, getClass().getResourceAsStream(json), false).build();
-
-        assertThat(settings.get("test1.value1"), equalTo("value1"));
-        assertThat(settings.get("test1.test2.value2"), equalTo("value2"));
-        assertThat(settings.getAsInt("test1.test2.value3", -1), equalTo(2));
-
-        // check array
-        assertNull(settings.get("test1.test3.0"));
-        assertNull(settings.get("test1.test3.1"));
-        assertThat(settings.getAsList("test1.test3").size(), equalTo(2));
-        assertThat(settings.getAsList("test1.test3").get(0), equalTo("test3-1"));
-        assertThat(settings.getAsList("test1.test3").get(1), equalTo("test3-2"));
+        assertTrue(Settings.builder().copy("test", settings).build().keySet().contains("test"));
+         * is then asserting that we no longer make this mistake when doing the internal string conversion. Instead, we convert to a string
+        settings = Settings.builder()
+    public void testGroupPrefix() {
+        );
+    public void testReadWriteArray() throws IOException {
+        final TimeValue expected = new TimeValue(1500, TimeUnit.MICROSECONDS);
+        assertEquals(Arrays.asList("1", "2", "3"), build.getAsList("foo.bar.baz"));
+import org.opensearch.common.unit.TimeValue;
+    public void testSecureSettingConflict() {
+            .build();
+ * specific language governing permissions and limitations
+            numKeys++;
+        assertNotNull(key1);
+        builder.put("test.key1.baz", "blah1");
     }
-
-    public void testToXContent() throws IOException {
-        // this is just terrible but it's the existing behavior!
-        Settings test = Settings.builder().putList("foo.bar", "1", "2", "3").put("foo.bar.baz", "test").build();
-        XContentBuilder builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
-        builder.startObject();
-        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+        assertThat(settings.getAsInt("test1.test2.value3", -1), equalTo(2));
         builder.endObject();
-        assertEquals("{\"foo\":{\"bar.baz\":\"test\",\"bar\":[\"1\",\"2\",\"3\"]}}", builder.toString());
-
-        test = Settings.builder().putList("foo.bar", "1", "2", "3").build();
-        builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
-        builder.startObject();
-        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
-        builder.endObject();
-        assertEquals("{\"foo\":{\"bar\":[\"1\",\"2\",\"3\"]}}", builder.toString());
-
-        builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
-        builder.startObject();
-        test.toXContent(builder, new ToXContent.MapParams(Collections.singletonMap("flat_settings", "true")));
-        builder.endObject();
+    }
+import java.util.NoSuchElementException;
+        String yaml = "/org/opensearch/common/settings/loader/indentation-settings.yml";
+        assertEquals(4, prefixMap.size());
+        final IllegalArgumentException e = expectThrows(
+        assertThat(settings.getAsList("a"), notNullValue());
+    public void testThatArraysAreOverriddenCorrectly() throws IOException {
+            .put(Settings.builder().putList("value", "3").build())
+    public void testWriteSettingsToStream() throws IOException {
+            .put("foo.bar", "def")
+import java.io.InputStream;
+        BytesStreamOutput out = new BytesStreamOutput();
         assertEquals("{\"foo.bar\":[\"1\",\"2\",\"3\"]}", builder.toString());
     }
-
-    public void testLoadEmptyStream() throws IOException {
+        builder.putList("test.key4.foo", "1", "2");
+        secureSettings.setString("test.key1.foo", "somethingsecure");
+        expectThrows(NoSuchElementException.class, () -> prefixIterator.next());
+        assertTrue(names.contains("baz"));
+ * Modifications Copyright OpenSearch Contributors. See
         Settings test = Settings.builder()
-            .loadFromStream(randomFrom("test.json", "test.yml"), new ByteArrayInputStream(new byte[0]), false)
-            .build();
-        assertEquals(0, test.size());
-    }
-
-    public void testSimpleYamlSettings() throws Exception {
-        final String yaml = "/org/opensearch/common/settings/loader/test-settings.yml";
-        final Settings settings = Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false).build();
-
-        assertThat(settings.get("test1.value1"), equalTo("value1"));
-        assertThat(settings.get("test1.test2.value2"), equalTo("value2"));
-        assertThat(settings.getAsInt("test1.test2.value3", -1), equalTo(2));
-
-        // check array
-        assertNull(settings.get("test1.test3.0"));
-        assertNull(settings.get("test1.test3.1"));
-        assertThat(settings.getAsList("test1.test3").size(), equalTo(2));
-        assertThat(settings.getAsList("test1.test3").get(0), equalTo("test3-1"));
+        final Settings settings = Settings.builder()
         assertThat(settings.getAsList("test1.test3").get(1), equalTo("test3-2"));
-        assertThat(settings.getAsList("test1.test4"), empty());
+        builder.put("a.b.c", "ab2");
+        assertNull(settings.get("test1.test3.0"));
+        assertTrue(filteredSettings.keySet().contains("a.b"));
     }
-
-    public void testYamlPlaceholder() throws IOException {
-        try (InputStream in = new ByteArrayInputStream("hosts: ${HOSTNAMES}".getBytes(StandardCharsets.UTF_8))) {
-            Settings settings = Settings.builder()
-                .loadFromStream("foo.yml", in, false)
-                .replacePropertyPlaceholders(name -> name.equals("HOSTNAMES") ? "[\"h1\", \"h2\"]" : null)
-                .build();
-            assertThat(settings.getAsList("hosts"), hasSize(2));
-            assertThat(settings.getAsList("hosts"), containsInAnyOrder("h1", "h2"));
-        }
-    }
-
-    public void testYamlLegacyList() throws IOException {
-        Settings settings = Settings.builder()
-            .loadFromStream(
-                "foo.yml",
-                new ByteArrayInputStream("foo.bar.baz.0: 1\nfoo.bar.baz.1: 2".getBytes(StandardCharsets.UTF_8)),
-                false
-            )
             .build();
-        assertThat(settings.getAsList("foo.bar.baz").size(), equalTo(2));
-        assertThat(settings.getAsList("foo.bar.baz").get(0), equalTo("1"));
-        assertThat(settings.getAsList("foo.bar.baz").get(1), equalTo("2"));
-    }
-
-    public void testIndentation() throws Exception {
-        String yaml = "/org/opensearch/common/settings/loader/indentation-settings.yml";
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> {
-            Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false);
-        });
-        assertTrue(e.getMessage(), e.getMessage().contains("malformed"));
-    }
-
-    public void testIndentationWithExplicitDocumentStart() throws Exception {
-        String yaml = "/org/opensearch/common/settings/loader/indentation-with-explicit-document-start-settings.yml";
-        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> {
-            Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false);
-        });
-        assertTrue(e.getMessage(), e.getMessage().contains("malformed"));
-    }
-
-    public void testMissingValue() throws Exception {
-        Path tmp = createTempFile("test", ".yaml");
-        Files.write(tmp, Collections.singletonList("foo: # missing value\n"), StandardCharsets.UTF_8);
+    public void testSecureSettingIllegalName() {
+        final TimeValue actual = setting.get(settings);
         OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> { Settings.builder().loadFromPath(tmp); });
-        assertTrue(
-            e.getMessage(),
-            e.getMessage().contains("null-valued setting found for key [foo] found at line number [1], column number [5]")
-        );
+            assertTrue(prefixIterator.hasNext());
+            .build();
+            .build();
+    public void testGetAsArrayFailsOnDuplicates() {
     }
-
-    public void testReadWriteArray() throws IOException {
-        BytesStreamOutput output = new BytesStreamOutput();
-        output.setVersion(randomFrom(Version.CURRENT, Version.V_2_0_0));
-        Settings settings = Settings.builder().putList("foo.bar", "0", "1", "2", "3").put("foo.bar.baz", "baz").build();
-        Settings.writeSettingsToStream(settings, output);
-        StreamInput in = StreamInput.wrap(BytesReference.toBytes(output.bytes()));
-        Settings build = Settings.readSettingsFromStream(in);
-        assertEquals(2, build.size());
-        assertEquals(build.getAsList("foo.bar"), Arrays.asList("0", "1", "2", "3"));
-        assertEquals(build.get("foo.bar.baz"), "baz");
+        builder.put("test.key2.else", "blah4");
+        builder.put("a.b.c", "ab2");
+        assertThat(settings.get("foo.test"), equalTo("test"));
+        settings = Settings.builder()
+        assertTrue(Settings.EMPTY.isEmpty());
+        assertFalse(filteredSettings.keySet().contains("a.b.c.d"));
     }
-
-    public void testCopy() {
-        Settings settings = Settings.builder().putList("foo.bar", "0", "1", "2", "3").put("foo.bar.baz", "baz").putNull("test").build();
-        assertEquals(Arrays.asList("0", "1", "2", "3"), Settings.builder().copy("foo.bar", settings).build().getAsList("foo.bar"));
-        assertEquals("baz", Settings.builder().copy("foo.bar.baz", settings).build().get("foo.bar.baz"));
-        assertNull(Settings.builder().copy("foo.bar.baz", settings).build().get("test"));
-        assertTrue(Settings.builder().copy("test", settings).build().keySet().contains("test"));
-        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> Settings.builder().copy("not_there", settings));
-        assertEquals("source key not found in the source settings", iae.getMessage());
-    }
-
-    public void testFractionalTimeValue() {
-        final Setting<TimeValue> setting = Setting.timeSetting(
-            "key",
-            TimeValue.parseTimeValue(randomTimeValue(0, 24, "h"), "key"),
-            TimeValue.ZERO
-        );
-        final TimeValue expected = TimeValue.timeValueMillis(randomNonNegativeLong());
-        final Settings settings = Settings.builder().put("key", expected).build();
-        /*
-         * Previously we would internally convert the time value to a string using a method that tries to be smart about the units (e.g.,
-         * 1000ms would be converted to 1s). However, this had a problem in that, for example, 1500ms would be converted to 1.5s. Then,
-         * 1.5s could not be converted back to a TimeValue because TimeValues do not support fractional components. Effectively this test
-         * is then asserting that we no longer make this mistake when doing the internal string conversion. Instead, we convert to a string
-         * using a method that does not lose the original unit.
-         */
-        final TimeValue actual = setting.get(settings);
-        assertThat(actual, equalTo(expected));
-    }
-
-    public void testFractionalByteSizeValue() {
-        final Setting<ByteSizeValue> setting = Setting.byteSizeSetting(
-            "key",
-            ByteSizeValue.parseBytesSizeValue(randomIntBetween(1, 16) + "k", "key")
-        );
+import org.opensearch.core.common.io.stream.StreamInput;
+        assertThat(settings.getAsList("d"), notNullValue());
         final ByteSizeValue expected = new ByteSizeValue(randomNonNegativeLong(), ByteSizeUnit.BYTES);
-        final Settings settings = Settings.builder().put("key", expected).build();
-        /*
-         * Previously we would internally convert the byte size value to a string using a method that tries to be smart about the units
-         * (e.g., 1024 bytes would be converted to 1kb). However, this had a problem in that, for example, 1536 bytes would be converted to
-         * 1.5k. Then, 1.5k could not be converted back to a ByteSizeValue because ByteSizeValues do not support fractional components.
-         * Effectively this test is then asserting that we no longer make this mistake when doing the internal string conversion. Instead,
-         * we convert to a string using a method that does not lose the original unit.
-         */
-        final ByteSizeValue actual = setting.get(settings);
-        assertThat(actual, equalTo(expected));
+        expectThrows(UnsupportedOperationException.class, () -> prefixMap.keySet().remove("a.b"));
     }
-
-    public void testSetByTimeUnit() {
-        final Setting<TimeValue> setting = Setting.timeSetting(
-            "key",
+    }
+import java.util.Map;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+        assertNull(build.get("foo.null.baz"));
+    }
+        if (randomBoolean()) {
+            e.getMessage(),
+        // this is just terrible but it's the existing behavior!
+        assertFalse(fooSettings.isEmpty());
+    public void testFractionalTimeValue() {
+        assertFalse(filteredSettings.keySet().contains("a"));
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> SecureSetting.secureString("*IllegalName", null));
+        MockSecureSettings secureSettings = new MockSecureSettings();
+        final Settings settings = Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false).build();
+    public void testFractionalByteSizeValue() {
+            .build();
+    public void testEmpty() {
+}
+        });
+        IllegalArgumentException iae = expectThrows(IllegalArgumentException.class, () -> Settings.builder().copy("not_there", settings));
+        });
+        assertEquals(2, secondLevelSetting.size());
+        // overriding a single value with an array
+import static org.hamcrest.Matchers.contains;
+/*
+        assertNull(Settings.builder().copy("foo.bar.baz", settings).build().get("test"));
+    }
+            .build();
+ * KIND, either express or implied.  See the License for the
+    public void testYamlPlaceholder() throws IOException {
             TimeValue.parseTimeValue(randomTimeValue(0, 24, "h"), "key"),
+        assertEquals("b.c", prefixIterator.next());
+        assertNull(thirdLevelSetting.get("2.3.4"));
+        Settings.Builder builder = Settings.builder();
+import java.nio.file.Files;
+            Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false);
+ * The OpenSearch Contributors require contributions made to
+        assertThat(settings.size(), equalTo(1));
+            assertTrue(prefixIterator.hasNext());
             TimeValue.ZERO
-        );
-        final TimeValue expected = new TimeValue(1500, TimeUnit.MICROSECONDS);
-        final Settings settings = Settings.builder().put("key", expected.getMicros(), TimeUnit.MICROSECONDS).build();
-        /*
-         * Previously we would internally convert the duration to a string by converting to milliseconds which could lose precision  (e.g.,
-         * 1500 microseconds would be converted to 1ms). Effectively this test is then asserting that we no longer make this mistake when
+import org.opensearch.common.io.stream.BytesStreamOutput;
+    public void testMultLevelGetPrefix() {
+        secureSettings.setString("test.key1.bar", "somethingsecure");
+            .put("foo.baz", "1,2,3,4")
+        assertFalse(filteredSettings.keySet().contains("a.b.c"));
+            .put("setting1", "${HOSTNAME}")
+        }
+            () -> Settings.builder().put("setting1", "${java.home}").replacePropertyPlaceholders().build()
+        final String json = "/org/opensearch/common/settings/loader/test-settings.json";
+    }
+        assertThat(settings.getAsList("setting1"), contains(hostname, hostip));
+        assertThat(settings.get("test1.value1"), equalTo("value1"));
+        for (int i = 0; i < 10; i++) {
+            .put(Settings.builder().putList("value", "2", "3").build())
+    }
+        assertFalse(iterator.hasNext());
+        Settings key2 = groups.get("key2");
+            .put("3.4", "ghi")
+import org.opensearch.common.xcontent.XContentType;
+        Settings settings = Settings.builder().putList("foo.bar", "0", "1", "2", "3").put("foo.bar.baz", "baz").putNull("test").build();
          * doing the internal string conversion. Instead, we convert to a duration using a method that does not lose the original unit.
-         */
+    }
+            .replacePropertyPlaceholders()
+        Settings firstLevelSettings = settings.getByPrefix("1.");
+        assertEquals(3, filteredSettings.size());
+            .put(Settings.builder().put("value.data", "1").build())
+        // overriding an array with a shorter array
+        settings = Settings.builder()
+        String yaml = "/org/opensearch/common/settings/loader/indentation-with-explicit-document-start-settings.yml";
+        builder.put("a.b", "ab1");
+        assertThat(settings.getAsList("value"), contains("2", "3"));
+        Settings settings = Settings.builder().put("archived.foo.bar", "baz").normalizePrefix("foo.").build();
+    public void testIndentation() throws Exception {
+        assertEquals(0, filteredSettings.size());
+        assertThat(settings.get("archived.foo.*"), equalTo("baz"));
+        expectThrows(NoSuchElementException.class, () -> iterator.next());
+        assertThat(settings.getAsList("foo.bar.baz").size(), equalTo(2));
+        final boolean flatSettings = randomBoolean();
+            .put(Settings.builder().put("value.deep.key", "3").build())
+        // overriding an array with a deeper structure
         final TimeValue actual = setting.get(settings);
+        Iterator<String> iterator = filteredSettings.keySet().iterator();
+            .put(Settings.builder().putList("value", "4", "5").build())
+        assertThat(settings.getAsList("a"), contains("b", "c"));
+        assertThat(settings.getAsList("test1.test3").get(1), equalTo("test3-2"));
+        assertEquals(build.getAsList("foo.bar"), Arrays.asList("0", "1", "2", "3"));
+        final Settings implicitEnvSettings = Settings.builder()
+    public void testReplacePropertiesPlaceholderSystemPropertyList() {
+        settings = Settings.builder()
+        );
+            TimeValue.parseTimeValue(randomTimeValue(0, 24, "h"), "key"),
+        if (randomBoolean()) {
+        MockSecureSettings secureSettings = new MockSecureSettings();
+        settings = Settings.builder().put("bar", "baz").normalizePrefix("foo.").build();
+        assertThat(settings.get("test1.test2.value2"), equalTo("value2"));
+        assertEquals("{\"ant.bee\":{\"cat.dog\":{\"ewe\":\"value3\"},\"cat\":\"value2\"},\"ant\":\"value1\"}", builder.toString());
+        assertEquals(2, build.getAsInt("foo.foobar", 0).intValue());
+        assertThat(settings.get("value"), is("[4, 5]"));
+        Settings test = Settings.builder().put("ant", "value1").put("ant.bee.cat", "value2").put("bee.cat", "value3").build();
+         * Previously we would internally convert the byte size value to a string using a method that tries to be smart about the units
+        Setting<SecureString> setting = SecureSetting.secureString("something.secure", null);
+        assertThat(thirdLevelSetting.get("4"), equalTo("abc"));
+            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").build())
+        assertTrue(filteredSettings.keySet().contains("a.b.c"));
+ * license agreements. See the NOTICE file distributed with
+        test.toXContent(builder, new ToXContent.MapParams(Collections.singletonMap("flat_settings", "true")));
+        assertThat(settings.get("test1.test2.value2"), equalTo("value2"));
+            ByteSizeValue.parseBytesSizeValue(randomIntBetween(1, 16) + "k", "key")
+        assertFalse(filteredSettings.keySet().contains("a.b"));
+    public void testMissingValue() throws Exception {
+    }
+        assertThat(settings.getAsList("foo.bar.baz").get(1), equalTo("2"));
+        assertThat(actual, equalTo(expected));
+        assertNull(settings.get("test1.test3.0"));
+            .putList("setting1", "${HOSTNAME}", "${HOSTIP}")
+        builder.put("a.c", "ac1");
+            .put(Settings.builder().put("value", "3").build())
+        if (randomBoolean()) {
+    }
+        assertThat(settings.size(), equalTo(1));
+        builder.startObject();
+        assertThat(e, hasToString(containsString("Could not resolve placeholder 'java.home'")));
+    public void testFilteredMap() {
+        settings = Settings.builder()
+        }
+        assertTrue(names.contains("bar"));
+        builder.put("a.b.c.d", "ab3");
+        XContentBuilder builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
+        assertEquals(2, groups.size());
+        Settings settings = builder.build();
+            .build();
+            IllegalArgumentException.class,
+        assertFalse(prefixMap.keySet().contains("a"));
+ *
+        assertNotNull(value);
+        assertEquals("source key not found in the source settings", iae.getMessage());
+            "key",
+    public void testToAndFromXContent() throws IOException {
+        Path tmp = createTempFile("test", ".yaml");
+        assertEquals(4, numKeys);
+            .put(Settings.builder().put("value.with.deep.key", "1").build())
+        assertEquals("ab2", filteredSettings.get("a.b.c"));
+import static org.hamcrest.Matchers.empty;
+            .put("property.placeholder", value)
+    public void testSecureSettingsPrefix() {
+        builder.put("a", "a1");
+ * Unless required by applicable law or agreed to in writing,
+        }
+        final String value = System.getProperty("java.home");
+        assertTrue(e.getMessage().contains("does not match the allowed setting name pattern"));
+            .put("bar", "hello world")
+            assertTrue(iterator.hasNext());
+        assertNull(settings.get("test.key3.bar"));
+         * 1.5k. Then, 1.5k could not be converted back to a ByteSizeValue because ByteSizeValues do not support fractional components.
+        assertThat(settings.get("archived.foo.bar"), equalTo("baz"));
+    public void testYamlLegacyList() throws IOException {
+        Settings prefixSettings = settings.getByPrefix("test.prefix.");
+        assertEquals("ab3", filteredSettings.get("a.b.c.d"));
+        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+        Settings filteredSettings = builder.build().filter((k) -> k.startsWith("a.b"));
+        assertThat(names.size(), equalTo(2));
+        assertThat(fooSettings.get("baz"), equalTo("ghi"));
+        secureSettings.setString("test.prefix.foo", "somethingsecure");
+    }
+        Settings settings = Settings.builder().put("something.secure", "notreallysecure").build();
+        builder.put("test.key1.baz", "blah1");
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> setting.get(settings));
+        settings = Settings.builder().put("archived.foo.*", "baz").normalizePrefix("foo.").build();
+        builder.endObject();
+            .replacePropertyPlaceholders(name -> name.equals("HOSTNAME") ? hostname : name.equals("HOSTIP") ? hostip : null)
+        assertNull(filteredSettings.get("a.b.c.d"));
+        assertThat(names.size(), equalTo(2));
+        Settings settings = Settings.builder().putList("foo.bar", "0", "1", "2", "3").put("foo.bar.baz", "baz").build();
+         */
+                new ByteArrayInputStream("foo.bar.baz.0: 1\nfoo.bar.baz.1: 2".getBytes(StandardCharsets.UTF_8)),
         assertThat(actual, equalTo(expected));
     }
-
-    public void testProcessSetting() throws IOException {
-        Settings test = Settings.builder().put("ant", "value1").put("ant.bee.cat", "value2").put("bee.cat", "value3").build();
-        XContentBuilder builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
+            assertTrue(k, k.startsWith("b") || k.startsWith("c"));
+        assertEquals("ab2", prefixMap.get("b.c"));
+        Settings settings = Settings.builder()
+            .loadFromSource("value: 1", XContentType.YAML)
+        assertNull(filteredSettings.get("a.b"));
+                false
+        final Setting<TimeValue> setting = Setting.timeSetting(
+        }
+        test = Settings.builder().putList("foo.bar", "1", "2", "3").build();
+import java.io.IOException;
+         * Effectively this test is then asserting that we no longer make this mistake when doing the internal string conversion. Instead,
+        assertEquals("test", build.get("rootfoo"));
+package org.opensearch.common.settings;
+import static org.hamcrest.Matchers.is;
+        builder.put("a.c", "ac1");
+        final TimeValue expected = TimeValue.timeValueMillis(randomNonNegativeLong());
+        assertNull(thirdLevelSetting.get("1.2.3"));
+        // overriding a deeper structure with an array
+        /*
+        final String hostname = randomAlphaOfLength(16);
+/*
+        MockSecureSettings secureSettings = new MockSecureSettings();
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        Settings fooSettings = settings.getAsSettings("foo");
+        final ByteSizeValue actual = setting.get(settings);
+        assertThat(secondLevelSetting.get("3.4"), equalTo("abc"));
+            .build();
+import org.opensearch.test.OpenSearchTestCase;
+        assertEquals("{\"foo\":{\"bar.baz\":\"test\",\"bar\":[\"1\",\"2\",\"3\"]}}", builder.toString());
+        // check array
+        assertThat(settings.getAsList("value"), contains("4", "5"));
+        builder.put("a.b.c.d", "ab3");
+            .put(Settings.builder().putList("value", "1", "2", "3").build())
+            IllegalStateException.class,
+        assertThat(settings.get("foo.bar"), equalTo("baz"));
+            assertThat(settings.getAsList("hosts"), hasSize(2));
+import org.opensearch.OpenSearchParseException;
         builder.startObject();
-        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+            .build();
+        assertThat(settings.get("foo.bar"), equalTo("baz"));
+ * GitHub history for details.
+        settings = Settings.builder()
+        Settings settings = builder.build();
+        Settings.Builder builder = Settings.builder();
+        assertThat(settings.get("foo.test"), equalTo("test"));
+ *
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> {
+            .put("rootfoo", "test")
+    public void testPrefixNormalizationArchived() {
+        Settings filteredSettings = builder.build().filter((k) -> false);
+    public void testReplacePropertiesPlaceholderByEnvironmentVariables() {
+        assertFalse(secondLevelSetting.isEmpty());
         builder.endObject();
-        assertEquals("{\"ant.bee\":{\"cat\":\"value2\"},\"ant\":\"value1\",\"bee\":{\"cat\":\"value3\"}}", builder.toString());
-
+        assertThat(settings.getAsList("test1.test3").get(0), equalTo("test3-1"));
+        );
+/*
+        assertThat(settings.get("bar"), nullValue());
+        expectThrows(NoSuchElementException.class, () -> iterator.next());
+        Settings build = Settings.readSettingsFromStream(in);
+        assertThat(secondLevelSetting.get("3"), equalTo("hello world"));
+        builder.startObject();
+        Settings secondLevelSetting = firstLevelSettings.getByPrefix("2.");
+            "key",
+        OpenSearchParseException e = expectThrows(OpenSearchParseException.class, () -> {
+         * we convert to a string using a method that does not lose the original unit.
+        final String hostip = randomAlphaOfLength(16);
+        assertEquals(3, numKeys);
+            e.getMessage().contains("null-valued setting found for key [foo] found at line number [1], column number [5]")
+         * 1.5s could not be converted back to a TimeValue because TimeValues do not support fractional components. Effectively this test
+        final String hostname = randomAlphaOfLength(16);
+        secureSettings.setString("test.key2.bog", "somethingsecure");
+        assertThat(fooSettings.get("bar"), equalTo("def"));
+        assertTrue(filteredSettings.keySet().contains("a.b.c.d"));
+        settings = Settings.builder()
+        Settings.writeSettingsToStream(builder.build(), out);
+        assertThat(settings.getAsList("value"), contains("3"));
+        builder.put("a.b", "ab1");
+        Settings.Builder builder = Settings.builder();
+                .replacePropertyPlaceholders(name -> name.equals("HOSTNAMES") ? "[\"h1\", \"h2\"]" : null)
+        Map<String, Settings> groups = settings.getGroups("test");
+        assertTrue(prefixSettings.names().contains("foo"));
+            .build();
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        assertTrue(
+            .put(Settings.builder().putList("value", "1", "2", "3").putList("a", "b", "c").build())
+        builder.setSecureSettings(secureSettings);
+        settings = Settings.builder()
+            .build();
+        assertThat(settings.getAsList("test1.test3").size(), equalTo(2));
+        builder.put("a.c", "ac1");
+                .loadFromStream("foo.yml", in, false)
+        Settings settings = Settings.builder()
+            .put("setting1", "${property.placeholder}")
+        assertEquals(2, firstLevelSettings.size());
+        }
+        }
+            assertTrue(iterator.hasNext());
+        );
+         * using a method that does not lose the original unit.
+        assertEquals(0, test.size());
+        Settings build = Settings.fromXContent(parser);
+        final Setting<ByteSizeValue> setting = Setting.byteSizeSetting(
+        assertEquals("baz", Settings.builder().copy("foo.bar.baz", settings).build().get("foo.bar.baz"));
+import org.opensearch.core.common.settings.SecureString;
+            .put("foo.foobar", 2)
+            .replacePropertyPlaceholders(name -> name.equals("HOSTNAMES") ? "[]" : null)
+            assertFalse(iterator.hasNext());
+        final Setting<TimeValue> setting = Setting.timeSetting(
+            .put("foo", "abc")
+        assertThat(settings.get("bar"), nullValue());
+import java.util.Set;
+        assertEquals("blah1", settings.get("test.key1.baz"));
+        builder.putNull("test.key3.bar");
+            .put("1.2.3", "hello world")
+        settings = Settings.builder()
+            .put("1.2.3.4", "abc")
+        int numKeys = 0;
+        );
+    }
+            .build();
+        assertTrue(names.contains("bar"));
+        builder.endObject();
+            Settings.builder().loadFromStream(yaml, getClass().getResourceAsStream(yaml), false);
+        assertFalse(thirdLevelSetting.isEmpty());
+        assertNull(settings.get("test1.test3.1"));
+        builder.put("test.key1.other", "blah2");
+    }
+        StreamInput in = StreamInput.wrap(BytesReference.toBytes(output.bytes()));
+        assertThat(settings.getAsList("value"), contains("4", "5"));
+        assertThat(settings.get("setting1"), equalTo("[]"));
+        Set<String> names = settings.names();
+        Settings thirdLevelSetting = secondLevelSetting.getByPrefix("3.");
+        Settings.writeSettingsToStream(settings, output);
+        // overriding an array with a longer array
+        Settings settings = Settings.builder()
+            .put(Settings.builder().putList("value.deep.key", "4", "5").build())
+         * 1000ms would be converted to 1s). However, this had a problem in that, for example, 1500ms would be converted to 1.5s. Then,
+        builder.endObject();
+            .put(Settings.builder().putList("value", "4", "5").putList("d", "e", "f").build())
+        settings = Settings.builder().put("bar", "baz").put("foo.test", "test").normalizePrefix("foo.").build();
+import static org.hamcrest.Matchers.notNullValue;
+        assertThat(key1.names(), containsInAnyOrder("foo", "bar", "baz", "other"));
+                .build();
+            .build();
+        final Settings settings = Settings.builder().put("key", expected).build();
+        assertThat(settings.getAsList("setting1"), empty());
+        Settings.Builder builder = Settings.builder();
+        assertThat(settings.size(), equalTo(1));
+            .put("setting1", "${HOSTNAMES}")
+        Settings settings = Settings.builder()
+        Settings prefixMap = builder.build().getByPrefix("a.");
+        XContentBuilder builder = MediaTypeRegistry.JSON.contentBuilder();
+import static org.hamcrest.Matchers.hasSize;
+    }
+ * ownership. Elasticsearch licenses this file to you under
+        Files.write(tmp, Collections.singletonList("foo: # missing value\n"), StandardCharsets.UTF_8);
+import static org.hamcrest.Matchers.containsString;
+ * SPDX-License-Identifier: Apache-2.0
+        Settings settings = Settings.builder().put("bar", "baz").put("foo", "abc").put("foo.bar", "def").put("foo.baz", "ghi").build();
+        MockSecureSettings secureSettings = new MockSecureSettings();
+        assertTrue(Settings.builder().setSecureSettings(secureSettings).build().isEmpty());
+        builder.setSecureSettings(secureSettings);
+        assertTrue(e.getMessage(), e.getMessage().contains("malformed"));
+        assertThat(settings.get("value.data"), is("1"));
+        assertFalse(prefixIterator.hasNext());
+        builder.put("a.b.c", "ab2");
+    public void testGetAsSettings() {
+            .build();
+        assertThat(settings.getAsList("foo.bar.baz").get(0), equalTo("1"));
+        }
+        assertThat(settings.get("foo.archived.foo.*"), nullValue());
+        XContentBuilder builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
+        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
+        assertNull(secondLevelSetting.get("2.3.4"));
+        Iterator<String> prefixIterator = prefixMap.keySet().iterator();
+        assertEquals("a.b.c.d", iterator.next());
+        final Settings settings = Settings.builder().put("key", expected).build();
+import org.opensearch.Version;
         test = Settings.builder().put("ant", "value1").put("ant.bee.cat", "value2").put("ant.bee.cat.dog.ewe", "value3").build();
+        assertNull(thirdLevelSetting.get("3.4"));
+    public void testNames() {
+        );
+        assertThat(settings.getAsList("value"), contains("4", "5"));
+import org.opensearch.core.common.bytes.BytesReference;
+        if (randomBoolean()) {
+        Settings settings = Settings.builder().normalizePrefix("foo.").build();
+        assertEquals(3, settings.size());
+        assertEquals("b.c.d", prefixIterator.next());
+            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").putList("a", "b", "c").build())
+    }
+    }
+        assertThat(settings.size(), equalTo(2));
+        assertFalse(filteredSettings.keySet().contains("a.c"));
+        final Settings settings = Settings.builder().put("key", expected.getMicros(), TimeUnit.MICROSECONDS).build();
+            .put(Settings.builder().putList("value", "1", "2").build())
+        assertFalse(filteredSettings.keySet().contains("a.c"));
+        settings = Settings.builder()
+        assertNull(secondLevelSetting.get("1.2.3"));
+        // test that other arrays are not overridden
+            assertThat(settings.getAsList("hosts"), containsInAnyOrder("h1", "h2"));
+        assertThat(firstLevelSettings.get("2.3.4"), equalTo("abc"));
+            assertTrue(k.startsWith("a.b"));
+    }
+        StreamInput in = StreamInput.wrap(out.bytes().toBytesRef().bytes);
+            .put(Settings.builder().putList("value.deep.key", "4", "5").putList("d", "e", "f").build())
+    public void testReplacePropertiesPlaceholderSystemVariablesHaveNoEffect() {
+                "foo.yml",
+        assertThat(key2.names(), containsInAnyOrder("foo", "bog", "baz", "else"));
+            .put(Settings.builder().putList("value", "2", "3").build())
+        secureSettings.setString("test.key2.foo", "somethingsecure");
+        assertThat(settings.get("setting1"), equalTo(value));
+            .put(Settings.builder().putList("value.deep.key", "4", "5").build())
+        assertEquals("a.b", iterator.next());
+ */
+        assertEquals(1, thirdLevelSetting.size());
+        assertThat(settings.get("test1.value1"), equalTo("value1"));
+        Settings test = Settings.builder().putList("foo.bar", "1", "2", "3").put("foo.bar.baz", "test").build();
+         * (e.g., 1024 bytes would be converted to 1kb). However, this had a problem in that, for example, 1536 bytes would be converted to
+import static org.hamcrest.Matchers.nullValue;
+        XContentParser parser = createParser(builder);
+        assertThat(settings.names().size(), equalTo(0));
+import static org.hamcrest.Matchers.hasToString;
+ * You may obtain a copy of the License at
+    public void testSetByTimeUnit() {
+        assertEquals(Arrays.asList("1", "2"), settings.getAsList("test.key4.foo"));
+            .loadFromStream(randomFrom("test.json", "test.yml"), new ByteArrayInputStream(new byte[0]), false)
+        assertTrue(e.getMessage().contains("does not match the allowed setting name pattern"));
+        assertNull(settings.get("test1.test3.1"));
+        assertFalse(value.isEmpty());
+        assertTrue(prefixMap.keySet().contains("c"));
+import java.util.Iterator;
+import static org.hamcrest.Matchers.equalTo;
+        assertTrue(e.getMessage(), e.getMessage().contains("malformed"));
+    }
+            .putList("foo.bar.baz", "1", "2", "3")
+ * under the License.
+        assertEquals(2, build.size());
+        output.setVersion(randomFrom(Version.CURRENT, Version.V_2_0_0));
+        secureSettings.setString("test.key2.foo", "somethingsecure");
+        Settings fooSettings = settings.getAsSettings("foo");
+        assertThat(settings.getAsList("test1.test3").size(), equalTo(2));
+            .build();
+ * this work for additional information regarding copyright
+        builder.startObject();
+        assertTrue(prefixMap.keySet().contains("b.c"));
+            .put(Settings.builder().putList("value", "4", "5").build())
+        assertEquals("1,2,3,4", build.get("foo.baz"));
+            )
+        assertEquals("{\"ant.bee\":{\"cat\":\"value2\"},\"ant\":\"value1\",\"bee\":{\"cat\":\"value3\"}}", builder.toString());
+            .replacePropertyPlaceholders(name -> "HOSTNAME".equals(name) ? hostname : null)
+        assertEquals("b", prefixIterator.next());
+        builder.put("a", "a1");
+        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
+        final Settings settings = Settings.builder()
+        assertThat(settings.size(), equalTo(1));
+        for (int i = 0; i < 10; i++) {
+    }
+            .build();
+        assertThat(settings.getAsInt("test1.test2.value3", -1), equalTo(2));
+            .build();
+    public void testCopy() {
+import org.opensearch.core.common.unit.ByteSizeUnit;
+        builder.put("a.b", "ab1");
+        int numKeys = 0;
+            "key",
+        final IllegalStateException e = expectThrows(
+ */
+        assertTrue(settings.keySet().contains("test.key3.bar"));
+        }
+import java.util.Collections;
+        assertEquals(Arrays.asList("0", "1", "2", "3"), Settings.builder().copy("foo.bar", settings).build().getAsList("foo.bar"));
+         * Previously we would internally convert the time value to a string using a method that tries to be smart about the units (e.g.,
+        String value = System.getProperty("java.home");
+        Settings settings = Settings.builder()
+            assertTrue(prefixIterator.hasNext());
+        e = expectThrows(IllegalArgumentException.class, () -> SecureSetting.secureFile("*IllegalName", null));
+        assertThat(e, hasToString(containsString("settings builder can't contain values for [foobar=foo] and [foobar.0=bar]")));
+    public void testProcessSetting() throws IOException {
+            .loadFromSource("value: [ 2, 3 ]", XContentType.YAML)
+        }
+            .build();
+import org.opensearch.core.xcontent.ToXContent;
+        assertEquals("{\"foo\":{\"bar\":[\"1\",\"2\",\"3\"]}}", builder.toString());
+ * software distributed under the License is distributed on an
+        }
+        assertEquals("ab3", prefixMap.get("b.c.d"));
+        assertThat(settings.getAsList("value.with.deep.key"), contains("2", "3"));
+        assertThat(settings.getAsList("value.deep.key"), contains("4", "5"));
+        assertTrue(names.contains("foo"));
+import java.nio.charset.StandardCharsets;
+        builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
+        assertEquals("ab1", filteredSettings.get("a.b"));
+    }
+    }
+         * 1500 microseconds would be converted to 1ms). Effectively this test is then asserting that we no longer make this mistake when
+        builder.endObject();
+import java.nio.file.Path;
+        for (String k : prefixMap.keySet()) {
+    public void testPrefixMap() {
+        assertFalse(filteredSettings.keySet().contains("a"));
+            () -> Settings.builder().put("foobar.0", "bar").put("foobar.1", "baz").put("foobar", "foo").build()
+ */
+            .build();
+        Settings.Builder builder = Settings.builder();
+        assertEquals("c", prefixIterator.next());
+ *
+         */
+        builder.startObject();
+        assertThat(implicitEnvSettings.get("setting1"), equalTo(hostname));
+        final Settings settings = Settings.builder().loadFromStream(json, getClass().getResourceAsStream(json), false).build();
+        assertThat(settings.getAsList("value"), contains("2", "3"));
+        }
+        builder.put("test.key2.baz", "blah3");
         builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
         builder.startObject();
-        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
-        builder.endObject();
-        assertEquals("{\"ant.bee\":{\"cat.dog\":{\"ewe\":\"value3\"},\"cat\":\"value2\"},\"ant\":\"value1\"}", builder.toString());
     }
-
-}
+            .put(Settings.builder().putList("value", "4", "5").build())
+import org.opensearch.core.xcontent.XContentBuilder;
+    }
+        builder.setSecureSettings(secureSettings);
+            .put(Settings.builder().putList("value.with.deep.key", "2", "3").build())
+import java.io.ByteArrayInputStream;
+        assertEquals("a.b.c", iterator.next());
+        if (randomBoolean()) {
+            .put(Settings.builder().putList("value.deep.key", "1", "2", "3").build())
+            .build();
+        settings = Settings.builder()
+            .put("foo.baz", "ghi")
+        Settings.Builder builder = Settings.builder();
+        Settings key1 = groups.get("key1");
+            TimeValue.ZERO
+            .put(Settings.builder().putList("value", "1").build())
+        /*
+        assertNotNull(key2);
+        assertTrue(e.getMessage().contains("must be stored inside the OpenSearch keystore"));
+        assertThat(settings.get("foo.archived.foo.bar"), nullValue());
+        settings = Settings.builder()
+        assertEquals(build.get("foo.bar.baz"), "baz");
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.core.common.unit.ByteSizeValue;
+            .build();
+        BytesStreamOutput output = new BytesStreamOutput();
+ * this file be licensed under the Apache-2.0 license or a
+            .put(Settings.builder().put("value", "1").build())
+        assertThat(settings.getAsList("value"), contains("3"));
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+        assertThat(settings.getAsList("value"), contains("2", "3"));
+    }
+        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+            .loadFromStream(
+        expectThrows(UnsupportedOperationException.class, () -> filteredSettings.keySet().remove("a.b"));
+        settings = Settings.builder()
+        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+    }
+            .put("2.3.4", "def")
+ * not use this file except in compliance with the License.
+        assertFalse(firstLevelSettings.isEmpty());
+        assertEquals(7, builder.build().size());
+            .put(Settings.builder().put("value.data", "1").build())
+        // check array
+    public void testPrefixNormalization() {
+        assertThat(settings.getAsList("d"), contains("e", "f"));
+        assertThat(settings.getAsList("test1.test4"), empty());
+ * compatible open source license.
+    }
+    }
+        final String yaml = "/org/opensearch/common/settings/loader/test-settings.yml";
+        // overriding an array with a single value
+        assertThat(settings.getAsList("value"), contains("3", "4", "5"));
+            .putNull("foo.null.baz")
+    }
+        secureSettings.setString("test.key2.bog", "somethingsecure");
+        secureSettings.setString("test.key1.bar", "somethingsecure");
+        names = fooSettings.names();
+        assertThat(actual, equalTo(expected));
+            .put(Settings.builder().putList("value", "1", "2").build())
+    public void testReplacePropertiesPlaceholderSystemProperty() {
+import java.util.Arrays;
+            .build();
+            assertTrue(iterator.hasNext());
+        secureSettings.setString("test.key1.foo", "somethingsecure");
+        assertThat(settings.getAsList("value.deep.key"), contains("3"));
+        /*
+public class SettingsTests extends OpenSearchTestCase {
+        Settings settings = Settings.readSettingsFromStream(in);
+            .put(Settings.builder().putList("value", "3", "4", "5").build())
+        assertTrue(prefixMap.keySet().contains("b.c.d"));
+        settings = Settings.builder().put("foo.test", "test").normalizePrefix("foo.").build();
+        builder.put("a.b.c.d", "ab3");
+        try (InputStream in = new ByteArrayInputStream("hosts: ${HOSTNAMES}".getBytes(StandardCharsets.UTF_8))) {
+            numKeys++;
+         */
+            assertTrue(prefixIterator.hasNext());
+    }
+            .build();
+        builder.put("a", "a1");
+        assertEquals("ab1", prefixMap.get("b"));
+        for (String k : filteredSettings.keySet()) {
+    }
+        assertEquals(2, fooSettings.size());
+        expectThrows(UnsupportedOperationException.class, () -> filteredSettings.keySet().remove("a.b"));
+        Iterator<String> iterator = filteredSettings.keySet().iterator();
+import org.opensearch.core.xcontent.XContentParser;
+        for (int i = 0; i < 10; i++) {
+        assertThat(settings.getAsList("test1.test3").get(0), equalTo("test3-1"));
+    public void testIndentationWithExplicitDocumentStart() throws Exception {
+            .put(Settings.builder().putList("value.deep.key", "1", "2").build())
+    }
+    public void testEmptyFilterMap() {
+        assertTrue(prefixMap.keySet().contains("b"));
+    public void testReplacePropertiesPlaceholderSystemPropertyEmptyList() {
+import java.util.concurrent.TimeUnit;
+        builder = XContentBuilder.builder(MediaTypeRegistry.JSON.xContent());
+        assertNull(secondLevelSetting.get("1.2.3.4"));
+            .build();
+        Settings settings = Settings.builder()
+        settings = Settings.builder()
+    public void testToXContent() throws IOException {
+    public void testLoadEmptyStream() throws IOException {
+         * Previously we would internally convert the duration to a string by converting to milliseconds which could lose precision  (e.g.,
+ * the Apache License, Version 2.0 (the "License"); you may
+        test.toXContent(builder, new ToXContent.MapParams(Collections.emptyMap()));
+    public void testSimpleYamlSettings() throws Exception {
+        settings.toXContent(builder, new ToXContent.MapParams(Collections.singletonMap("flat_settings", "" + flatSettings)));

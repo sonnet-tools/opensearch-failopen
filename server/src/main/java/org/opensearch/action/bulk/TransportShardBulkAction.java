@@ -1,1036 +1,961 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.action.bulk;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.ParameterizedMessage;
-import org.apache.logging.log4j.util.MessageSupplier;
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.action.ActionListenerResponseHandler;
-import org.opensearch.action.ActionRunnable;
-import org.opensearch.action.DocWriteRequest;
-import org.opensearch.action.DocWriteResponse;
-import org.opensearch.action.delete.DeleteRequest;
-import org.opensearch.action.delete.DeleteResponse;
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.index.IndexResponse;
-import org.opensearch.action.support.ActionFilters;
-import org.opensearch.action.support.ChannelActionListener;
-import org.opensearch.action.support.TransportIndicesResolvingAction;
-import org.opensearch.action.support.WriteRequest;
-import org.opensearch.action.support.replication.ReplicationMode;
-import org.opensearch.action.support.replication.ReplicationOperation;
-import org.opensearch.action.support.replication.ReplicationTask;
-import org.opensearch.action.support.replication.TransportReplicationAction;
-import org.opensearch.action.support.replication.TransportWriteAction;
-import org.opensearch.action.update.UpdateHelper;
-import org.opensearch.action.update.UpdateRequest;
-import org.opensearch.action.update.UpdateResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.ClusterStateObserver;
-import org.opensearch.cluster.action.index.MappingUpdatedAction;
-import org.opensearch.cluster.action.shard.ShardStateAction;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.MappingMetadata;
-import org.opensearch.cluster.metadata.ResolvedIndices;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.cluster.routing.AllocationId;
-import org.opensearch.cluster.routing.ShardRouting;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.compress.CompressedXContent;
-import org.opensearch.common.inject.Inject;
-import org.opensearch.common.lease.Releasable;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.core.tasks.TaskId;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.index.IndexingPressureService;
-import org.opensearch.index.SegmentReplicationPressureService;
-import org.opensearch.index.engine.Engine;
-import org.opensearch.index.engine.VersionConflictEngineException;
-import org.opensearch.index.get.GetResult;
-import org.opensearch.index.mapper.MapperException;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.index.mapper.SourceToParse;
-import org.opensearch.index.remote.RemoteStorePressureService;
-import org.opensearch.index.seqno.SequenceNumbers;
-import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardNotFoundException;
-import org.opensearch.index.translog.Translog;
-import org.opensearch.indices.IndicesService;
-import org.opensearch.indices.SystemIndices;
-import org.opensearch.node.NodeClosedException;
-import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
-import org.opensearch.tasks.Task;
-import org.opensearch.telemetry.tracing.Tracer;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-import org.opensearch.transport.TransportChannel;
-import org.opensearch.transport.TransportRequest;
-import org.opensearch.transport.TransportRequestOptions;
-import org.opensearch.transport.TransportService;
-import org.opensearch.transport.client.transport.NoNodeAvailableException;
-
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.LongSupplier;
-
-/**
- * Performs shard-level bulk (index, delete or update) operations
- *
- * @opensearch.internal
- */
-public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequest, BulkShardRequest, BulkShardResponse>
-    implements
-        TransportIndicesResolvingAction<BulkShardRequest> {
-
-    public static final String ACTION_NAME = BulkAction.NAME + "[s]";
-
-    private static final Logger logger = LogManager.getLogger(TransportShardBulkAction.class);
-    private static final Function<IndexShard, String> EXECUTOR_NAME_FUNCTION = shard -> {
-        if (shard.indexSettings().getIndexMetadata().isSystem()) {
-            return Names.SYSTEM_WRITE;
-        } else {
-            return Names.WRITE;
-        }
-    };
-
-    private final UpdateHelper updateHelper;
-    private final MappingUpdatedAction mappingUpdatedAction;
-    private final SegmentReplicationPressureService segmentReplicationPressureService;
-    private final RemoteStorePressureService remoteStorePressureService;
-
-    /**
-     * This action is used for performing primary term validation. With remote translog enabled, the translogs would
-     * be durably persisted in remote store. Without remote translog, current transport replication calls does primary
-     * term validation as well as logically replicate the data. With remote translog, the primary would make calls to
-     * replicas to perform primary term validation. This make sures an isolated primary fails to ack after primary
-     * term validation in presence of a new primary.
-     */
-    private final String transportPrimaryTermValidationAction;
-
-    @Inject
-    public TransportShardBulkAction(
-        Settings settings,
-        TransportService transportService,
-        ClusterService clusterService,
-        IndicesService indicesService,
-        ThreadPool threadPool,
-        ShardStateAction shardStateAction,
-        MappingUpdatedAction mappingUpdatedAction,
-        UpdateHelper updateHelper,
-        ActionFilters actionFilters,
-        IndexingPressureService indexingPressureService,
-        SegmentReplicationPressureService segmentReplicationPressureService,
-        RemoteStorePressureService remoteStorePressureService,
-        SystemIndices systemIndices,
-        Tracer tracer
-    ) {
-        super(
-            settings,
-            ACTION_NAME,
-            transportService,
-            clusterService,
-            indicesService,
-            threadPool,
-            shardStateAction,
-            actionFilters,
-            BulkShardRequest::new,
-            BulkShardRequest::new,
-            EXECUTOR_NAME_FUNCTION,
-            false,
-            indexingPressureService,
-            systemIndices,
-            tracer,
-            AdmissionControlActionType.INDEXING
-        );
-        this.updateHelper = updateHelper;
-        this.mappingUpdatedAction = mappingUpdatedAction;
-        this.segmentReplicationPressureService = segmentReplicationPressureService;
-        this.remoteStorePressureService = remoteStorePressureService;
-
-        this.transportPrimaryTermValidationAction = ACTION_NAME + "[validate_primary_term]";
-
-        transportService.registerRequestHandler(
-            transportPrimaryTermValidationAction,
-            executor,
-            true,
-            true,
-            PrimaryTermValidationRequest::new,
-            this::handlePrimaryTermValidationRequest
-        );
-    }
-
-    protected void handlePrimaryTermValidationRequest(
-        final PrimaryTermValidationRequest request,
-        final TransportChannel channel,
-        final Task task
-    ) {
-        ActionListener<ReplicaResponse> listener = new ChannelActionListener<>(channel, transportPrimaryTermValidationAction, request);
-        final ShardId shardId = request.getShardId();
-        assert shardId != null : "request shardId must be set";
-        IndexShard replica = getIndexShard(shardId);
-        try {
-            new PrimaryTermValidationReplicaAction(listener, replica, (ReplicationTask) task, request).run();
-        } catch (RuntimeException e) {
-            listener.onFailure(e);
-        }
-    }
-
-    @Override
-    public ResolvedIndices resolveIndices(BulkShardRequest request) {
-        return ResolvedIndices.of(request.index());
-    }
-
-    /**
-     * This action is the primary term validation action which is used for doing primary term validation with replicas.
-     * This is only applicable for TransportShardBulkAction because all writes (delete/update/single write/bulk)
-     * ultimately boils down to TransportShardBulkAction and isolated primary could continue to acknowledge if it is not
-     * aware that the primary has changed. This helps achieve the same. More details in java doc of
-     * {@link TransportShardBulkAction#transportPrimaryTermValidationAction}.
-     *
-     * @opensearch.internal
-     */
-    private static final class PrimaryTermValidationReplicaAction extends AbstractRunnable implements ActionListener<Releasable> {
-
-        private final ActionListener<ReplicaResponse> onCompletionListener;
-        private final IndexShard replica;
-        private final ReplicationTask task;
-        private final PrimaryTermValidationRequest request;
-
-        public PrimaryTermValidationReplicaAction(
+                );
             ActionListener<ReplicaResponse> onCompletionListener,
-            IndexShard replica,
-            ReplicationTask task,
-            PrimaryTermValidationRequest request
-        ) {
-            this.onCompletionListener = onCompletionListener;
-            this.replica = replica;
-            this.task = task;
-            this.request = request;
-        }
-
-        @Override
-        public void onResponse(Releasable releasable) {
-            setPhase(task, "finished");
-            onCompletionListener.onResponse(new ReplicaResponse(SequenceNumbers.NO_OPS_PERFORMED, SequenceNumbers.NO_OPS_PERFORMED));
-        }
-
-        @Override
-        public void onFailure(Exception e) {
-            setPhase(task, "failed");
-            onCompletionListener.onFailure(e);
-        }
-
-        @Override
-        protected void doRun() throws Exception {
-            setPhase(task, "primary-term-validation");
-            final String actualAllocationId = this.replica.routingEntry().allocationId().getId();
-            if (actualAllocationId.equals(request.getTargetAllocationID()) == false) {
-                throw new ShardNotFoundException(
-                    this.replica.shardId(),
-                    "expected allocation id [{}] but found [{}]",
-                    request.getTargetAllocationID(),
-                    actualAllocationId
-                );
-            }
-            // Check operation primary term against the incoming primary term
-            // If the request primary term is low, then trigger lister failure
-            if (request.getPrimaryTerm() < replica.getOperationPrimaryTerm()) {
-                final String message = String.format(
-                    Locale.ROOT,
-                    "%s operation primary term [%d] is too old (current [%d])",
-                    request.getShardId(),
-                    request.getPrimaryTerm(),
-                    replica.getOperationPrimaryTerm()
-                );
-                onFailure(new IllegalStateException(message));
-            } else {
-                onResponse(null);
-            }
-        }
-    }
-
-    /**
-     * Primary term validation request sent to a specific allocation id
-     *
-     * @opensearch.internal
-     */
-    protected static final class PrimaryTermValidationRequest extends TransportRequest {
-
-        /**
-         * {@link AllocationId#getId()} of the shard this request is sent to
-         **/
-        private final String targetAllocationID;
-        private final long primaryTerm;
-        private final ShardId shardId;
-
-        public PrimaryTermValidationRequest(String targetAllocationID, long primaryTerm, ShardId shardId) {
-            this.targetAllocationID = Objects.requireNonNull(targetAllocationID);
-            this.primaryTerm = primaryTerm;
-            this.shardId = Objects.requireNonNull(shardId);
-        }
-
-        public PrimaryTermValidationRequest(StreamInput in) throws IOException {
-            super(in);
-            targetAllocationID = in.readString();
-            primaryTerm = in.readVLong();
-            shardId = new ShardId(in);
-        }
-
-        @Override
+import org.opensearch.transport.TransportChannel;
+        UpdateHelper updateHelper,
         public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            out.writeString(targetAllocationID);
-            out.writeVLong(primaryTerm);
-            shardId.writeTo(out);
-        }
-
-        @Override
-        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            return new ReplicationTask(id, type, action, getDescription(), parentTaskId, headers);
-        }
-
-        public String getTargetAllocationID() {
-            return targetAllocationID;
-        }
-
-        public long getPrimaryTerm() {
-            return primaryTerm;
-        }
-
-        public ShardId getShardId() {
-            return shardId;
-        }
-
-        @Override
-        public String getDescription() {
-            return toString();
-        }
-
-        @Override
+    public static void performOnPrimary(
+        } else {
         public String toString() {
-            return "PrimaryTermValidationRequest ["
-                + shardId
-                + "] for targetAllocationID ["
-                + targetAllocationID
-                + "] with primaryTerm ["
-                + primaryTerm
-                + "]";
-        }
-    }
-
+             * the append exception and rethrows it from every later call, so the body's exception (thrown out of
+import java.util.concurrent.ExecutorService;
+        this.segmentReplicationPressureService = segmentReplicationPressureService;
+import org.opensearch.index.engine.Engine;
+                    indexRequest.process(metadata.getCreationVersion(), mappingMd, updateRequest.concreteIndex());
+                        }
     @Override
-    protected ReplicationOperation.Replicas<BulkShardRequest> primaryTermValidationReplicasProxy() {
-        return new PrimaryTermValidationProxy();
-    }
-
+             * {@code batch.add} or an ordering {@code flush()}) is exactly what {@code finish()} throws again. Attaching
+            // Even though the primary waits on all nodes to ack the mapping changes to the cluster-manager
+            final BulkItemResponse response = item.primaryResponse();
+            assert update != null;
+                                    docWriteRequest.version()
+                    waitForMappingUpdate.accept(ActionListener.runAfter(new ActionListener<Void>() {
+import org.opensearch.index.engine.VersionConflictEngineException;
+                );
     /**
-     * This {@link org.opensearch.action.support.replication.TransportReplicationAction.ReplicasProxy} implementation is
-     * used for primary term validation and is only relevant for TransportShardBulkAction replication action.
-     *
-     * @opensearch.internal
-     */
-    private final class PrimaryTermValidationProxy extends WriteActionReplicasProxy {
-
-        @Override
-        public void performOn(
-            ShardRouting replica,
-            BulkShardRequest request,
-            long primaryTerm,
-            long globalCheckpoint,
-            long maxSeqNoOfUpdatesOrDeletes,
-            ActionListener<ReplicationOperation.ReplicaResponse> listener
-        ) {
-            String nodeId = replica.currentNodeId();
-            final DiscoveryNode node = clusterService.state().nodes().get(nodeId);
-            if (node == null) {
-                listener.onFailure(new NoNodeAvailableException("unknown node [" + nodeId + "]"));
-                return;
-            }
-            final PrimaryTermValidationRequest validationRequest = new PrimaryTermValidationRequest(
+            public void onClusterServiceClose() {
+        super(
+            // mapping update. Assume that the update is first applied on the primary, and only later on the replica
+                    primaryResponse.getSeqNo(),
+        SegmentReplicationPressureService segmentReplicationPressureService,
+                    requestForResult = bulkShardRequest;
+                final BulkShardRequest requestForResult;
+import org.opensearch.core.common.io.stream.StreamInput;
+     * This action is used for performing primary term validation. With remote translog enabled, the translogs would
+            setPhase(task, "primary-term-validation");
+                    indexRequest.getAutoGeneratedTimestamp(),
+                    deleteRequest.routing()
+                            concreteIndex,
+                if (TransportShardBulkAction.isConflictException(failure)) {
+            // With remote-store fencing enabled, stale-primary fencing is enforced by a conditional write on the
+            if (indexShard.indexSettings().isRemoteStoreFencingEnabled()
+                final long primaryTerm;
+                request.id(),
+            return new WriteReplicaResult<>(request, location, null, replica, logger);
+                        indexSourceAsBytes,
+            final DocWriteResponse.Result translatedResult = translate.getResponseResult();
+                            return;
+                new SourceToParse(
+                    request.getContentType(),
+import org.opensearch.core.index.shard.ShardId;
+                break;
+import org.opensearch.index.shard.ShardNotFoundException;
+            // fence blob during every translog upload (see RemoteStoreFence), so the no-op primary term validation
+     * This is only applicable for TransportShardBulkAction because all writes (delete/update/single write/bulk)
+    protected Releasable checkPrimaryLimits(BulkShardRequest request, boolean rerouteWasLocal, boolean localRerouteInitiatedByNodeClient) {
+ * GitHub history for details.
+import org.opensearch.index.IndexingPressureService;
+    ) {
+                final ShardId shardId = replica.shardId();
+import org.opensearch.cluster.metadata.ResolvedIndices;
+    protected void handlePrimaryTermValidationRequest(
+                    shardId.getIndexName(),
+            mappingUpdater.updateMappings(result.getRequiredMappingUpdate(), primary.shardId(), new ActionListener<Void>() {
+            final IndexRequest request = context.getRequestToExecute();
+                final SourceToParse sourceToParse = new SourceToParse(
+                                    primary,
+        BulkShardRequest request,
+ */
+                case UPDATED:
                 replica.allocationId().getId(),
-                primaryTerm,
-                replica.shardId()
+                && indexShard.indexSettings().getTranslogDurability() == Translog.Durability.REQUEST) {
+    private final RemoteStorePressureService remoteStorePressureService;
+        if (shard.indexSettings().getIndexMetadata().isSystem()) {
+        public long getPrimaryTerm() {
+    }
+                DeleteRequest deleteRequest = (DeleteRequest) docWriteRequest;
+        }
+                    response.getFailure().getMessage()
+import org.opensearch.action.ActionRunnable;
+import org.opensearch.action.support.TransportIndicesResolvingAction;
+                    request.id(),
+            }
+                    context.setRequestToExecute(updateResult.action());
+import org.opensearch.index.mapper.SourceToParse;
+        }
+import org.opensearch.action.delete.DeleteRequest;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.action.update.UpdateHelper;
+    private static Engine.Result exceptionToResult(Exception e, IndexShard primary, boolean isDelete, long version) {
+                    @Override
+import org.opensearch.threadpool.ThreadPool;
+                    throw finishFailure;
+        Translog.Location location = null;
+            // execute translated update request
+        );
+            }
+ * this work for additional information regarding copyright
+            }
+    private final SegmentReplicationPressureService segmentReplicationPressureService;
+                request.ifSeqNo(),
+     *
+import org.apache.logging.log4j.Logger;
+            ShardRouting replica,
+                        ) == false) {
+                            assert context.requiresWaitingForMappingUpdate();
+                    deleteResponse.getId(),
+                        context.buildShardResponse(serviceTimeEWMAInNanos, nodeQueueSize),
+             */
+            final Translog.Location location = performOnReplica(request, replica);
+            PrimaryTermValidationRequest::new,
+                } finally {
+            @Override
+            @Override
+import org.opensearch.index.SegmentReplicationPressureService;
+ * SPDX-License-Identifier: Apache-2.0
+                        finishRequest(-1, -1);
+ */
+                final GetResult getResult = UpdateHelper.extractGetResult(
+import org.opensearch.cluster.routing.ShardRouting;
+        Tracer tracer
+            out.writeString(targetAllocationID);
+import org.opensearch.action.support.replication.TransportReplicationAction;
+                ActionListener.completeWith(
+            }
+                    primaryResponse.getVersion(),
+                        MapperService.SINGLE_MAPPING_NAME,
+                break;
+        ActionListener<Void> itemDoneListener
+        new ActionRunnable<PrimaryResult<BulkShardRequest, BulkShardResponse>>(listener) {
+                    indexRequest.getContentType(),
+            }
+        ActionListener<ReplicaResponse> listener = new ChannelActionListener<>(channel, transportPrimaryTermValidationAction, request);
+ * software distributed under the License is distributed on an
+            }
+        if (indexShard.indexSettings().isAssignedOnRemoteNode()) {
+    }
+                    if (bodyFailure != null) {
+                        requestForResult,
+            ActionListener<ReplicationOperation.ReplicaResponse> listener
+            assert response != null;
+ */
+            response = executionResult;
+            }
+        return new PrimaryTermValidationProxy();
+                // we may fail translating a update to index or delete operation
+            PrimaryTermValidationRequest request
             );
-            final ActionListenerResponseHandler<ReplicaResponse> handler = new ActionListenerResponseHandler<>(
-                listener,
-                ReplicaResponse::new
+        public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
+                    indexRequest.isRetry(),
+        ClusterService clusterService,
+            shardStateAction,
+        ActionListener<PrimaryResult<BulkShardRequest, BulkShardResponse>> listener
+                    primaryTerm,
+            // That is accepted rather than defended against - flipping to ASYNC is an explicit request for
+            /**
+        this.updateHelper = updateHelper;
+        return BulkAction.INSTANCE.transportOptions(settings);
+            transportPrimaryTermValidationAction,
+                        context.getPrimary(),
+                final IndexResponse indexResponse = operationResponse.getResponse();
+import java.util.Locale;
+             * On the common failure path both are the <em>same</em> instance: a failed {@code TranslogBatchScope} stores
+                case CREATED:
+                        final DocWriteRequest<?> current = context.getCurrent();
+            true,
+        IndexShard replica = getIndexShard(shardId);
+import org.apache.logging.log4j.util.MessageSupplier;
+                        }
+                            updateRequest,
+                );
+        }
+                    }
+                    context.markOperationAsNoOp(updateResult.action());
+            result = primary.applyDeleteOperationOnPrimary(
+                    public boolean isForceExecution() {
+    /**
+import org.opensearch.threadpool.ThreadPool.Names;
+import java.util.function.LongSupplier;
+            // Close this thread's translog batch before the mapping update is requested. Its completion re-executes
+                    continue; // ignore replication as we didn't generate a sequence number for this request.
+                    throw new IllegalStateException("Illegal update operation " + updateResult.getResponseResult());
+             * the finish failure is attached as suppressed; otherwise the finish failure propagates.
+                            sourceAndContent.v1(),
+            // to the replica. When it arrives on the replica, there’s no guarantee that the replica has already
+     * Creates a new bulk item result from the given requests and result of performing the update operation on the shard.
+                    deleteRequest.id(),
+                    requestForResult.index(bulkShardRequest.index());
+        final DocWriteRequest<?> docWriteRequest = context.getCurrent();
+                listener.onFailure(new NoNodeAvailableException("unknown node [" + nodeId + "]"));
+                try {
+            private final ExecutorService executor = threadPool.executor(executorName);
+            assert operationResult != null : "operation result must never be null";
+import org.opensearch.cluster.routing.AllocationId;
+        public PrimaryTermValidationReplicaAction(
+import org.opensearch.index.translog.Translog;
+            @Override
+        }
+            // interval-bounded durability, and every acknowledgement under it carries the same exposure.
+}
+                        updateIndexRequest.getContentType()
+            String nodeId = replica.currentNodeId();
+        BulkPrimaryExecutionContext context,
+                if (executor instanceof OpenSearchThreadPoolExecutor) {
+        }
+import org.opensearch.index.seqno.SequenceNumbers;
+import org.opensearch.action.support.replication.ReplicationMode;
+/*
+                long serviceTimeNanos = System.nanoTime() - startTime;
+        return ExceptionsHelper.unwrapCause(e) instanceof VersionConflictEngineException;
+                    request.extraFieldValues()
+import org.opensearch.action.support.ActionFilters;
+    }
+                    context.getPrimary().shardId(),
+                    () -> new WritePrimaryResult<>(
+            mappingUpdatedAction.updateMappingOnClusterManager(shardId.getIndex(), update, mappingListener);
+                final IndexRequest updateIndexRequest = translate.action();
+        return new BulkShardResponse(in);
+            switch (updateResult.getResponseResult()) {
+                }
+                );
+                    )
+             * exception stays the one the client sees (per-operation, the first failing append is what propagates) and
+                    break;
+     * term validation as well as logically replicate the data. With remote translog, the primary would make calls to
+import org.opensearch.common.lease.Releasable;
+    }
+    protected void dispatchedShardOperationOnPrimary(
+            // TODO - While removing remote store flag, this can be encapsulated to single class with common interface for backpressure
+            AdmissionControlActionType.INDEXING
+                        assert context.isInitial(); // either completed and moved to next or reset
+                            indexResponse.getVersion(),
+                return ReplicationMode.NO_REPLICATION;
+                    deleteResponse.getPrimaryTerm(),
+        ShardStateAction shardStateAction,
+            transportService,
+        }
+        private final long primaryTerm;
+                    while (context.hasMoreOperationsToExecute()) {
+                );
+            super.writeTo(out);
+import org.opensearch.action.index.IndexRequest;
+     * ultimately boils down to TransportShardBulkAction and isolated primary could continue to acknowledge if it is not
+             * Failure handling mirrors the per-operation path, where a {@code Translog#add} failure propagates out of
+                    // Requesting mapping update failed, so we don't have to wait for a cluster state update
+    ) {
+                        if (current != null
+     * @opensearch.internal
+    @Override
+import org.opensearch.cluster.service.ClusterService;
+                operationResult = performOpOnReplica(response.getResponse(), item.request(), replica);
+            response = new BulkItemResponse(operationResponse.getItemId(), DocWriteRequest.OpType.UPDATE, updateResponse);
+                }
+    public ResolvedIndices resolveIndices(BulkShardRequest request) {
+                mappingUpdateListener.onResponse(null);
+                        null,
+import org.opensearch.transport.TransportService;
+                            // continuation can run; the finally below is then a no-op.
+                final Engine.TranslogBatch translogBatch = beginResult != null ? beginResult : Engine.NO_OP_TRANSLOG_BATCH;
+            // Durability is a dynamic index setting, and this decision is not atomic with the ack-time sync: an
+                    primaryTerm = replica.getOperationPrimaryTerm();
+                    requestForResult.setParentTask(bulkShardRequest.getParentTask());
+                }
+                    response.getFailure().getSeqNo(),
+                );
+ * license agreements. See the NOTICE file distributed with
+        UpdateHelper updateHelper,
+             * tragic event and the sync that would acknowledge any item never runs. If the body already threw, that
+            });
+        String executorName
+                    primaryResponse.getVersion(),
+                    context.getPrimary().noopUpdate();
             );
+     * used for primary term validation and is only relevant for TransportShardBulkAction replication action.
+import org.opensearch.action.support.replication.ReplicationTask;
+                    // No actual writes occurred, so we should not refresh
+                    primaryResponse.getSeqNo(),
+        @Override
+            this.request = request;
+            return Names.SYSTEM_WRITE;
+                        if (finishFailure != bodyFailure) {
+            onCompletionListener.onResponse(new ReplicaResponse(SequenceNumbers.NO_OPS_PERFORMED, SequenceNumbers.NO_OPS_PERFORMED));
+                        }
+        transportService.registerRequestHandler(
+        if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
+                @Override
+        } catch (RuntimeException e) {
+            this.primaryTerm = primaryTerm;
+            } catch (Exception e) {
+        return super.checkPrimaryLimits(request, rerouteWasLocal, localRerouteInitiatedByNodeClient);
+                    updateResponse.setGetResult(
+                        new CompressedXContent(result.getRequiredMappingUpdate(), ToXContent.EMPTY_PARAMS),
+                // realtime GET or the size cap may flush a chunk from another thread while this scope remains open;
+        }
+                assert false : "Unexpected request operation type on replica: " + docWriteRequest + ";primary result: " + primaryResponse;
+                context.markAsCompleted(context.getExecutionResult());
+                    primaryResponse.getId(),
+            context.setRequestToExecute(context.getCurrent());
+        performOnPrimary(request, primary, updateHelper, threadPool::absoluteTimeInMillis, (update, shardId, mappingListener) -> {
+        MappingUpdatePerformer mappingUpdater,
+                } else {
+        }
+                }
+            if (request.getPrimaryTerm() < replica.getOperationPrimaryTerm()) {
+                        @Override
+                + shardId
+ * You may obtain a copy of the License at
+            // Check operation primary term against the incoming primary term
+                            final DocWriteRequest<?> docWriteRequest = context.getRequestToExecute();
+import java.util.Objects;
+            ReplicationTask task,
+                logger.info(() -> new ParameterizedMessage("{} mapping update rejected by primary", primary.shardId()), e);
+            location = syncOperationResultOrThrow(operationResult, location);
+import org.opensearch.common.Nullable;
+     * This action is the primary term validation action which is used for doing primary term validation with replicas.
+    private final String transportPrimaryTermValidationAction;
+                    itemDoneListener.onResponse(null);
+        if (opType == DocWriteRequest.OpType.UPDATE) {
+        final DocWriteRequest.OpType opType = context.getCurrent().opType();
+                    deleteResponse.getShardId(),
+                long startTime = System.nanoTime();
+                        bulkShardRequest.items()
+            // append failure thrown, here on the owning thread rather than in the caller's finally block.
+     * {@link TransportShardBulkAction#transportPrimaryTermValidationAction}.
+            } else {
+     *                      a mapping update that will finish and invoke the listener on a different thread
+        final DocWriteRequest.OpType opType = docWriteRequest.opType();
+                            && (current.opType() == DocWriteRequest.OpType.UPDATE || current.opType() == DocWriteRequest.OpType.DELETE)) {
+import org.opensearch.common.unit.TimeValue;
+     * term validation in presence of a new primary.
+            }
+                    updateRequest,
+        }
+                            context,
+        }
+                + "] with primaryTerm ["
+import org.opensearch.index.mapper.MapperException;
+    }
+                } catch (RuntimeException finishFailure) {
+            private void finishRequest(long serviceTimeEWMAInNanos, int nodeQueueSize) {
+                    logger.trace(messageSupplier, failure);
+import org.opensearch.cluster.ClusterState;
+                    context.setRequestToExecute(indexRequest);
+        return isDelete ? primary.getFailedDeleteResult(e, version) : primary.getFailedIndexResult(e, version);
+                }
+                return;
+                + primaryTerm
+                    "%s operation primary term [%d] is too old (current [%d])",
+ * compatible open source license.
+                request.ifPrimaryTerm(),
+            targetAllocationID = in.readString();
+ * ownership. Elasticsearch licenses this file to you under
+ * Unless required by applicable law or agreed to in writing,
+        );
+ *     http://www.apache.org/licenses/LICENSE-2.0
+                    indexResponse.getVersion(),
+    ) throws Exception {
+            BulkShardRequest request,
+                            );
+                    // primary is on older version, just take the current primary term
+                    IndexMetadata metadata = context.getPrimary().indexSettings().getIndexMetadata();
+                            // requesting the mapping update, so the scope is closed and its location merged before any
+        IndexShard primary,
+import org.opensearch.cluster.action.shard.ShardStateAction;
+        private final ReplicationTask task;
+    @Override
+             * retry on the re-promoted primary. The same instance is therefore never attached to itself.
+        IndexingPressureService indexingPressureService,
+            this.onCompletionListener = onCompletionListener;
+                            nowInMillisSupplier,
+                context.setRequestToExecute(updateRequest);
+        context.markAsCompleted(response);
+                final IndexRequest indexRequest = (IndexRequest) docWriteRequest;
+                // Create a modified request with NONE refresh policy if no writes occurred
+                public void onResponse(Void v) {
+                    null
+        if (force(request) == false) {
+                // updates/deletes flush the current chunk for ordering, and finally always appends and closes it.
+        public void onResponse(Releasable releasable) {
+            return targetAllocationID;
+            out.writeVLong(primaryTerm);
+                    request.getTargetAllocationID(),
+             * {@code TransportActions#isShardNotAvailableException} does not recognise and defeat the coordinator's
+        }
+            // (see MappingUpdatedAction.updateMappingOnClusterManager) we still need to protect against missing mappings
+                }
+    ) {
+        final BulkItemResponse executionResult = context.getExecutionResult();
+                            context.setRequestToExecute(context.getCurrent());
+            BulkShardRequest::new,
+            if (translatedResult == DocWriteResponse.Result.CREATED || translatedResult == DocWriteResponse.Result.UPDATED) {
+ *
+            // ASYNC skips its sync, leaving that one operation checked against neither witness until the next upload.
+            }
+        @Override
+            super(in);
+            // and wait for them. The reason is concurrent requests. Request r1 which has new field f triggers a
+        ) {
+                                ),
+    public static final String ACTION_NAME = BulkAction.NAME + "[s]";
+        if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
+                    deleteResponse.getVersion(),
+                    sourceToParse
+        DocWriteRequest<?> docWriteRequest,
+                        true,
+            }
+import org.opensearch.index.get.GetResult;
             transportService.sendRequest(node, transportPrimaryTermValidationAction, validationRequest, transportOptions, handler);
         }
+        @Override
+        assert context.getRequestToExecute() != null; // also checks that we're in TRANSLATED state
+                        public void onResponse(Void v) {
+            try {
+                    }
+                primary.mapperService()
+                            waitForMappingUpdate,
+import org.opensearch.cluster.metadata.MappingMetadata;
     }
-
-    @Override
-    protected TransportRequestOptions transportOptions(Settings settings) {
-        return BulkAction.INSTANCE.transportOptions(settings);
+import org.opensearch.indices.SystemIndices;
+        TransportService transportService,
+                // We're done, there's no more operations to execute so we resolve the wrapped listener
+        Settings settings,
+                                exceptionToResult(
+public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequest, BulkShardRequest, BulkShardResponse>
+             * <p>
+            if (actualAllocationId.equals(request.getTargetAllocationID()) == false) {
+        private final IndexShard replica;
+            try {
+                if (response.getFailure().getTerm() == SequenceNumbers.UNASSIGNED_PRIMARY_TERM) {
+            long maxSeqNoOfUpdatesOrDeletes,
+    protected static final class PrimaryTermValidationRequest extends TransportRequest {
+                        if (executeBulkItemRequest(
+                    break;
+                            bodyFailure.addSuppressed(finishFailure);
+        RemoteStorePressureService remoteStorePressureService,
+    private static final Function<IndexShard, String> EXECUTOR_NAME_FUNCTION = shard -> {
+    private static Engine.Result performOpOnReplica(
+            final Engine.Result operationResult;
+    };
+/*
+        final Task task
+            if (isFailed) {
+        return result;
+     * be durably persisted in remote store. Without remote translog, current transport replication calls does primary
     }
-
-    @Override
-    protected BulkShardResponse newResponseInstance(StreamInput in) throws IOException {
-        return new BulkShardResponse(in);
+        if (isUpdate) {
+     * @opensearch.internal
+        DocWriteResponse primaryResponse,
+        IndexShard replica
+            this::handlePrimaryTermValidationRequest
+            new PrimaryTermValidationReplicaAction(listener, replica, (ReplicationTask) task, request).run();
+import org.opensearch.index.shard.IndexShard;
     }
-
+                    indexRequest.id(),
+    private final UpdateHelper updateHelper;
+                + targetAllocationID
+                version,
     @Override
-    protected void dispatchedShardOperationOnPrimary(
-        BulkShardRequest request,
-        IndexShard primary,
-        ActionListener<PrimaryResult<BulkShardRequest, BulkShardResponse>> listener
-    ) {
-        ClusterStateObserver observer = new ClusterStateObserver(clusterService, request.timeout(), logger, threadPool.getThreadContext());
-        performOnPrimary(request, primary, updateHelper, threadPool::absoluteTimeInMillis, (update, shardId, mappingListener) -> {
-            assert update != null;
-            assert shardId != null;
-            mappingUpdatedAction.updateMappingOnClusterManager(shardId.getIndex(), update, mappingListener);
-        }, mappingUpdateListener -> observer.waitForNextChange(new ClusterStateObserver.Listener() {
-            @Override
-            public void onNewClusterState(ClusterState state) {
-                mappingUpdateListener.onResponse(null);
-            }
-
-            @Override
-            public void onClusterServiceClose() {
-                mappingUpdateListener.onFailure(new NodeClosedException(clusterService.localNode()));
-            }
-
-            @Override
-            public void onTimeout(TimeValue timeout) {
-                mappingUpdateListener.onFailure(new MapperException("timed out while waiting for a dynamic mapping update"));
-            }
+                    deleteResponse.getSeqNo(),
+                });
+            ACTION_NAME,
+                    actualAllocationId
+import org.opensearch.action.update.UpdateRequest;
+        ThreadPool threadPool,
+                            context.mergeLocationToSync(translogBatch.flush());
+                onFailure(new IllegalStateException(message));
+                    indexResponse.getShardInfo(),
+            return toString();
+            true,
+                }
+                request.versionType(),
+                // even if the request has RefreshPolicy.IMMEDIATE
+        assert context.isInitial();
+import org.opensearch.action.ActionListenerResponseHandler;
+    /**
         }), listener, threadPool, executor(primary));
-    }
-
-    @Override
-    protected long primaryOperationSize(BulkShardRequest request) {
-        return request.ramBytesUsed();
-    }
-
-    @Override
-    public ReplicationMode getReplicationMode(IndexShard indexShard) {
-        if (indexShard.indexSettings().isAssignedOnRemoteNode()) {
-            // With remote-store fencing enabled, stale-primary fencing is enforced by a conditional write on the
-            // fence blob during every translog upload (see RemoteStoreFence), so the no-op primary term validation
-            // fanout to replicas is not required and replicas are taken off the write path entirely. With ASYNC
-            // durability the fence is only validated at the upload interval, so the per-op fanout is retained.
-            // Durability is a dynamic index setting, and this decision is not atomic with the ack-time sync: an
-            // operation that reads REQUEST here (dropping the fanout) can be acknowledged after a concurrent flip to
-            // ASYNC skips its sync, leaving that one operation checked against neither witness until the next upload.
-            // That is accepted rather than defended against - flipping to ASYNC is an explicit request for
-            // interval-bounded durability, and every acknowledgement under it carries the same exposure.
-            if (indexShard.indexSettings().isRemoteStoreFencingEnabled()
-                && indexShard.indexSettings().getTranslogDurability() == Translog.Durability.REQUEST) {
-                return ReplicationMode.NO_REPLICATION;
-            }
-            return ReplicationMode.PRIMARY_TERM_VALIDATION;
         }
+                        return true;
+        return location;
+                    IndexRequest indexRequest = updateResult.action();
+        final PrimaryTermValidationRequest request,
+            response = processUpdateResponse((UpdateRequest) docWriteRequest, context.getConcreteIndex(), executionResult, updateResult);
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                    @Override
+                            mappingUpdater,
+        this.transportPrimaryTermValidationAction = ACTION_NAME + "[validate_primary_term]";
+import org.opensearch.common.settings.Settings;
+                            // We are waiting for a mapping update on another thread, that will invoke this action again
+                    onComplete(exceptionToResult(e, primary, isDelete, version), context, updateResult);
+            private void finishTranslogBatch(@Nullable Exception bodyFailure) {
+            assert shardId != null;
+            settings,
+            IndexShard replica,
+                version,
+                } catch (Exception e) {
+        this.remoteStorePressureService = remoteStorePressureService;
+                default:
+                } else {
+ * specific language governing permissions and limitations
+                        // Fail all operations after a bulk rejection hit an action that waited for a mapping update and finish the request
+    }
+            @Override
+            this.shardId = Objects.requireNonNull(shardId);
+                    indexResponse.getResult()
+                    indexRequest.extraFieldValues()
+                final Exception failure = executionResult.getFailure().getCause();
+                updateResponse = new UpdateResponse(
+     * This {@link org.opensearch.action.support.replication.TransportReplicationAction.ReplicasProxy} implementation is
+        LongSupplier nowInMillisSupplier,
+                throw new ShardNotFoundException(
+                    context.finishTranslogBatch();
+import org.opensearch.telemetry.tracing.Tracer;
+                context.markOperationAsExecuted(result);
+                try {
+                onResponse(null);
+                            sourceAndContent.v2(),
+                    finishTranslogBatch(bodyFailure);
+     *
+                    indexResponse.getId(),
+    private static void onComplete(Engine.Result r, BulkPrimaryExecutionContext context, UpdateHelper.Result updateResult) {
+                    finishRequest(serviceTimeNanos, 0);
+                replica.shardId(),
+                final DeleteResponse deleteResponse = operationResponse.getResponse();
+                } else {
+                request.ifPrimaryTerm()
+            case INDEX:
+        switch (docWriteRequest.opType()) {
+            BulkShardRequest::new,
+import org.opensearch.node.NodeClosedException;
+    }
+    }
+                    request.getShardId(),
+            private final BulkPrimaryExecutionContext context = new BulkPrimaryExecutionContext(request, primary);
+        } else {
+                    primaryTerm = response.getFailure().getTerm();
+                    }
+                if (response.getResponse().getResult() == DocWriteResponse.Result.NOOP) {
+                case DELETED:
+            false,
+                mappingUpdateListener.onFailure(new MapperException("timed out while waiting for a dynamic mapping update"));
+     * Executes bulk item requests and handles request execution exceptions.
+            long globalCheckpoint,
+            executor,
+        final long version = context.getRequestToExecute().version();
+     */
+package org.opensearch.action.bulk;
+ * @opensearch.internal
+                );
+                } else {
+import org.opensearch.common.collect.Tuple;
+        final Engine.Result result;
+                replica.shardId()
+            // If the request primary term is low, then trigger lister failure
+                executor.execute(new ActionRunnable<PrimaryResult<BulkShardRequest, BulkShardResponse>>(listener) {
+            listener.onFailure(e);
+import org.opensearch.action.support.replication.ReplicationOperation;
+                return true;
+        for (int i = 0; i < request.items().length; i++) {
+        }
+                    indexResponse.getSeqNo(),
+            }
+        final UpdateHelper.Result updateResult;
+            }
+    public TransportShardBulkAction(
+                return true;
+        final Engine.Result result;
+                            indexSourceAsBytes
+import org.opensearch.ratelimitting.admissioncontrol.enums.AdmissionControlActionType;
+import org.opensearch.cluster.ClusterStateObserver;
+            final BulkItemRequest item = request.items()[i];
+import org.opensearch.common.inject.Inject;
+        ) {
+                    final BytesReference indexSourceAsBytes = updateIndexRequest.source();
+    protected long primaryOperationSize(BulkShardRequest request) {
+            long primaryTerm,
+                final Engine.Result result = new Engine.IndexResult(failure, updateRequest.version());
+                                context,
+import java.io.IOException;
+        this.mappingUpdatedAction = mappingUpdatedAction;
+                updateResponse = new UpdateResponse(
+                + "]";
+            } else {
+                    listener,
+     */
+            && isConflictException(executionResult.getFailure().getCause())
+ */
+                result = replica.applyDeleteOperationOnReplica(
+        }, mappingUpdateListener -> observer.waitForNextChange(new ClusterStateObserver.Listener() {
+        UpdateHelper updateHelper,
+        @Override
+                    deleteResponse.getResult()
+                    opType.getLowercase(),
+import org.opensearch.tasks.Task;
+                if (locationToSync == null && bulkShardRequest.getRefreshPolicy() != WriteRequest.RefreshPolicy.NONE) {
+     */
+                    "expected allocation id [{}] but found [{}]",
+            updateResult = null;
+        return ResolvedIndices.of(request.index());
+            onComplete(result, context, updateResult);
+             * <p>
+    public static Translog.Location performOnReplica(BulkShardRequest request, IndexShard replica) throws Exception {
+                            // once its done so we just break out here. executeBulkItemRequest finished the batch before
+                operationResult = replica.markSeqNoAsNoop(
+    }
+            );
+                    requestForResult = new BulkShardRequest(
+                    request.index(),
+                if (updateRequest.fetchSource() != null && updateRequest.fetchSource().fetchSource()) {
+            setPhase(task, "finished");
+        public ShardId getShardId() {
+        IndexShard primary,
+                Engine.TranslogBatch beginResult = primary.beginTranslogBatch();
+            // service
+        }
+                // Batch successful primary index operations for eligible remote-backed segment-replication engines. A
+    ) {
+/*
+        }
+                Exception bodyFailure = null;
+                );
+            final UpdateResponse updateResponse;
+        final UpdateHelper.Result translate
+import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
+                            indexResponse.getPrimaryTerm(),
+            if (segmentReplicationPressureService.isSegmentReplicationBackpressureEnabled()) {
+        }.run();
+ *
+    }
+                    context.markAsRequiringMappingUpdate();
+import org.apache.logging.log4j.message.ParameterizedMessage;
+                final Translog.Location locationToSync = context.getLocationToSync();
+import org.apache.logging.log4j.LogManager;
+        return request.ramBytesUsed();
+            public void onNewClusterState(ClusterState state) {
+        if (operationResponse.isFailed()) {
+                request.getAutoGeneratedTimestamp(),
         return super.getReplicationMode(indexShard);
     }
-
-    public static void performOnPrimary(
-        BulkShardRequest request,
-        IndexShard primary,
-        UpdateHelper updateHelper,
-        LongSupplier nowInMillisSupplier,
-        MappingUpdatePerformer mappingUpdater,
-        Consumer<ActionListener<Void>> waitForMappingUpdate,
-        ActionListener<PrimaryResult<BulkShardRequest, BulkShardResponse>> listener,
-        ThreadPool threadPool,
-        String executorName
-    ) {
-        new ActionRunnable<PrimaryResult<BulkShardRequest, BulkShardResponse>>(listener) {
-
-            private final ExecutorService executor = threadPool.executor(executorName);
-
-            private final BulkPrimaryExecutionContext context = new BulkPrimaryExecutionContext(request, primary);
-
-            @Override
-            protected void doRun() throws Exception {
-                long startTime = System.nanoTime();
-                // Batch successful primary index operations for eligible remote-backed segment-replication engines. A
-                // realtime GET or the size cap may flush a chunk from another thread while this scope remains open;
-                // updates/deletes flush the current chunk for ordering, and finally always appends and closes it.
-                Engine.TranslogBatch beginResult = primary.beginTranslogBatch();
-                final Engine.TranslogBatch translogBatch = beginResult != null ? beginResult : Engine.NO_OP_TRANSLOG_BATCH;
-                context.setTranslogBatch(translogBatch);
-                Exception bodyFailure = null;
-                try {
-                    while (context.hasMoreOperationsToExecute()) {
-                        final DocWriteRequest<?> current = context.getCurrent();
-                        if (current != null
-                            && (current.opType() == DocWriteRequest.OpType.UPDATE || current.opType() == DocWriteRequest.OpType.DELETE)) {
-                            context.mergeLocationToSync(translogBatch.flush());
-                        }
-                        if (executeBulkItemRequest(
-                            context,
-                            updateHelper,
-                            nowInMillisSupplier,
-                            mappingUpdater,
-                            waitForMappingUpdate,
-                            ActionListener.wrap(v -> executor.execute(this), this::onRejection)
-                        ) == false) {
-                            // We are waiting for a mapping update on another thread, that will invoke this action again
-                            // once its done so we just break out here. executeBulkItemRequest finished the batch before
-                            // requesting the mapping update, so the scope is closed and its location merged before any
-                            // continuation can run; the finally below is then a no-op.
-                            return;
-                        }
-                        assert context.isInitial(); // either completed and moved to next or reset
-                    }
-                } catch (Exception e) {
-                    bodyFailure = e;
-                    throw e;
-                } finally {
-                    finishTranslogBatch(bodyFailure);
-                }
-                // We're done, there's no more operations to execute so we resolve the wrapped listener
-                long serviceTimeNanos = System.nanoTime() - startTime;
-                if (executor instanceof OpenSearchThreadPoolExecutor) {
-                    finishRequest(serviceTimeNanos, ((OpenSearchThreadPoolExecutor) executor).getQueue().size());
-                } else {
-                    finishRequest(serviceTimeNanos, 0);
-                }
-            }
-
-            /**
-             * Appends the final chunk and detaches the scope, folding the greatest appended location into the
-             * request's sync location. A no-op once the batch has been finished, which {@link #executeBulkItemRequest}
-             * does before requesting a mapping update so the scope never outlives this thread's execution.
-             * <p>
-             * Failure handling mirrors the per-operation path, where a {@code Translog#add} failure propagates out of
-             * {@link #executeBulkItemRequest} and fails the whole shard-bulk request: the translog has recorded its own
-             * tragic event and the sync that would acknowledge any item never runs. If the body already threw, that
-             * exception stays the one the client sees (per-operation, the first failing append is what propagates) and
-             * the finish failure is attached as suppressed; otherwise the finish failure propagates.
-             * <p>
-             * On the common failure path both are the <em>same</em> instance: a failed {@code TranslogBatchScope} stores
-             * the append exception and rethrows it from every later call, so the body's exception (thrown out of
-             * {@code batch.add} or an ordering {@code flush()}) is exactly what {@code finish()} throws again. Attaching
-             * an exception to itself is rejected by the JDK ({@code IllegalArgumentException: Self-suppression not
-             * permitted}), which would replace an {@code AlreadyClosedException} with an exception
-             * {@code TransportActions#isShardNotAvailableException} does not recognise and defeat the coordinator's
-             * retry on the re-promoted primary. The same instance is therefore never attached to itself.
-             */
-            private void finishTranslogBatch(@Nullable Exception bodyFailure) {
-                try {
-                    context.finishTranslogBatch();
-                } catch (RuntimeException finishFailure) {
-                    if (bodyFailure != null) {
-                        if (finishFailure != bodyFailure) {
-                            bodyFailure.addSuppressed(finishFailure);
-                        }
-                        return;
-                    }
-                    throw finishFailure;
-                }
-            }
-
-            @Override
-            public void onRejection(Exception e) {
-                // We must finish the outstanding request. Finishing the outstanding request can include
-                // refreshing and fsyncing. Therefore, we must force execution on the WRITE thread.
-                executor.execute(new ActionRunnable<PrimaryResult<BulkShardRequest, BulkShardResponse>>(listener) {
-
-                    @Override
-                    protected void doRun() {
-                        // Fail all operations after a bulk rejection hit an action that waited for a mapping update and finish the request
-                        while (context.hasMoreOperationsToExecute()) {
-                            context.setRequestToExecute(context.getCurrent());
-                            final DocWriteRequest<?> docWriteRequest = context.getRequestToExecute();
-                            onComplete(
-                                exceptionToResult(
-                                    e,
-                                    primary,
-                                    docWriteRequest.opType() == DocWriteRequest.OpType.DELETE,
-                                    docWriteRequest.version()
-                                ),
-                                context,
-                                null
-                            );
-                        }
-                        finishRequest(-1, -1);
-                    }
-
-                    @Override
-                    public boolean isForceExecution() {
-                        return true;
-                    }
-                });
-            }
-
-            private void finishRequest(long serviceTimeEWMAInNanos, int nodeQueueSize) {
-                // If no actual writes occurred (locationToSync is null), we should not trigger refresh
-                // even if the request has RefreshPolicy.IMMEDIATE
-                final Translog.Location locationToSync = context.getLocationToSync();
-                final BulkShardRequest bulkShardRequest = context.getBulkShardRequest();
-
-                // Create a modified request with NONE refresh policy if no writes occurred
-                final BulkShardRequest requestForResult;
-                if (locationToSync == null && bulkShardRequest.getRefreshPolicy() != WriteRequest.RefreshPolicy.NONE) {
-                    // No actual writes occurred, so we should not refresh
-                    requestForResult = new BulkShardRequest(
-                        bulkShardRequest.shardId(),
-                        WriteRequest.RefreshPolicy.NONE,
-                        bulkShardRequest.items()
-                    );
-                    requestForResult.index(bulkShardRequest.index());
-                    requestForResult.setParentTask(bulkShardRequest.getParentTask());
-                } else {
-                    requestForResult = bulkShardRequest;
-                }
-
-                ActionListener.completeWith(
-                    listener,
-                    () -> new WritePrimaryResult<>(
-                        requestForResult,
-                        context.buildShardResponse(serviceTimeEWMAInNanos, nodeQueueSize),
+        }
+import org.opensearch.transport.client.transport.NoNodeAvailableException;
+            );
                         locationToSync,
-                        null,
-                        context.getPrimary(),
-                        logger
-                    )
-                );
-            }
-        }.run();
-    }
-
-    @Override
-    protected Releasable checkPrimaryLimits(BulkShardRequest request, boolean rerouteWasLocal, boolean localRerouteInitiatedByNodeClient) {
-        if (force(request) == false) {
-            if (segmentReplicationPressureService.isSegmentReplicationBackpressureEnabled()) {
-                segmentReplicationPressureService.isSegrepLimitBreached(request.shardId());
-            }
-            // TODO - While removing remote store flag, this can be encapsulated to single class with common interface for backpressure
-            // service
-            if (remoteStorePressureService.isSegmentsUploadBackpressureEnabled()) {
-                remoteStorePressureService.validateSegmentsUploadLag(request.shardId());
-            }
-        }
-        return super.checkPrimaryLimits(request, rerouteWasLocal, localRerouteInitiatedByNodeClient);
-    }
-
-    /**
-     * Executes bulk item requests and handles request execution exceptions.
-     * @return {@code true} if request completed on this thread and the listener was invoked, {@code false} if the request triggered
-     *                      a mapping update that will finish and invoke the listener on a different thread
-     */
-    static boolean executeBulkItemRequest(
-        BulkPrimaryExecutionContext context,
-        UpdateHelper updateHelper,
-        LongSupplier nowInMillisSupplier,
-        MappingUpdatePerformer mappingUpdater,
-        Consumer<ActionListener<Void>> waitForMappingUpdate,
-        ActionListener<Void> itemDoneListener
-    ) throws Exception {
-        final DocWriteRequest.OpType opType = context.getCurrent().opType();
-
-        final UpdateHelper.Result updateResult;
-        if (opType == DocWriteRequest.OpType.UPDATE) {
-            final UpdateRequest updateRequest = (UpdateRequest) context.getCurrent();
-            try {
-                updateResult = updateHelper.prepare(updateRequest, context.getPrimary(), nowInMillisSupplier);
-            } catch (Exception failure) {
-                // we may fail translating a update to index or delete operation
-                // we use index result to communicate failure while translating update request
-                final Engine.Result result = new Engine.IndexResult(failure, updateRequest.version());
-                context.setRequestToExecute(updateRequest);
-                context.markOperationAsExecuted(result);
-                context.markAsCompleted(context.getExecutionResult());
-                return true;
-            }
-            // execute translated update request
-            switch (updateResult.getResponseResult()) {
-                case CREATED:
-                case UPDATED:
-                    IndexRequest indexRequest = updateResult.action();
-                    IndexMetadata metadata = context.getPrimary().indexSettings().getIndexMetadata();
-                    MappingMetadata mappingMd = metadata.mapping();
-                    indexRequest.process(metadata.getCreationVersion(), mappingMd, updateRequest.concreteIndex());
-                    context.setRequestToExecute(indexRequest);
-                    break;
-                case DELETED:
-                    context.setRequestToExecute(updateResult.action());
-                    break;
-                case NOOP:
-                    context.getPrimary().noopUpdate();
-                    context.markOperationAsNoOp(updateResult.action());
-                    context.markAsCompleted(context.getExecutionResult());
-                    return true;
-                default:
-                    throw new IllegalStateException("Illegal update operation " + updateResult.getResponseResult());
-            }
-        } else {
-            context.setRequestToExecute(context.getCurrent());
-            updateResult = null;
-        }
-
-        assert context.getRequestToExecute() != null; // also checks that we're in TRANSLATED state
-
-        final IndexShard primary = context.getPrimary();
-        final long version = context.getRequestToExecute().version();
-        final boolean isDelete = context.getRequestToExecute().opType() == DocWriteRequest.OpType.DELETE;
-        final Engine.Result result;
-        if (isDelete) {
-            final DeleteRequest request = context.getRequestToExecute();
-            result = primary.applyDeleteOperationOnPrimary(
-                version,
-                request.id(),
-                request.routing(),
-                request.versionType(),
-                request.ifSeqNo(),
-                request.ifPrimaryTerm()
-            );
-        } else {
-            final IndexRequest request = context.getRequestToExecute();
-            result = primary.applyIndexOperationOnPrimary(
-                version,
-                request.versionType(),
-                new SourceToParse(
-                    request.index(),
-                    request.id(),
-                    request.source(),
-                    request.getContentType(),
-                    request.routing(),
-                    request.extraFieldValues()
-                ),
-                request.ifSeqNo(),
-                request.ifPrimaryTerm(),
-                request.getAutoGeneratedTimestamp(),
-                request.isRetry()
-            );
-        }
-        if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
-
-            try {
-                primary.mapperService()
-                    .merge(
-                        MapperService.SINGLE_MAPPING_NAME,
-                        new CompressedXContent(result.getRequiredMappingUpdate(), ToXContent.EMPTY_PARAMS),
-                        MapperService.MergeReason.MAPPING_UPDATE_PREFLIGHT
-                    );
-            } catch (Exception e) {
-                logger.info(() -> new ParameterizedMessage("{} mapping update rejected by primary", primary.shardId()), e);
-                onComplete(exceptionToResult(e, primary, isDelete, version), context, updateResult);
-                return true;
-            }
-
-            // Close this thread's translog batch before the mapping update is requested. Its completion re-executes
-            // the caller on another thread (possibly before this one returns), so the scope must be finished, and any
-            // append failure thrown, here on the owning thread rather than in the caller's finally block.
-            context.finishTranslogBatch();
-
-            mappingUpdater.updateMappings(result.getRequiredMappingUpdate(), primary.shardId(), new ActionListener<Void>() {
-                @Override
-                public void onResponse(Void v) {
-                    context.markAsRequiringMappingUpdate();
-                    waitForMappingUpdate.accept(ActionListener.runAfter(new ActionListener<Void>() {
-                        @Override
-                        public void onResponse(Void v) {
-                            assert context.requiresWaitingForMappingUpdate();
-                            context.resetForExecutionForRetry();
-                        }
-
-                        @Override
-                        public void onFailure(Exception e) {
-                            context.failOnMappingUpdate(e);
-                        }
-                    }, () -> itemDoneListener.onResponse(null)));
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    onComplete(exceptionToResult(e, primary, isDelete, version), context, updateResult);
-                    // Requesting mapping update failed, so we don't have to wait for a cluster state update
-                    assert context.isInitial();
-                    itemDoneListener.onResponse(null);
-                }
-            });
-            return false;
-        } else {
-            onComplete(result, context, updateResult);
-        }
-        return true;
-    }
-
-    private static Engine.Result exceptionToResult(Exception e, IndexShard primary, boolean isDelete, long version) {
-        return isDelete ? primary.getFailedDeleteResult(e, version) : primary.getFailedIndexResult(e, version);
-    }
-
-    private static void onComplete(Engine.Result r, BulkPrimaryExecutionContext context, UpdateHelper.Result updateResult) {
-        context.markOperationAsExecuted(r);
-        final DocWriteRequest<?> docWriteRequest = context.getCurrent();
-        final DocWriteRequest.OpType opType = docWriteRequest.opType();
-        final boolean isUpdate = opType == DocWriteRequest.OpType.UPDATE;
-        final BulkItemResponse executionResult = context.getExecutionResult();
-        final boolean isFailed = executionResult.isFailed();
-        if (isUpdate
-            && isFailed
-            && isConflictException(executionResult.getFailure().getCause())
-            && context.getRetryCounter() < ((UpdateRequest) docWriteRequest).retryOnConflict()) {
-            context.resetForExecutionForRetry();
-            return;
-        }
-        final BulkItemResponse response;
-        if (isUpdate) {
-            response = processUpdateResponse((UpdateRequest) docWriteRequest, context.getConcreteIndex(), executionResult, updateResult);
-        } else {
-            if (isFailed) {
-                final Exception failure = executionResult.getFailure().getCause();
-                final MessageSupplier messageSupplier = () -> new ParameterizedMessage(
-                    "{} failed to execute bulk item ({}) {}",
-                    context.getPrimary().shardId(),
-                    opType.getLowercase(),
-                    docWriteRequest
-                );
-                if (TransportShardBulkAction.isConflictException(failure)) {
-                    logger.trace(messageSupplier, failure);
-                } else {
-                    logger.debug(messageSupplier, failure);
-                }
-            }
-            response = executionResult;
-        }
-        context.markAsCompleted(response);
-        assert context.isInitial();
-    }
-
-    private static boolean isConflictException(final Exception e) {
-        return ExceptionsHelper.unwrapCause(e) instanceof VersionConflictEngineException;
-    }
-
-    /**
-     * Creates a new bulk item result from the given requests and result of performing the update operation on the shard.
-     */
-    static BulkItemResponse processUpdateResponse(
-        final UpdateRequest updateRequest,
-        final String concreteIndex,
-        BulkItemResponse operationResponse,
-        final UpdateHelper.Result translate
-    ) {
-        final BulkItemResponse response;
-        if (operationResponse.isFailed()) {
-            response = new BulkItemResponse(operationResponse.getItemId(), DocWriteRequest.OpType.UPDATE, operationResponse.getFailure());
-        } else {
-            final DocWriteResponse.Result translatedResult = translate.getResponseResult();
-            final UpdateResponse updateResponse;
-            if (translatedResult == DocWriteResponse.Result.CREATED || translatedResult == DocWriteResponse.Result.UPDATED) {
-                final IndexRequest updateIndexRequest = translate.action();
-                final IndexResponse indexResponse = operationResponse.getResponse();
-                updateResponse = new UpdateResponse(
-                    indexResponse.getShardInfo(),
-                    indexResponse.getShardId(),
-                    indexResponse.getId(),
-                    indexResponse.getSeqNo(),
-                    indexResponse.getPrimaryTerm(),
-                    indexResponse.getVersion(),
-                    indexResponse.getResult()
-                );
-
-                if (updateRequest.fetchSource() != null && updateRequest.fetchSource().fetchSource()) {
-                    final BytesReference indexSourceAsBytes = updateIndexRequest.source();
-                    final Tuple<? extends MediaType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(
-                        indexSourceAsBytes,
-                        true,
-                        updateIndexRequest.getContentType()
-                    );
-                    updateResponse.setGetResult(
-                        UpdateHelper.extractGetResult(
-                            updateRequest,
-                            concreteIndex,
-                            indexResponse.getSeqNo(),
-                            indexResponse.getPrimaryTerm(),
-                            indexResponse.getVersion(),
-                            sourceAndContent.v2(),
-                            sourceAndContent.v1(),
-                            indexSourceAsBytes
-                        )
-                    );
-                }
-            } else if (translatedResult == DocWriteResponse.Result.DELETED) {
-                final DeleteResponse deleteResponse = operationResponse.getResponse();
-                updateResponse = new UpdateResponse(
-                    deleteResponse.getShardInfo(),
-                    deleteResponse.getShardId(),
-                    deleteResponse.getId(),
-                    deleteResponse.getSeqNo(),
-                    deleteResponse.getPrimaryTerm(),
-                    deleteResponse.getVersion(),
-                    deleteResponse.getResult()
-                );
-
-                final GetResult getResult = UpdateHelper.extractGetResult(
-                    updateRequest,
-                    concreteIndex,
-                    deleteResponse.getSeqNo(),
-                    deleteResponse.getPrimaryTerm(),
-                    deleteResponse.getVersion(),
-                    translate.updatedSourceAsMap(),
-                    translate.updateSourceContentType(),
-                    null
-                );
-
-                updateResponse.setGetResult(getResult);
-            } else {
-                throw new IllegalArgumentException("unknown operation type: " + translatedResult);
-            }
-            response = new BulkItemResponse(operationResponse.getItemId(), DocWriteRequest.OpType.UPDATE, updateResponse);
-        }
-        return response;
-    }
-
-    @Override
-    protected void dispatchedShardOperationOnReplica(BulkShardRequest request, IndexShard replica, ActionListener<ReplicaResult> listener) {
-        ActionListener.completeWith(listener, () -> {
-            final Translog.Location location = performOnReplica(request, replica);
-            return new WriteReplicaResult<>(request, location, null, replica, logger);
-        });
-    }
-
-    @Override
-    protected long replicaOperationSize(BulkShardRequest request) {
         return request.ramBytesUsed();
-    }
-
-    public static Translog.Location performOnReplica(BulkShardRequest request, IndexShard replica) throws Exception {
-        Translog.Location location = null;
-        for (int i = 0; i < request.items().length; i++) {
-            final BulkItemRequest item = request.items()[i];
-            final BulkItemResponse response = item.primaryResponse();
-            final Engine.Result operationResult;
-            assert response != null;
-            if (response.isFailed()) {
-                if (response.getFailure().getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO) {
-                    continue; // ignore replication as we didn't generate a sequence number for this request.
-                }
-
-                final long primaryTerm;
-                if (response.getFailure().getTerm() == SequenceNumbers.UNASSIGNED_PRIMARY_TERM) {
-                    // primary is on older version, just take the current primary term
-                    primaryTerm = replica.getOperationPrimaryTerm();
-                } else {
-                    primaryTerm = response.getFailure().getTerm();
-                }
-                operationResult = replica.markSeqNoAsNoop(
-                    response.getFailure().getSeqNo(),
-                    primaryTerm,
-                    response.getFailure().getMessage()
-                );
-            } else {
-                if (response.getResponse().getResult() == DocWriteResponse.Result.NOOP) {
-                    continue; // ignore replication as it's a noop
-                }
-                assert response.getResponse().getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO;
-                operationResult = performOpOnReplica(response.getResponse(), item.request(), replica);
-            }
-            assert operationResult != null : "operation result must never be null";
-            location = syncOperationResultOrThrow(operationResult, location);
+        final BulkItemResponse response;
+        private final ActionListener<ReplicaResponse> onCompletionListener;
+            return ReplicationMode.PRIMARY_TERM_VALIDATION;
+    protected long replicaOperationSize(BulkShardRequest request) {
         }
-        return location;
-    }
-
-    private static Engine.Result performOpOnReplica(
-        DocWriteResponse primaryResponse,
-        DocWriteRequest<?> docWriteRequest,
-        IndexShard replica
-    ) throws Exception {
-        final Engine.Result result;
-        switch (docWriteRequest.opType()) {
-            case CREATE:
-            case INDEX:
-                final IndexRequest indexRequest = (IndexRequest) docWriteRequest;
-                final ShardId shardId = replica.shardId();
-                final SourceToParse sourceToParse = new SourceToParse(
-                    shardId.getIndexName(),
-                    indexRequest.id(),
-                    indexRequest.source(),
-                    indexRequest.getContentType(),
-                    indexRequest.routing(),
-                    indexRequest.extraFieldValues()
-                );
-                result = replica.applyIndexOperationOnReplica(
-                    primaryResponse.getId(),
-                    primaryResponse.getSeqNo(),
-                    primaryResponse.getPrimaryTerm(),
-                    primaryResponse.getVersion(),
-                    indexRequest.getAutoGeneratedTimestamp(),
-                    indexRequest.isRetry(),
-                    sourceToParse
-                );
-                break;
-            case DELETE:
-                DeleteRequest deleteRequest = (DeleteRequest) docWriteRequest;
-                result = replica.applyDeleteOperationOnReplica(
-                    primaryResponse.getSeqNo(),
-                    primaryResponse.getPrimaryTerm(),
-                    primaryResponse.getVersion(),
-                    deleteRequest.id(),
-                    deleteRequest.routing()
-                );
-                break;
             default:
-                assert false : "Unexpected request operation type on replica: " + docWriteRequest + ";primary result: " + primaryResponse;
-                throw new IllegalStateException("Unexpected request operation type on replica: " + docWriteRequest.opType().getLowercase());
+    @Override
+            context.resetForExecutionForRetry();
+                        }
+import org.opensearch.core.common.bytes.BytesReference;
+            final UpdateRequest updateRequest = (UpdateRequest) context.getCurrent();
+                assert response.getResponse().getSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO;
+ *
         }
-        if (result.getResultType() == Engine.Result.Type.MAPPING_UPDATE_REQUIRED) {
-            // Even though the primary waits on all nodes to ack the mapping changes to the cluster-manager
-            // (see MappingUpdatedAction.updateMappingOnClusterManager) we still need to protect against missing mappings
-            // and wait for them. The reason is concurrent requests. Request r1 which has new field f triggers a
-            // mapping update. Assume that the update is first applied on the primary, and only later on the replica
-            // (it’s happening concurrently). Request r2, which now arrives on the primary and which also has the new
-            // field f might see the updated mapping (on the primary), and will therefore proceed to be replicated
-            // to the replica. When it arrives on the replica, there’s no guarantee that the replica has already
-            // applied the new mapping, so there is no other option than to wait.
-            throw new TransportReplicationAction.RetryOnReplicaException(
-                replica.shardId(),
-                "Mappings are not available on the replica yet, triggered update: " + result.getRequiredMappingUpdate()
-            );
+    static BulkItemResponse processUpdateResponse(
+                        logger
+        private final ShardId shardId;
+        final BulkItemResponse response;
+        BulkShardRequest request,
+            public void onRejection(Exception e) {
+import org.opensearch.transport.TransportRequestOptions;
+                        }
+        } else {
+         **/
+                            onComplete(
+    private static boolean isConflictException(final Exception e) {
+                                    e,
+            threadPool,
+            }
+                );
+        protected void doRun() throws Exception {
+import org.opensearch.index.remote.RemoteStorePressureService;
+    private static final class PrimaryTermValidationReplicaAction extends AbstractRunnable implements ActionListener<Releasable> {
+            // fanout to replicas is not required and replicas are taken off the write path entirely. With ASYNC
+        if (isDelete) {
+        Consumer<ActionListener<Void>> waitForMappingUpdate,
         }
-        return result;
+        } else {
+        public void onFailure(Exception e) {
+        @Override
+    protected void dispatchedShardOperationOnReplica(BulkShardRequest request, IndexShard replica, ActionListener<ReplicaResult> listener) {
+            final PrimaryTermValidationRequest validationRequest = new PrimaryTermValidationRequest(
+                );
+        public String getTargetAllocationID() {
+                }
+                final MessageSupplier messageSupplier = () -> new ParameterizedMessage(
+            }
+                    Locale.ROOT,
     }
-}
+                request.ifSeqNo(),
+            return false;
+            } else if (translatedResult == DocWriteResponse.Result.DELETED) {
+                    logger.debug(messageSupplier, failure);
+import org.opensearch.transport.TransportRequest;
+                primaryTerm,
+     */
+                    indexRequest.source(),
+                        UpdateHelper.extractGetResult(
+            return;
+            // applied the new mapping, so there is no other option than to wait.
+        public String getDescription() {
+        ActionFilters actionFilters,
+import java.util.Map;
+                    final Tuple<? extends MediaType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(
+        final IndexShard primary = context.getPrimary();
+            if (node == null) {
+            final String actualAllocationId = this.replica.routingEntry().allocationId().getId();
+    /**
+            case DELETE:
+            this.task = task;
+            }
+             * permitted}), which would replace an {@code AlreadyClosedException} with an exception
+    ) throws Exception {
+                    MappingMetadata mappingMd = metadata.mapping();
+                final BulkShardRequest bulkShardRequest = context.getBulkShardRequest();
+            setPhase(task, "failed");
+ * Modifications Copyright OpenSearch Contributors. See
+import org.opensearch.common.xcontent.XContentHelper;
+                        }
+                    );
+            }
+        private final PrimaryTermValidationRequest request;
+        LongSupplier nowInMillisSupplier,
+            primaryTerm = in.readVLong();
+                }
+            final DiscoveryNode node = clusterService.state().nodes().get(nodeId);
+            // field f might see the updated mapping (on the primary), and will therefore proceed to be replicated
+                    protected void doRun() {
+            @Override
+            throw new TransportReplicationAction.RetryOnReplicaException(
+import org.opensearch.action.support.ChannelActionListener;
+        final TransportChannel channel,
+/**
+            // the caller on another thread (possibly before this one returns), so the scope must be finished, and any
+                // refreshing and fsyncing. Therefore, we must force execution on the WRITE thread.
+                onComplete(exceptionToResult(e, primary, isDelete, version), context, updateResult);
+        ActionListener.completeWith(listener, () -> {
+                }
+            return Names.WRITE;
+                    request.getPrimaryTerm(),
+                    }, () -> itemDoneListener.onResponse(null)));
+        private final String targetAllocationID;
+                result = replica.applyIndexOperationOnReplica(
+    }
+                }
+            indicesService,
+import org.opensearch.cluster.action.index.MappingUpdatedAction;
+     * aware that the primary has changed. This helps achieve the same. More details in java doc of
+            this.targetAllocationID = Objects.requireNonNull(targetAllocationID);
+                    context.markAsCompleted(context.getExecutionResult());
+import org.opensearch.action.index.IndexResponse;
+                    finishRequest(serviceTimeNanos, ((OpenSearchThreadPoolExecutor) executor).getQueue().size());
+             * {@link #executeBulkItemRequest} and fails the whole shard-bulk request: the translog has recorded its own
+import org.opensearch.core.xcontent.ToXContent;
+                updateResult = updateHelper.prepare(updateRequest, context.getPrimary(), nowInMillisSupplier);
+import org.opensearch.core.action.ActionListener;
+                );
+                        while (context.hasMoreOperationsToExecute()) {
+import org.opensearch.core.xcontent.MediaType;
+                    translate.updateSourceContentType(),
+        Consumer<ActionListener<Void>> waitForMappingUpdate,
+        @Override
+import org.opensearch.ExceptionsHelper;
+     */
+    protected ReplicationOperation.Replicas<BulkShardRequest> primaryTermValidationReplicasProxy() {
+import org.opensearch.action.delete.DeleteResponse;
+            && isFailed
+import org.opensearch.action.DocWriteRequest;
+        final String concreteIndex,
+            shardId = new ShardId(in);
+            }
+                "Mappings are not available on the replica yet, triggered update: " + result.getRequiredMappingUpdate()
+            response = new BulkItemResponse(operationResponse.getItemId(), DocWriteRequest.OpType.UPDATE, operationResponse.getFailure());
+    }
+        /**
+        assert shardId != null : "request shardId must be set";
+                    );
+     * Primary term validation request sent to a specific allocation id
+                ReplicaResponse::new
+            && context.getRetryCounter() < ((UpdateRequest) docWriteRequest).retryOnConflict()) {
+ * not use this file except in compliance with the License.
+            systemIndices,
+                    deleteResponse.getSeqNo(),
+import java.util.function.Consumer;
+    private final class PrimaryTermValidationProxy extends WriteActionReplicasProxy {
+                    );
+                if (response.getFailure().getSeqNo() == SequenceNumbers.UNASSIGNED_SEQ_NO) {
+     * @return {@code true} if request completed on this thread and the listener was invoked, {@code false} if the request triggered
+        final boolean isUpdate = opType == DocWriteRequest.OpType.UPDATE;
+        final UpdateRequest updateRequest,
+     * replicas to perform primary term validation. This make sures an isolated primary fails to ack after primary
+                    assert context.isInitial();
+            if (remoteStorePressureService.isSegmentsUploadBackpressureEnabled()) {
+                    deleteResponse.getPrimaryTerm(),
+import org.opensearch.index.mapper.MapperService;
+                    deleteResponse.getVersion(),
+import org.opensearch.indices.IndicesService;
+            actionFilters,
+            return new ReplicationTask(id, type, action, getDescription(), parentTaskId, headers);
+                    indexRequest.routing(),
+             * Appends the final chunk and detaches the scope, folding the greatest appended location into the
+        }
+    @Override
+            this.replica = replica;
+        MappingUpdatedAction mappingUpdatedAction,
+    implements
+    }
+            }
+                listener,
+    @Override
+                        WriteRequest.RefreshPolicy.NONE,
+    protected TransportRequestOptions transportOptions(Settings settings) {
+        }
+import org.opensearch.core.tasks.TaskId;
+    }
+        BulkItemResponse operationResponse,
+        ActionListener<PrimaryResult<BulkShardRequest, BulkShardResponse>> listener,
+                                null
+        final ShardId shardId = request.getShardId();
+                @Override
+        public PrimaryTermValidationRequest(StreamInput in) throws IOException {
+    /**
+ * under the License.
+            if (response.isFailed()) {
+        }
+        public void performOn(
+                        MapperService.MergeReason.MAPPING_UPDATE_PREFLIGHT
+    /**
+             * an exception to itself is rejected by the JDK ({@code IllegalArgumentException: Self-suppression not
+                                    docWriteRequest.opType() == DocWriteRequest.OpType.DELETE,
+                        return;
+            protected void doRun() throws Exception {
+import org.opensearch.action.support.WriteRequest;
+        return response;
+import org.opensearch.action.support.replication.TransportWriteAction;
+                            context.resetForExecutionForRetry();
+    protected BulkShardResponse newResponseInstance(StreamInput in) throws IOException {
+                request.routing(),
+                    translate.updatedSourceAsMap(),
+                    }
+        }
+import org.opensearch.common.compress.CompressedXContent;
+                            indexResponse.getSeqNo(),
+                    primaryResponse.getPrimaryTerm(),
+                            context.failOnMappingUpdate(e);
+                    return true;
+                        bulkShardRequest.shardId(),
+        final boolean isFailed = executionResult.isFailed();
+                    continue; // ignore replication as it's a noop
+                public void onFailure(Exception e) {
+            final DeleteRequest request = context.getRequestToExecute();
+    @Inject
+        final boolean isDelete = context.getRequestToExecute().opType() == DocWriteRequest.OpType.DELETE;
+        ClusterStateObserver observer = new ClusterStateObserver(clusterService, request.timeout(), logger, threadPool.getThreadContext());
+import org.opensearch.cluster.node.DiscoveryNode;
+            onCompletionListener.onFailure(e);
+        } else {
+                        @Override
+                mappingUpdateListener.onFailure(new NodeClosedException(clusterService.localNode()));
+                        public void onFailure(Exception e) {
+                segmentReplicationPressureService.isSegrepLimitBreached(request.shardId());
+                    this.replica.shardId(),
+                ),
+        public PrimaryTermValidationRequest(String targetAllocationID, long primaryTerm, ShardId shardId) {
+                    indexResponse.getPrimaryTerm(),
+        try {
+    }
+import org.opensearch.cluster.metadata.IndexMetadata;
+                    docWriteRequest
+                    request.source(),
+        }
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+                    "{} failed to execute bulk item ({}) {}",
+                    primaryResponse.getPrimaryTerm(),
+             * does before requesting a mapping update so the scope never outlives this thread's execution.
+     *
+            case CREATE:
+    }
+                // we use index result to communicate failure while translating update request
+                updateResponse.setGetResult(getResult);
+            );
+        if (isUpdate
+                case NOOP:
+        } else {
+        }
+                // If no actual writes occurred (locationToSync is null), we should not trigger refresh
+import org.opensearch.action.DocWriteResponse;
+    static boolean executeBulkItemRequest(
+                        )
+        SystemIndices systemIndices,
+                context.setTranslogBatch(translogBatch);
+            return shardId;
+            EXECUTOR_NAME_FUNCTION,
+            // (it’s happening concurrently). Request r2, which now arrives on the primary and which also has the new
+            context.finishTranslogBatch();
+            // durability the fence is only validated at the upload interval, so the per-op fanout is retained.
+                    request.routing(),
+ * The OpenSearch Contributors require contributions made to
+        ThreadPool threadPool,
+                final String message = String.format(
+        IndicesService indicesService,
+        @Override
+    private static final Logger logger = LogManager.getLogger(TransportShardBulkAction.class);
+        @Override
+ * this file be licensed under the Apache-2.0 license or a
+            tracer,
+                    deleteResponse.getShardInfo(),
+    public ReplicationMode getReplicationMode(IndexShard indexShard) {
+            }
+                    bodyFailure = e;
+                // We must finish the outstanding request. Finishing the outstanding request can include
+        TransportIndicesResolvingAction<BulkShardRequest> {
+                    indexResponse.getShardId(),
+            public void onTimeout(TimeValue timeout) {
+                remoteStorePressureService.validateSegmentsUploadLag(request.shardId());
+    @Override
+            result = primary.applyIndexOperationOnPrimary(
+                    throw e;
+            shardId.writeTo(out);
+            final ActionListenerResponseHandler<ReplicaResponse> handler = new ActionListenerResponseHandler<>(
+                    concreteIndex,
+                            ActionListener.wrap(v -> executor.execute(this), this::onRejection)
+                    );
+                request.isRetry()
+            // operation that reads REQUEST here (dropping the fanout) can be acknowledged after a concurrent flip to
+            clusterService,
+     */
+                    replica.getOperationPrimaryTerm()
+            } catch (Exception failure) {
+    }
+        return true;
+        }
+         * {@link AllocationId#getId()} of the shard this request is sent to
+ * Performs shard-level bulk (index, delete or update) operations
+ * Licensed to Elasticsearch under one or more contributor
+import org.opensearch.action.update.UpdateResponse;
+ *
+        MappingUpdatePerformer mappingUpdater,
+                throw new IllegalArgumentException("unknown operation type: " + translatedResult);
+                    .merge(
+            indexingPressureService,
+                request.versionType(),
+                + "] for targetAllocationID ["
+    private final MappingUpdatedAction mappingUpdatedAction;
+    @Override
+             * request's sync location. A no-op once the batch has been finished, which {@link #executeBulkItemRequest}
+    ) {
+                            updateHelper,
+            return primaryTerm;
+                throw new IllegalStateException("Unexpected request operation type on replica: " + docWriteRequest.opType().getLowercase());
+import java.util.function.Function;
+        });
+            return "PrimaryTermValidationRequest ["
+    @Override
+            } else {
+ * KIND, either express or implied.  See the License for the
+    }
+     * @opensearch.internal
+        context.markOperationAsExecuted(r);
+ * the Apache License, Version 2.0 (the "License"); you may

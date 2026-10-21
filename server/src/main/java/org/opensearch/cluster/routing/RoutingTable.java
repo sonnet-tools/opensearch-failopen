@@ -1,734 +1,648 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.routing;
-
-import org.opensearch.cluster.Diff;
-import org.opensearch.cluster.Diffable;
-import org.opensearch.cluster.DiffableUtils;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
-import org.opensearch.cluster.routing.RecoverySource.RemoteStoreRecoverySource;
-import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.util.iterable.Iterables;
-import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
-import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.core.common.io.stream.StreamOutput;
-import org.opensearch.core.common.io.stream.VerifiableWriteable;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.index.IndexNotFoundException;
-import org.opensearch.index.shard.ShardNotFoundException;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Predicate;
-
-import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
-
-/**
- * Represents a global cluster-wide routing table for all indices including the
- * version of the current routing state.
- *
- * @see IndexRoutingTable
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<RoutingTable>, VerifiableWriteable {
-
-    public static final RoutingTable EMPTY_ROUTING_TABLE = builder().build();
-
-    private final long version;
-
-    // index to IndexRoutingTable map
-    private final Map<String, IndexRoutingTable> indicesRouting;
-
-    public RoutingTable(long version, final Map<String, IndexRoutingTable> indicesRouting) {
-        this.version = version;
-        this.indicesRouting = Collections.unmodifiableMap(indicesRouting);
     }
-
-    /**
-     * Get's the {@link IndexShardRoutingTable} for the given shard id from the given {@link IndexRoutingTable}
-     * or throws a {@link ShardNotFoundException} if no shard by the given id is found in the IndexRoutingTable.
-     *
-     * @param indexRouting IndexRoutingTable
-     * @param shardId ShardId
-     * @return IndexShardRoutingTable
-     */
-    public static IndexShardRoutingTable shardRoutingTable(IndexRoutingTable indexRouting, int shardId) {
-        IndexShardRoutingTable indexShard = indexRouting.shard(shardId);
-        if (indexShard == null) {
-            throw new ShardNotFoundException(new ShardId(indexRouting.getIndex(), shardId));
-        }
-        return indexShard;
-    }
-
-    /**
-     * Returns the version of the {@link RoutingTable}.
-     *
-     * @return version of the {@link RoutingTable}
-     */
-    public long version() {
-        return this.version;
-    }
-
-    @Override
-    public Iterator<IndexRoutingTable> iterator() {
-        return indicesRouting.values().iterator();
-    }
-
-    public boolean hasIndex(String index) {
-        return indicesRouting.containsKey(index);
-    }
-
-    public boolean hasIndex(Index index) {
-        IndexRoutingTable indexRouting = index(index.getName());
-        return indexRouting != null && indexRouting.getIndex().equals(index);
-    }
-
-    public IndexRoutingTable index(String index) {
-        return indicesRouting.get(index);
-    }
-
     public IndexRoutingTable index(Index index) {
-        return indicesRouting.get(index.getName());
-    }
-
-    public Map<String, IndexRoutingTable> indicesRouting() {
-        return indicesRouting;
-    }
-
-    public Map<String, IndexRoutingTable> getIndicesRouting() {
-        return indicesRouting();
-    }
-
-    /**
-     * All shards for the provided index and shard id
-     * @return All the shard routing entries for the given index and shard id
-     * @throws IndexNotFoundException if provided index does not exist
-     * @throws ShardNotFoundException if provided shard id is unknown
-     */
-    public IndexShardRoutingTable shardRoutingTable(String index, int shardId) {
-        IndexRoutingTable indexRouting = index(index);
-        if (indexRouting == null) {
-            throw new IndexNotFoundException(index);
-        }
-        return shardRoutingTable(indexRouting, shardId);
-    }
-
-    /**
-     * All shards for the provided {@link ShardId}
-     * @return All the shard routing entries for the given index and shard id
-     * @throws IndexNotFoundException if provided index does not exist
-     * @throws ShardNotFoundException if provided shard id is unknown
-     */
-    public IndexShardRoutingTable shardRoutingTable(ShardId shardId) {
-        IndexRoutingTable indexRouting = index(shardId.getIndexName());
-        if (indexRouting == null || indexRouting.getIndex().equals(shardId.getIndex()) == false) {
-            throw new IndexNotFoundException(shardId.getIndex());
-        }
-        IndexShardRoutingTable shard = indexRouting.shard(shardId.id());
-        if (shard == null) {
-            throw new ShardNotFoundException(shardId);
-        }
-        return shard;
-    }
-
-    @Nullable
-    public ShardRouting getByAllocationId(ShardId shardId, String allocationId) {
-        final IndexRoutingTable indexRoutingTable = index(shardId.getIndexName());
-        if (indexRoutingTable == null) {
-            return null;
-        }
-        final IndexShardRoutingTable shardRoutingTable = indexRoutingTable.shard(shardId.getId());
-        return shardRoutingTable == null ? null : shardRoutingTable.getByAllocationId(allocationId);
-    }
-
-    public boolean validate(Metadata metadata) {
-        for (IndexRoutingTable indexRoutingTable : this) {
-            if (indexRoutingTable.validate(metadata) == false) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public List<ShardRouting> shardsWithState(ShardRoutingState state) {
-        List<ShardRouting> shards = new ArrayList<>();
-        for (IndexRoutingTable indexRoutingTable : this) {
+ *     http://www.apache.org/licenses/LICENSE-2.0
             shards.addAll(indexRoutingTable.shardsWithState(state));
-        }
-        return shards;
-    }
-
-    public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
-        int count = 0;
-        for (IndexRoutingTable indexRoutingTable : this) {
-            count += indexRoutingTable.shardsMatchingPredicateCount(predicate);
-        }
-        return count;
-    }
-
-    /**
-     * All the shards (replicas) for all indices in this routing table.
-     *
-     * @return All the shards
-     */
-    public List<ShardRouting> allShards() {
-        List<ShardRouting> shards = new ArrayList<>();
-        String[] indices = indicesRouting.keySet().toArray(new String[0]);
-        for (String index : indices) {
-            List<ShardRouting> allShardsIndex = allShards(index);
-            shards.addAll(allShardsIndex);
-        }
-        return shards;
-    }
-
-    /**
-     * All the shards (replicas) for the provided index.
-     *
-     * @param index The index to return all the shards (replicas).
-     * @return All the shards matching the specific index
-     * @throws IndexNotFoundException If the index passed does not exists
-     */
-    public List<ShardRouting> allShards(String index) {
-        List<ShardRouting> shards = new ArrayList<>();
-        IndexRoutingTable indexRoutingTable = index(index);
-        if (indexRoutingTable == null) {
-            throw new IndexNotFoundException(index);
-        }
-        for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-            for (ShardRouting shardRouting : indexShardRoutingTable) {
-                shards.add(shardRouting);
+         * must be thrown away. If you need to build a new RoutingTable as a
+ * specific language governing permissions and limitations
             }
-        }
-        return shards;
     }
-
-    /**
-     * Return GroupShardsIterator where each active shard routing has it's own shard iterator.
-     *
-     * @param includeEmpty             if true, a shard iterator will be added for non-assigned shards as well
-     */
-    public GroupShardsIterator<ShardIterator> allActiveShardsGrouped(String[] indices, boolean includeEmpty) {
-        return allSatisfyingPredicateShardsGrouped(indices, includeEmpty, ACTIVE_PREDICATE);
-    }
-
-    /**
-     * Return GroupShardsIterator where each assigned shard routing has it's own shard iterator.
-     *
-     * @param includeEmpty if true, a shard iterator will be added for non-assigned shards as well
-     */
-    public GroupShardsIterator<ShardIterator> allAssignedShardsGrouped(String[] indices, boolean includeEmpty) {
-        return allSatisfyingPredicateShardsGrouped(indices, includeEmpty, ASSIGNED_PREDICATE);
-    }
-
-    private static Predicate<ShardRouting> ACTIVE_PREDICATE = ShardRouting::active;
-    private static Predicate<ShardRouting> ASSIGNED_PREDICATE = ShardRouting::assignedToNode;
-
-    private GroupShardsIterator<ShardIterator> allSatisfyingPredicateShardsGrouped(
-        String[] indices,
-        boolean includeEmpty,
-        Predicate<ShardRouting> predicate
-    ) {
-        // use list here since we need to maintain identity across shards
-        ArrayList<ShardIterator> set = new ArrayList<>();
-        for (String index : indices) {
-            IndexRoutingTable indexRoutingTable = index(index);
-            if (indexRoutingTable == null) {
-                continue;
-                // we simply ignore indices that don't exists (make sense for operations that use it currently)
-            }
-            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    if (predicate.test(shardRouting)) {
-                        set.add(shardRouting.shardsIt());
-                    } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
-                        set.add(new PlainShardIterator(shardRouting.shardId(), Collections.emptyList()));
-                    }
-                }
-            }
-        }
-        return GroupShardsIterator.sortAndCreate(set);
-    }
-
-    public ShardsIterator allShards(String[] indices) {
-        return allShardsSatisfyingPredicate(indices, shardRouting -> true, false);
-    }
-
-    public ShardsIterator allShardsIncludingRelocationTargets(String[] indices) {
-        return allShardsSatisfyingPredicate(indices, shardRouting -> true, true);
-    }
-
-    /**
-     * All the shards on the node which match the predicate
-     * @param predicate condition to match
-     * @return iterator over shards matching the predicate
-     */
-    public ShardsIterator allShardsSatisfyingPredicate(Predicate<ShardRouting> predicate) {
-        String[] indices = indicesRouting.keySet().toArray(new String[0]);
-        return allShardsSatisfyingPredicate(indices, predicate, false);
-    }
-
-    /**
-     * All the shards for the provided indices on the node which match the predicate
-     * @param indices indices to return all the shards.
-     * @param predicate condition to match
-     * @return iterator over shards matching the predicate for the specific indices
-     */
-    public ShardsIterator allShardsSatisfyingPredicate(String[] indices, Predicate<ShardRouting> predicate) {
-        return allShardsSatisfyingPredicate(indices, predicate, false);
-    }
-
-    private ShardsIterator allShardsSatisfyingPredicate(
-        String[] indices,
-        Predicate<ShardRouting> predicate,
-        boolean includeRelocationTargets
-    ) {
-        // use list here since we need to maintain identity across shards
-        List<ShardRouting> shards = new ArrayList<>();
-        for (String index : indices) {
-            IndexRoutingTable indexRoutingTable = index(index);
-            if (indexRoutingTable == null) {
-                continue;
-                // we simply ignore indices that don't exists (make sense for operations that use it currently)
-            }
-            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    if (predicate.test(shardRouting)) {
-                        shards.add(shardRouting);
-                        if (includeRelocationTargets && shardRouting.relocating()) {
-                            shards.add(shardRouting.getTargetRelocatingShard());
-                        }
-                    }
-                }
-            }
-        }
-        return new PlainShardsIterator(shards);
-    }
-
-    /**
-     * All the *active* primary shards for the provided indices grouped (each group is a single element, consisting
-     * of the primary shard). This is handy for components that expect to get group iterators, but still want in some
-     * cases to iterate over all primary shards (and not just one shard in replication group).
-     *
-     * @param indices The indices to return all the shards (replicas)
-     * @return All the primary shards grouped into a single shard element group each
-     * @throws IndexNotFoundException If an index passed does not exists
-     */
-    public GroupShardsIterator<ShardIterator> activePrimaryShardsGrouped(String[] indices, boolean includeEmpty) {
-        // use list here since we need to maintain identity across shards
-        ArrayList<ShardIterator> set = new ArrayList<>();
-        for (String index : indices) {
-            IndexRoutingTable indexRoutingTable = index(index);
-            if (indexRoutingTable == null) {
                 throw new IndexNotFoundException(index);
-            }
-            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                ShardRouting primary = indexShardRoutingTable.primaryShard();
-                if (primary.active()) {
-                    set.add(primary.shardsIt());
-                } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
-                    set.add(new PlainShardIterator(primary.shardId(), Collections.emptyList()));
-                }
-            }
-        }
-        return GroupShardsIterator.sortAndCreate(set);
-    }
-
-    @Override
-    public Diff<RoutingTable> diff(RoutingTable previousState) {
-        return new RoutingTableDiff(previousState, this);
-    }
-
-    public Diff<RoutingTable> incrementalDiff(RoutingTable previousState) {
-        return new RoutingTableIncrementalDiff(previousState, this);
-    }
-
-    public static Diff<RoutingTable> readDiffFrom(StreamInput in) throws IOException {
-        return new RoutingTableDiff(in);
-    }
-
-    public static RoutingTable readFrom(StreamInput in) throws IOException {
-        Builder builder = new Builder();
-        builder.version = in.readLong();
-        int size = in.readVInt();
-        for (int i = 0; i < size; i++) {
-            IndexRoutingTable index = IndexRoutingTable.readFrom(in);
-            builder.add(index);
-        }
-
-        return builder.build();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(version);
-        out.writeVInt(indicesRouting.size());
-        for (final IndexRoutingTable index : indicesRouting.values()) {
-            index.writeTo(out);
-        }
-    }
-
-    @Override
-    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {
-        out.writeLong(version);
-        out.writeMapValues(indicesRouting, (stream, value) -> value.writeVerifiableTo((BufferedChecksumStreamOutput) stream));
-    }
-
-    private static class RoutingTableDiff implements Diff<RoutingTable>, StringKeyDiffProvider<IndexRoutingTable> {
-
-        private final long version;
-
-        private final Diff<Map<String, IndexRoutingTable>> indicesRouting;
-
-        RoutingTableDiff(RoutingTable before, RoutingTable after) {
-            version = after.version;
-            indicesRouting = DiffableUtils.diff(before.indicesRouting, after.indicesRouting, DiffableUtils.getStringKeySerializer());
-        }
-
-        private static final DiffableUtils.DiffableValueReader<String, IndexRoutingTable> DIFF_VALUE_READER =
-            new DiffableUtils.DiffableValueReader<>(IndexRoutingTable::readFrom, IndexRoutingTable::readDiffFrom);
-
-        RoutingTableDiff(StreamInput in) throws IOException {
-            version = in.readLong();
-            indicesRouting = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), DIFF_VALUE_READER);
-        }
-
-        @Override
-        public String toString() {
-            return "RoutingTableDiff{" + "version=" + version + ", indicesRouting=" + indicesRouting + '}';
-        }
-
-        @Override
-        public RoutingTable apply(RoutingTable part) {
-            return new RoutingTable(version, indicesRouting.apply(part.indicesRouting));
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeLong(version);
-            indicesRouting.writeTo(out);
-        }
-
-        @Override
-        public DiffableUtils.MapDiff<String, IndexRoutingTable, Map<String, IndexRoutingTable>> provideDiff() {
-            return (DiffableUtils.MapDiff<String, IndexRoutingTable, Map<String, IndexRoutingTable>>) indicesRouting;
-        }
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public static Builder builder(RoutingTable routingTable) {
-        return new Builder(routingTable);
-    }
-
-    /**
-     * Builder for the routing table. Note that build can only be called one time.
-     *
-     * @opensearch.api
-     */
-    @PublicApi(since = "1.0.0")
-    public static class Builder {
-
-        private long version;
-        private Map<String, IndexRoutingTable> indicesRouting = new HashMap<>();
-
-        public Builder() {
-
-        }
-
-        public Builder(RoutingTable routingTable) {
-            version = routingTable.version;
-            for (IndexRoutingTable indexRoutingTable : routingTable) {
-                indicesRouting.put(indexRoutingTable.getIndex().getName(), indexRoutingTable);
-            }
-        }
-
-        public Builder updateNodes(long version, RoutingNodes routingNodes) {
-            // this is being called without pre initializing the routing table, so we must copy over the version as well
-            this.version = version;
-
-            Map<String, IndexRoutingTable.Builder> indexRoutingTableBuilders = new HashMap<>();
-            for (RoutingNode routingNode : routingNodes) {
-                for (ShardRouting shardRoutingEntry : routingNode) {
-                    // every relocating shard has a double entry, ignore the target one.
-                    if (shardRoutingEntry.initializing() && shardRoutingEntry.relocatingNodeId() != null) continue;
-
-                    addShard(indexRoutingTableBuilders, shardRoutingEntry);
-                }
-            }
-
-            Iterable<ShardRouting> shardRoutingEntries = Iterables.concat(routingNodes.unassigned(), routingNodes.unassigned().ignored());
-
-            for (ShardRouting shardRoutingEntry : shardRoutingEntries) {
-                addShard(indexRoutingTableBuilders, shardRoutingEntry);
-            }
-
-            for (IndexRoutingTable.Builder indexBuilder : indexRoutingTableBuilders.values()) {
-                add(indexBuilder);
-            }
             return this;
+     * Get's the {@link IndexShardRoutingTable} for the given shard id from the given {@link IndexRoutingTable}
         }
-
-        private static void addShard(
-            final Map<String, IndexRoutingTable.Builder> indexRoutingTableBuilders,
-            final ShardRouting shardRoutingEntry
-        ) {
-            Index index = shardRoutingEntry.index();
-            IndexRoutingTable.Builder indexBuilder = indexRoutingTableBuilders.get(index.getName());
-            if (indexBuilder == null) {
-                indexBuilder = new IndexRoutingTable.Builder(index);
-                indexRoutingTableBuilders.put(index.getName(), indexBuilder);
-            }
-            indexBuilder.addShard(shardRoutingEntry);
-        }
-
-        /**
-         * Update the number of replicas for the specified indices.
-         *
-         * @param numberOfReplicas the number of replicas
-         * @param indices          the indices to update the number of replicas for
-         * @return the builder
-         */
-        public Builder updateNumberOfReplicas(final int numberOfReplicas, final String[] indices) {
-            if (indicesRouting == null) {
-                throw new IllegalStateException("once build is called the builder cannot be reused");
-            }
-            for (String index : indices) {
-                IndexRoutingTable indexRoutingTable = indicesRouting.get(index);
-                if (indexRoutingTable == null) {
-                    // ignore index missing failure, its closed...
-                    continue;
-                }
-                int currentNumberOfReplicas = indexRoutingTable.shards().get(0).writerReplicas().size();
-                IndexRoutingTable.Builder builder = new IndexRoutingTable.Builder(indexRoutingTable.getIndex());
-                // re-add all the shards
-                for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                    builder.addIndexShard(indexShardRoutingTable);
-                }
-                if (currentNumberOfReplicas < numberOfReplicas) {
-                    // now, add "empty" ones
-                    for (int i = 0; i < (numberOfReplicas - currentNumberOfReplicas); i++) {
-                        builder.addReplica();
-                    }
-                } else if (currentNumberOfReplicas > numberOfReplicas) {
-                    for (int i = 0; i < (currentNumberOfReplicas - numberOfReplicas); i++) {
-                        builder.removeReplica();
-                    }
-                }
-                indicesRouting.put(index, builder.build());
-            }
-            return this;
-        }
-
-        /**
-         * Update the number of search replicas for the specified indices.
-         *
-         * @param numberOfSearchReplicas the number of replicas
-         * @param indices          the indices to update the number of replicas for
-         * @return the builder
-         */
-        public Builder updateNumberOfSearchReplicas(final int numberOfSearchReplicas, final String[] indices) {
-            if (indicesRouting == null) {
-                throw new IllegalStateException("once build is called the builder cannot be reused");
-            }
-            for (String index : indices) {
-                IndexRoutingTable indexRoutingTable = indicesRouting.get(index);
-                if (indexRoutingTable == null) {
-                    // ignore index missing failure, its closed...
-                    continue;
-                }
-                IndexShardRoutingTable shardRoutings = indexRoutingTable.shards().get(0);
-                int currentNumberOfSearchReplicas = shardRoutings.searchOnlyReplicas().size();
-                IndexRoutingTable.Builder builder = new IndexRoutingTable.Builder(indexRoutingTable.getIndex());
-                // re-add all the shards
-                for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
-                    builder.addIndexShard(indexShardRoutingTable);
-                }
-                if (currentNumberOfSearchReplicas < numberOfSearchReplicas) {
-                    // now, add "empty" ones
-                    for (int i = 0; i < (numberOfSearchReplicas - currentNumberOfSearchReplicas); i++) {
-                        builder.addSearchReplica();
-                    }
-                } else if (currentNumberOfSearchReplicas > numberOfSearchReplicas) {
-                    for (int i = 0; i < (currentNumberOfSearchReplicas - numberOfSearchReplicas); i++) {
-                        builder.removeSearchReplica();
-                    }
-                }
-                indicesRouting.put(index, builder.build());
-            }
-            return this;
-        }
-
-        public Builder addAsNew(IndexMetadata indexMetadata) {
-            if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsNew(
+        IndexRoutingTable indexRouting = index(index.getName());
+                shards.add(shardRouting);
                     indexMetadata
-                );
-                add(indexRoutingBuilder);
+     *
+            if (indexRoutingTable == null) {
+ */
+        }
+                indicesRouting.put(indexRoutingTable.getIndex().getName(), indexRoutingTable);
+ *
+            final ShardRouting shardRoutingEntry
+        @Override
+            this.version = version;
+                    // now, add "empty" ones
+    public boolean hasIndex(Index index) {
+    }
+     * @throws IndexNotFoundException If the index passed does not exists
+        return shardRoutingTable(indexRouting, shardId);
+     * @param indices The indices to return all the shards (replicas)
+ * not use this file except in compliance with the License.
+            this.version = version;
+            IndexRoutingTable indexRoutingTable = index(index);
             }
-            return this;
+     * @param indexRouting IndexRoutingTable
+import org.opensearch.index.IndexNotFoundException;
+                    for (int i = 0; i < (numberOfReplicas - currentNumberOfReplicas); i++) {
+import java.util.Set;
+import java.util.ArrayList;
+        return shards;
+        return true;
+    @Nullable
         }
-
-        public Builder addAsRecovery(IndexMetadata indexMetadata) {
-            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
-                    .initializeAsRecovery(indexMetadata);
-                add(indexRoutingBuilder);
-            }
-            return this;
+    public Map<String, IndexRoutingTable> indicesRouting() {
+                        set.add(new PlainShardIterator(shardRouting.shardId(), Collections.emptyList()));
         }
-
-        public Builder addAsFromDangling(IndexMetadata indexMetadata) {
-            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
-                    .initializeAsFromDangling(indexMetadata);
-                add(indexRoutingBuilder);
-            }
-            return this;
-        }
-
-        public Builder addAsFromCloseToOpen(IndexMetadata indexMetadata) {
-            if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
-                    .initializeAsFromCloseToOpen(indexMetadata);
-                add(indexRoutingBuilder);
-            }
-            return this;
-        }
-
-        public Builder addAsFromOpenToClose(IndexMetadata indexMetadata) {
-            assert isIndexVerifiedBeforeClosed(indexMetadata);
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
-                .initializeAsFromOpenToClose(indexMetadata);
-            return add(indexRoutingBuilder);
-        }
-
-        public Builder addAsRemoteStoreRestore(
-            IndexMetadata indexMetadata,
-            RemoteStoreRecoverySource recoverySource,
-            Map<ShardId, IndexShardRoutingTable> indexShardRoutingTableMap,
-            boolean forceRecoveryPrimary
-        ) {
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
-                .initializeAsRemoteStoreRestore(indexMetadata, recoverySource, indexShardRoutingTableMap, forceRecoveryPrimary);
-            add(indexRoutingBuilder);
-            return this;
-        }
-
-        public Builder addAsRestore(IndexMetadata indexMetadata, SnapshotRecoverySource recoverySource) {
-            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsRestore(
-                indexMetadata,
-                recoverySource
-            );
-            add(indexRoutingBuilder);
-            return this;
-        }
-
-        public Builder addAsNewRestore(
-            IndexMetadata indexMetadata,
-            SnapshotRecoverySource recoverySource,
-            final Set<Integer> ignoreShards
-        ) {
+}
+            if (indexRoutingTable == null) {
+    public void writeVerifiableTo(BufferedChecksumStreamOutput out) throws IOException {
             IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsNewRestore(
+                if (indexRoutingTable == null) {
+     * @return All the shards matching the specific index
+     *
+                IndexShardRoutingTable shardRoutings = indexRoutingTable.shards().get(0);
+        // use list here since we need to maintain identity across shards
+     *
+            count += indexRoutingTable.shardsMatchingPredicateCount(predicate);
+        for (String index : indices) {
+        Predicate<ShardRouting> predicate
+                    continue;
                 indexMetadata,
-                recoverySource,
-                ignoreShards
-            );
-            add(indexRoutingBuilder);
+                    // ignore index missing failure, its closed...
+    }
+                IndexRoutingTable indexRoutingTable = indicesRouting.get(index);
+    public IndexShardRoutingTable shardRoutingTable(String index, int shardId) {
+        return indicesRouting.get(index.getName());
+    public static IndexShardRoutingTable shardRoutingTable(IndexRoutingTable indexRouting, int shardId) {
+    public List<ShardRouting> shardsWithState(ShardRoutingState state) {
             return this;
-        }
-
-        public Builder add(IndexRoutingTable indexRoutingTable) {
-            if (indicesRouting == null) {
-                throw new IllegalStateException("once build is called the builder cannot be reused");
-            }
-            indicesRouting.put(indexRoutingTable.getIndex().getName(), indexRoutingTable);
-            return this;
-        }
-
+    public Map<String, IndexRoutingTable> getIndicesRouting() {
+    }
+    }
+    public ShardRouting getByAllocationId(ShardId shardId, String allocationId) {
+         *
+import org.opensearch.core.common.io.stream.StreamOutput;
         public Builder add(IndexRoutingTable.Builder indexRoutingTableBuilder) {
-            add(indexRoutingTableBuilder.build());
+        for (IndexRoutingTable indexRoutingTable : this) {
+         * @param indices          the indices to update the number of replicas for
+                }
+     * Return GroupShardsIterator where each assigned shard routing has it's own shard iterator.
+                indexBuilder = new IndexRoutingTable.Builder(index);
+            indicesRouting.put(indexRoutingTable.getIndex().getName(), indexRoutingTable);
+        String[] indices,
+                throw new IllegalStateException("once build is called the builder cannot be reused");
+                if (currentNumberOfReplicas < numberOfReplicas) {
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
+    private static Predicate<ShardRouting> ACTIVE_PREDICATE = ShardRouting::active;
+                // re-add all the shards
+            for (String index : indices) {
+    /**
+         */
+                ignoreShards
+    }
+    /**
+        return indexRouting != null && indexRouting.getIndex().equals(index);
+        for (int i = 0; i < size; i++) {
             return this;
+    }
+                for (ShardRouting shardRouting : indexShardRoutingTable) {
+                    // ignore index missing failure, its closed...
+            version = routingTable.version;
+                for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+    }
+        IndexRoutingTable indexRouting = index(shardId.getIndexName());
+        public Builder addAsNew(IndexMetadata indexMetadata) {
+            }
+            }
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
+    public boolean hasIndex(String index) {
+            return add(indexRoutingBuilder);
+    }
+        Builder builder = new Builder();
+     * All the shards (replicas) for all indices in this routing table.
+ * software distributed under the License is distributed on an
+import java.util.List;
+    }
+        public Builder updateNumberOfReplicas(final int numberOfReplicas, final String[] indices) {
+                .initializeAsRemoteStoreRestore(indexMetadata, recoverySource, indexShardRoutingTableMap, forceRecoveryPrimary);
+            final Set<Integer> ignoreShards
+        // use list here since we need to maintain identity across shards
+            if (indexBuilder == null) {
+            }
+        return new PlainShardsIterator(shards);
+            Map<ShardId, IndexShardRoutingTable> indexShardRoutingTableMap,
+            sb.append(entry.prettyPrint()).append('\n');
+    }
+        public Builder addAsRestore(IndexMetadata indexMetadata, SnapshotRecoverySource recoverySource) {
+            return new RoutingTable(version, indicesRouting.apply(part.indicesRouting));
+        if (indexRouting == null) {
+            IndexRoutingTable indexRoutingTable = index(index);
+        return new RoutingTableDiff(in);
+            return this;
+        public Builder add(IndexRoutingTable indexRoutingTable) {
+            if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
+            return null;
+import org.opensearch.cluster.routing.RecoverySource.SnapshotRecoverySource;
+            }
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsNew(
+        RoutingTableDiff(RoutingTable before, RoutingTable after) {
+                        shards.add(shardRouting);
+            assert isIndexVerifiedBeforeClosed(indexMetadata);
+     * @return All the shard routing entries for the given index and shard id
+     * @return All the shards
         }
-
+                for (ShardRouting shardRoutingEntry : routingNode) {
+        ) {
+    /**
+ * GitHub history for details.
+        }
+        @Override
+            // this is being called without pre initializing the routing table, so we must copy over the version as well
+            return this;
+     * All the shards for the provided indices on the node which match the predicate
+        builder.version = in.readLong();
+            throw new ShardNotFoundException(new ShardId(indexRouting.getIndex(), shardId));
+ * You may obtain a copy of the License at
+    public IndexRoutingTable index(String index) {
+import org.opensearch.cluster.metadata.Metadata;
+        }
+                recoverySource
+            return this;
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
+            for (ShardRouting shardRoutingEntry : shardRoutingEntries) {
+            add(indexRoutingBuilder);
+                        builder.addReplica();
+    /**
+@PublicApi(since = "1.0.0")
+ * @opensearch.api
+     * cases to iterate over all primary shards (and not just one shard in replication group).
+                }
+        return sb.toString();
+        public Builder addAsNewRestore(
+    public int shardsMatchingPredicateCount(Predicate<ShardRouting> predicate) {
+import org.opensearch.cluster.DiffableUtils;
+     * @throws IndexNotFoundException if provided index does not exist
+                        builder.removeSearchReplica();
+        for (final IndexRoutingTable index : indicesRouting.values()) {
+    public static class Builder {
+        RoutingTableDiff(StreamInput in) throws IOException {
+        return GroupShardsIterator.sortAndCreate(set);
+                        if (includeRelocationTargets && shardRouting.relocating()) {
+    public GroupShardsIterator<ShardIterator> allActiveShardsGrouped(String[] indices, boolean includeEmpty) {
+                    set.add(primary.shardsIt());
+        public Builder(RoutingTable routingTable) {
+        IndexRoutingTable indexRouting = index(index);
+        }
+            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+/**
+                    .initializeAsFromCloseToOpen(indexMetadata);
+        }
+import org.opensearch.common.Nullable;
+         * Builds the routing table. Note that once this is called the builder
+ * version of the current routing state.
+    }
+        }
+ * SPDX-License-Identifier: Apache-2.0
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+        StringBuilder sb = new StringBuilder("routing_table (version ").append(version).append("):\n");
+    public String toString() {
+        /**
+                add(indexRoutingBuilder);
+        public Builder addAsFromOpenToClose(IndexMetadata indexMetadata) {
+        String[] indices = indicesRouting.keySet().toArray(new String[0]);
+     * @throws ShardNotFoundException if provided shard id is unknown
+        return new RoutingTableDiff(previousState, this);
+            }
+        List<ShardRouting> shards = new ArrayList<>();
+        for (IndexRoutingTable indexRoutingTable : this) {
+    @Override
+            builder.add(index);
+                IndexRoutingTable.Builder builder = new IndexRoutingTable.Builder(indexRoutingTable.getIndex());
+    }
+                }
+     */
+        ArrayList<ShardIterator> set = new ArrayList<>();
+        }
+    }
+            }
+    public List<ShardRouting> allShards() {
+        return shardRoutingTable == null ? null : shardRoutingTable.getByAllocationId(allocationId);
+                    for (int i = 0; i < (currentNumberOfReplicas - numberOfReplicas); i++) {
+            Map<String, IndexRoutingTable.Builder> indexRoutingTableBuilders = new HashMap<>();
+            add(indexRoutingBuilder);
+    @PublicApi(since = "1.0.0")
+ * The OpenSearch Contributors require contributions made to
+        public void writeTo(StreamOutput out) throws IOException {
+                // we simply ignore indices that don't exists (make sense for operations that use it currently)
+                    // now, add "empty" ones
+        return GroupShardsIterator.sortAndCreate(set);
+import org.opensearch.common.annotation.PublicApi;
+    }
+import org.opensearch.core.common.io.stream.StreamInput;
+     */
+        private final Diff<Map<String, IndexRoutingTable>> indicesRouting;
+                        set.add(shardRouting.shardsIt());
+ *
+    }
+        }
+        private static void addShard(
+         * @return the builder
+import org.opensearch.cluster.metadata.IndexMetadata;
+            if (indexRoutingTable == null) {
+        // use list here since we need to maintain identity across shards
+                throw new IllegalStateException("once build is called the builder cannot be reused");
+     * @return All the primary shards grouped into a single shard element group each
+        public Builder addAsRemoteStoreRestore(
+     *
+    public GroupShardsIterator<ShardIterator> activePrimaryShardsGrouped(String[] indices, boolean includeEmpty) {
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
+        IndexRoutingTable indexRoutingTable = index(index);
+            return this;
+import java.util.function.Predicate;
+     */
+            version = after.version;
+     */
+        return allSatisfyingPredicateShardsGrouped(indices, includeEmpty, ASSIGNED_PREDICATE);
+    @Override
+import java.util.HashMap;
+                }
+        public Builder version(long version) {
+         * @return the builder
+ */
+                    if (predicate.test(shardRouting)) {
+                }
+            final Map<String, IndexRoutingTable.Builder> indexRoutingTableBuilders,
+        return new Builder(routingTable);
+        }
+            }
+    /**
+            }
+            IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex()).initializeAsRestore(
+            IndexRoutingTable indexRoutingTable = index(index);
+        for (IndexRoutingTable indexRoutingTable : this) {
+         */
         public Builder remove(String index) {
             if (indicesRouting == null) {
-                throw new IllegalStateException("once build is called the builder cannot be reused");
+     * All the shards (replicas) for the provided index.
+        public Builder addAsFromDangling(IndexMetadata indexMetadata) {
             }
-            indicesRouting.remove(index);
-            return this;
-        }
-
-        public Builder version(long version) {
-            this.version = version;
-            return this;
-        }
-
-        /**
-         * Builds the routing table. Note that once this is called the builder
-         * must be thrown away. If you need to build a new RoutingTable as a
-         * copy of this one you'll need to build a new RoutingTable.Builder.
-         */
-        public RoutingTable build() {
-            if (indicesRouting == null) {
-                throw new IllegalStateException("once build is called the builder cannot be reused");
-            }
-            RoutingTable table = new RoutingTable(version, indicesRouting);
-            indicesRouting = null;
-            return table;
-        }
     }
-
+        }
+                    }
+        out.writeMapValues(indicesRouting, (stream, value) -> value.writeVerifiableTo((BufferedChecksumStreamOutput) stream));
+ *
+     * @param includeEmpty if true, a shard iterator will be added for non-assigned shards as well
+        return count;
+        }
     @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder("routing_table (version ").append(version).append("):\n");
-        for (final IndexRoutingTable entry : indicesRouting.values()) {
-            sb.append(entry.prettyPrint()).append('\n');
-        }
-        return sb.toString();
+     * @throws IndexNotFoundException if provided index does not exist
+        return indicesRouting();
+                .initializeAsFromOpenToClose(indexMetadata);
+    public Diff<RoutingTable> diff(RoutingTable previousState) {
+            }
+        @Override
+import java.util.Map;
+            add(indexRoutingTableBuilder.build());
+        List<ShardRouting> shards = new ArrayList<>();
+            );
+        if (indexShard == null) {
+ * Unless required by applicable law or agreed to in writing,
+            return table;
+                // we simply ignore indices that don't exists (make sense for operations that use it currently)
+            if (indicesRouting == null) {
+            return "RoutingTableDiff{" + "version=" + version + ", indicesRouting=" + indicesRouting + '}';
+        String[] indices,
+     * of the primary shard). This is handy for components that expect to get group iterators, but still want in some
     }
-
-}
+                if (indexRoutingTable == null) {
+                for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+        }
+        for (String index : indices) {
+/*
+    public ShardsIterator allShards(String[] indices) {
+            return this;
+            if (indicesRouting == null) {
+        ArrayList<ShardIterator> set = new ArrayList<>();
+    /**
+        for (final IndexRoutingTable entry : indicesRouting.values()) {
+ * Represents a global cluster-wide routing table for all indices including the
+     * All shards for the provided {@link ShardId}
+        return allShardsSatisfyingPredicate(indices, predicate, false);
+    public static RoutingTable readFrom(StreamInput in) throws IOException {
+        }
+    private static class RoutingTableDiff implements Diff<RoutingTable>, StringKeyDiffProvider<IndexRoutingTable> {
+     * @param includeEmpty             if true, a shard iterator will be added for non-assigned shards as well
+            IndexMetadata indexMetadata,
+        out.writeVInt(indicesRouting.size());
+                // re-add all the shards
+            Iterable<ShardRouting> shardRoutingEntries = Iterables.concat(routingNodes.unassigned(), routingNodes.unassigned().ignored());
+                    // every relocating shard has a double entry, ignore the target one.
+                add(indexRoutingBuilder);
+        final IndexShardRoutingTable shardRoutingTable = indexRoutingTable.shard(shardId.getId());
+            }
+            );
+            }
+import org.opensearch.common.util.iterable.Iterables;
+        return this.version;
+            return this;
+    }
+     * @param shardId ShardId
+            for (IndexRoutingTable.Builder indexBuilder : indexRoutingTableBuilders.values()) {
+import org.opensearch.cluster.Diff;
+    public Iterator<IndexRoutingTable> iterator() {
+    @Override
+                continue;
+import org.opensearch.core.common.io.stream.BufferedChecksumStreamOutput;
+        int size = in.readVInt();
+        ) {
+                if (primary.active()) {
+        out.writeLong(version);
+        ) {
+                throw new IllegalStateException("once build is called the builder cannot be reused");
+        }
+            new DiffableUtils.DiffableValueReader<>(IndexRoutingTable::readFrom, IndexRoutingTable::readDiffFrom);
+    }
+                        }
+                } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
+        return new RoutingTableIncrementalDiff(previousState, this);
+            for (RoutingNode routingNode : routingNodes) {
+            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+     * @throws IndexNotFoundException If an index passed does not exists
+        }
+            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
+     */
+            throw new ShardNotFoundException(shardId);
+     *
+                addShard(indexRoutingTableBuilders, shardRoutingEntry);
+        }
+     */
+        for (String index : indices) {
+        return indicesRouting;
+        }
+        }
+                    for (int i = 0; i < (numberOfSearchReplicas - currentNumberOfSearchReplicas); i++) {
+     *
+        out.writeLong(version);
+     * @param index The index to return all the shards (replicas).
+            if (indicesRouting == null) {
+        Predicate<ShardRouting> predicate,
+            return this;
+ * KIND, either express or implied.  See the License for the
+            return this;
+        final IndexRoutingTable indexRoutingTable = index(shardId.getIndexName());
+    /**
+    @Override
+     * @return IndexShardRoutingTable
+            return this;
+        private long version;
+import org.opensearch.cluster.routing.RecoverySource.RemoteStoreRecoverySource;
+            for (String index : indices) {
+     */
+            indicesRouting = DiffableUtils.readJdkMapDiff(in, DiffableUtils.getStringKeySerializer(), DIFF_VALUE_READER);
+                recoverySource,
+    /**
+    }
+ * the Apache License, Version 2.0 (the "License"); you may
+        /**
+                    } else if (includeEmpty) { // we need this for counting properly, just make it an empty one
+            return this;
+     * @return All the shard routing entries for the given index and shard id
+                } else if (currentNumberOfSearchReplicas > numberOfSearchReplicas) {
+        }
+            }
+    ) {
+            }
+     *
+        }
+                    }
+ * compatible open source license.
+ */
+     * @opensearch.api
+    // index to IndexRoutingTable map
+                    }
+        }
+            IndexRoutingTable.Builder indexBuilder = indexRoutingTableBuilders.get(index.getName());
+            }
+            throw new IndexNotFoundException(index);
+        return shard;
+                if (currentNumberOfSearchReplicas < numberOfSearchReplicas) {
+     * @param predicate condition to match
+        boolean includeRelocationTargets
+     * or throws a {@link ShardNotFoundException} if no shard by the given id is found in the IndexRoutingTable.
+    /**
+        private static final DiffableUtils.DiffableValueReader<String, IndexRoutingTable> DIFF_VALUE_READER =
+        if (shard == null) {
+    private final Map<String, IndexRoutingTable> indicesRouting;
+/*
+        }
+                int currentNumberOfReplicas = indexRoutingTable.shards().get(0).writerReplicas().size();
+     * @param predicate condition to match
+import org.opensearch.core.index.shard.ShardId;
+    }
+    /**
+        }
+        }
+            }
+            IndexRoutingTable index = IndexRoutingTable.readFrom(in);
+        return allShardsSatisfyingPredicate(indices, predicate, false);
+                for (ShardRouting shardRouting : indexShardRoutingTable) {
+        }
+        }
+            throw new IndexNotFoundException(index);
+        public Builder() {
+    public static final RoutingTable EMPTY_ROUTING_TABLE = builder().build();
+     */
+    public void writeTo(StreamOutput out) throws IOException {
+        return allShardsSatisfyingPredicate(indices, shardRouting -> true, false);
+                }
+    public List<ShardRouting> allShards(String index) {
+    private final long version;
+        }
+    public GroupShardsIterator<ShardIterator> allAssignedShardsGrouped(String[] indices, boolean includeEmpty) {
+     * @throws ShardNotFoundException if provided shard id is unknown
+            for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+        if (indexRouting == null || indexRouting.getIndex().equals(shardId.getIndex()) == false) {
+                    if (shardRoutingEntry.initializing() && shardRoutingEntry.relocatingNodeId() != null) continue;
+     * @return iterator over shards matching the predicate for the specific indices
+                    if (predicate.test(shardRouting)) {
+                indexMetadata,
+                throw new IllegalStateException("once build is called the builder cannot be reused");
+                    builder.addIndexShard(indexShardRoutingTable);
+import java.util.Collections;
+     * Builder for the routing table. Note that build can only be called one time.
+    public static Diff<RoutingTable> readDiffFrom(StreamInput in) throws IOException {
+        return shards;
+            indexBuilder.addShard(shardRoutingEntry);
+    }
+                indexRoutingTableBuilders.put(index.getName(), indexBuilder);
+     */
+    public ShardsIterator allShardsSatisfyingPredicate(Predicate<ShardRouting> predicate) {
+        return indicesRouting.values().iterator();
+        this.version = version;
+        }
+     * @return version of the {@link RoutingTable}
+ * license agreements. See the NOTICE file distributed with
+            out.writeLong(version);
+        return allShardsSatisfyingPredicate(indices, shardRouting -> true, true);
+import org.opensearch.core.common.io.stream.VerifiableWriteable;
+     * All shards for the provided index and shard id
+import java.util.Iterator;
+        }
+/*
+                    continue;
+    }
+        return builder.build();
+        }
+ *
+            indicesRouting = DiffableUtils.diff(before.indicesRouting, after.indicesRouting, DiffableUtils.getStringKeySerializer());
+            indicesRouting = null;
+            indicesRouting.remove(index);
+                IndexRoutingTable indexRoutingTable = indicesRouting.get(index);
+     * Return GroupShardsIterator where each active shard routing has it's own shard iterator.
+                ShardRouting primary = indexShardRoutingTable.primaryShard();
+    }
+    public static Builder builder() {
+ * @see IndexRoutingTable
+        public DiffableUtils.MapDiff<String, IndexRoutingTable, Map<String, IndexRoutingTable>> provideDiff() {
+            if (indexRoutingTable.validate(metadata) == false) {
+                    for (int i = 0; i < (currentNumberOfSearchReplicas - numberOfSearchReplicas); i++) {
+         * copy of this one you'll need to build a new RoutingTable.Builder.
+                        builder.addSearchReplica();
+    }
+    }
+                int currentNumberOfSearchReplicas = shardRoutings.searchOnlyReplicas().size();
+                );
+     * Returns the version of the {@link RoutingTable}.
+            version = in.readLong();
+        }
+         * @param numberOfSearchReplicas the number of replicas
+    }
+         * Update the number of replicas for the specified indices.
+                    }
+        return indicesRouting.get(index);
+    }
+            }
+ * under the License.
+    public static Builder builder(RoutingTable routingTable) {
+ *
+        IndexShardRoutingTable shard = indexRouting.shard(shardId.id());
+    private GroupShardsIterator<ShardIterator> allSatisfyingPredicateShardsGrouped(
+    private static Predicate<ShardRouting> ASSIGNED_PREDICATE = ShardRouting::assignedToNode;
+package org.opensearch.cluster.routing;
+import static org.opensearch.cluster.metadata.MetadataIndexStateService.isIndexVerifiedBeforeClosed;
+            }
+                indicesRouting.put(index, builder.build());
+            return (DiffableUtils.MapDiff<String, IndexRoutingTable, Map<String, IndexRoutingTable>>) indicesRouting;
+         * Update the number of search replicas for the specified indices.
+import org.opensearch.cluster.Diffable;
+        this.indicesRouting = Collections.unmodifiableMap(indicesRouting);
+        return indicesRouting.containsKey(index);
+     * @param indices indices to return all the shards.
+                throw new IllegalStateException("once build is called the builder cannot be reused");
+        }
+ * this work for additional information regarding copyright
+         *
+    public IndexShardRoutingTable shardRoutingTable(ShardId shardId) {
+                }
+        if (indexRoutingTable == null) {
+    public long version() {
+            Index index = shardRoutingEntry.index();
+        }
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+        return allSatisfyingPredicateShardsGrouped(indices, includeEmpty, ACTIVE_PREDICATE);
+    }
+         * @param numberOfReplicas the number of replicas
+                    .initializeAsRecovery(indexMetadata);
+                add(indexRoutingBuilder);
+                    set.add(new PlainShardIterator(primary.shardId(), Collections.emptyList()));
+import org.opensearch.index.shard.ShardNotFoundException;
+        for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+        }
+    }
+    /**
+                IndexRoutingTable.Builder builder = new IndexRoutingTable.Builder(indexRoutingTable.getIndex());
+                continue;
+        if (indexRoutingTable == null) {
+import org.opensearch.core.index.Index;
+import java.io.IOException;
+                        builder.removeReplica();
+        }
+        }
+     * All the *active* primary shards for the provided indices grouped (each group is a single element, consisting
+    }
+            }
+ * this file be licensed under the Apache-2.0 license or a
+            for (IndexRoutingTable indexRoutingTable : routingTable) {
+    }
+    }
+        int count = 0;
+        public Builder updateNodes(long version, RoutingNodes routingNodes) {
+         * @param indices          the indices to update the number of replicas for
+         */
+            List<ShardRouting> allShardsIndex = allShards(index);
+                    }
+     * @return iterator over shards matching the predicate
+            }
+    /**
+            return this;
+    }
+            if (indicesRouting == null) {
+    public ShardsIterator allShardsSatisfyingPredicate(String[] indices, Predicate<ShardRouting> predicate) {
+        }
+        return shards;
+     * All the shards on the node which match the predicate
+            for (ShardRouting shardRouting : indexShardRoutingTable) {
+    ) {
+        IndexShardRoutingTable indexShard = indexRouting.shard(shardId);
+            RoutingTable table = new RoutingTable(version, indicesRouting);
+            index.writeTo(out);
+        public String toString() {
+        String[] indices = indicesRouting.keySet().toArray(new String[0]);
+            SnapshotRecoverySource recoverySource,
+        /**
+    public RoutingTable(long version, final Map<String, IndexRoutingTable> indicesRouting) {
+                return false;
+        boolean includeEmpty,
+                    builder.addIndexShard(indexShardRoutingTable);
+        for (String index : indices) {
+                indicesRouting.put(index, builder.build());
+        List<ShardRouting> shards = new ArrayList<>();
+                }
+                    addShard(indexRoutingTableBuilders, shardRoutingEntry);
+ */
+    }
+        public Builder addAsRecovery(IndexMetadata indexMetadata) {
+    }
+     */
+            }
+                add(indexRoutingBuilder);
+        @Override
+            if (indexMetadata.getState() == IndexMetadata.State.OPEN || isIndexVerifiedBeforeClosed(indexMetadata)) {
+public class RoutingTable implements Iterable<IndexRoutingTable>, Diffable<RoutingTable>, VerifiableWriteable {
+                } else if (currentNumberOfReplicas > numberOfReplicas) {
+        public RoutingTable apply(RoutingTable part) {
+                }
+        }
+                add(indexBuilder);
+        public Builder updateNumberOfSearchReplicas(final int numberOfSearchReplicas, final String[] indices) {
+        return new Builder();
+    private ShardsIterator allShardsSatisfyingPredicate(
+            shards.addAll(allShardsIndex);
+            if (indexMetadata.getState() == IndexMetadata.State.OPEN) {
+ * ownership. Elasticsearch licenses this file to you under
+                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(indexMetadata.getIndex())
+        private Map<String, IndexRoutingTable> indicesRouting = new HashMap<>();
+        List<ShardRouting> shards = new ArrayList<>();
+                    .initializeAsFromDangling(indexMetadata);
+    public ShardsIterator allShardsIncludingRelocationTargets(String[] indices) {
+            IndexMetadata indexMetadata,
+    public boolean validate(Metadata metadata) {
+            boolean forceRecoveryPrimary
+            add(indexRoutingBuilder);
+     *
+        return indexShard;
+            }
+                }
+        private final long version;
+            indicesRouting.writeTo(out);
+     */
+        public RoutingTable build() {
+        public Builder addAsFromCloseToOpen(IndexMetadata indexMetadata) {
+    public Diff<RoutingTable> incrementalDiff(RoutingTable previousState) {
+            throw new IndexNotFoundException(shardId.getIndex());
+            RemoteStoreRecoverySource recoverySource,
+ * Licensed to Elasticsearch under one or more contributor
+                    }
+                            shards.add(shardRouting.getTargetRelocatingShard());

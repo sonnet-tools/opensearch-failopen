@@ -1,303 +1,268 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.cluster.coordination;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
-import org.opensearch.cluster.coordination.CoordinationState.VoteCollection;
-import org.opensearch.cluster.node.DiscoveryNode;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.unit.TimeValue;
-import org.opensearch.common.util.concurrent.AbstractRunnable;
-import org.opensearch.core.common.transport.TransportAddress;
-import org.opensearch.gateway.GatewayMetaState;
-import org.opensearch.monitor.StatusInfo;
-import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.threadpool.ThreadPool.Names;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
-import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING;
-import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
-
-/**
- * Helper for cluster failure events
- *
- * @opensearch.internal
- */
-public class ClusterFormationFailureHelper {
-    private static final Logger logger = LogManager.getLogger(ClusterFormationFailureHelper.class);
-
-    public static final Setting<TimeValue> DISCOVERY_CLUSTER_FORMATION_WARNING_TIMEOUT_SETTING = Setting.timeSetting(
-        "discovery.cluster_formation_warning_timeout",
-        TimeValue.timeValueMillis(10000),
-        TimeValue.timeValueMillis(1),
-        Setting.Property.NodeScope
-    );
-
-    private final Supplier<ClusterFormationState> clusterFormationStateSupplier;
-    private final ThreadPool threadPool;
-    private final TimeValue clusterFormationWarningTimeout;
-    private final Runnable logLastFailedJoinAttempt;
-    @Nullable // if no warning is scheduled
-    private volatile WarningScheduler warningScheduler;
-
-    public ClusterFormationFailureHelper(
-        Settings settings,
-        Supplier<ClusterFormationState> clusterFormationStateSupplier,
-        ThreadPool threadPool,
-        Runnable logLastFailedJoinAttempt
-    ) {
-        this.clusterFormationStateSupplier = clusterFormationStateSupplier;
-        this.threadPool = threadPool;
-        this.clusterFormationWarningTimeout = DISCOVERY_CLUSTER_FORMATION_WARNING_TIMEOUT_SETTING.get(settings);
-        this.logLastFailedJoinAttempt = logLastFailedJoinAttempt;
-    }
-
-    public boolean isRunning() {
-        return warningScheduler != null;
-    }
-
-    public void start() {
-        assert warningScheduler == null;
-        warningScheduler = new WarningScheduler();
-        warningScheduler.scheduleNextWarning();
-    }
-
-    public void stop() {
-        warningScheduler = null;
-    }
-
-    /**
-     * A warning scheduler.
-     *
-     * @opensearch.internal
-     */
-    private class WarningScheduler {
-
-        private boolean isActive() {
-            return warningScheduler == this;
-        }
-
-        void scheduleNextWarning() {
-            threadPool.scheduleUnlessShuttingDown(clusterFormationWarningTimeout, Names.GENERIC, new AbstractRunnable() {
-                @Override
-                public void onFailure(Exception e) {
-                    logger.debug("unexpected exception scheduling cluster formation warning", e);
-                }
-
-                @Override
-                protected void doRun() {
-                    if (isActive()) {
-                        logLastFailedJoinAttempt.run();
-                        logger.warn(clusterFormationStateSupplier.get().getDescription());
-                    }
-                }
-
-                @Override
-                public void onAfter() {
-                    if (isActive()) {
-                        scheduleNextWarning();
-                    }
-                }
-
-                @Override
-                public String toString() {
-                    return "emit warning if cluster not formed";
-                }
-            });
-        }
-    }
-
-    /**
-     * State of the cluster formation.
-     *
-     * @opensearch.internal
-     */
-    static class ClusterFormationState {
         private final Settings settings;
-        private final ClusterState clusterState;
-        private final List<TransportAddress> resolvedAddresses;
-        private final List<DiscoveryNode> foundPeers;
-        private final long currentTerm;
-        private final ElectionStrategy electionStrategy;
-        private final StatusInfo statusInfo;
-
-        ClusterFormationState(
-            Settings settings,
-            ClusterState clusterState,
-            List<TransportAddress> resolvedAddresses,
-            List<DiscoveryNode> foundPeers,
-            long currentTerm,
-            ElectionStrategy electionStrategy,
-            StatusInfo statusInfo
-        ) {
-            this.settings = settings;
-            this.clusterState = clusterState;
-            this.resolvedAddresses = resolvedAddresses;
-            this.foundPeers = foundPeers;
-            this.currentTerm = currentTerm;
-            this.electionStrategy = electionStrategy;
-            this.statusInfo = statusInfo;
-        }
-
-        String getDescription() {
-            if (statusInfo.getStatus() == UNHEALTHY) {
-                return String.format(Locale.ROOT, "this node is unhealthy: %s", statusInfo.getInfo());
-            }
-            final List<String> clusterStateNodes = StreamSupport.stream(
-                clusterState.nodes().getClusterManagerNodes().values().spliterator(),
-                false
-            ).map(n -> n.toString()).collect(Collectors.toList());
-
-            final String discoveryWillContinueDescription = String.format(
-                Locale.ROOT,
-                "node term %d, last-accepted version %d in term %d; discovery will continue using %s from hosts providers and %s from last-known cluster state",
-                currentTerm,
-                clusterState.getVersionOrMetadataVersion(),
-                clusterState.term(),
-                resolvedAddresses,
-                clusterStateNodes
-            );
-
-            final String discoveryStateIgnoringQuorum = String.format(
-                Locale.ROOT,
-                "have discovered %s; %s",
-                foundPeers,
+                @Override
+                        Locale.ROOT,
+ * @opensearch.internal
+                    bootstrappingDescription,
+        Runnable logLastFailedJoinAttempt
+}
+                }
+            } else {
+                    return "a node with id " + realNodeIds;
+        assert warningScheduler == null;
+import org.opensearch.common.unit.TimeValue;
+                clusterState.nodes().getLocalNode(),
+ * Helper for cluster failure events
+                final String bootstrappingDescription;
+        private String describeQuorum(VotingConfiguration votingConfiguration) {
+    }
                 discoveryWillContinueDescription
             );
-
-            if (clusterState.nodes().getLocalNode().isClusterManagerNode() == false) {
-                return String.format(Locale.ROOT, "cluster-manager not discovered yet: %s", discoveryStateIgnoringQuorum);
+            List<DiscoveryNode> foundPeers,
             }
-
-            if (clusterState.getLastAcceptedConfiguration().isEmpty()) {
-                final String bootstrappingDescription;
-
-                if (INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(Settings.EMPTY).equals(INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(settings))) {
-                    bootstrappingDescription = "[" + INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey() + "] is empty on this node";
-                } else {
-                    bootstrappingDescription = String.format(
-                        Locale.ROOT,
+            this.statusInfo = statusInfo;
+        private final List<DiscoveryNode> foundPeers;
+                clusterState.term(),
+    public void stop() {
+                    if (isActive()) {
+    public static final Setting<TimeValue> DISCOVERY_CLUSTER_FORMATION_WARNING_TIMEOUT_SETTING = Setting.timeSetting(
+ *
+                resolvedAddresses,
+                @Override
                         "this node must discover cluster-manager-eligible nodes %s to bootstrap a cluster",
-                        INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(settings)
-                    );
+    }
                 }
-
-                return String.format(
-                    Locale.ROOT,
-                    "cluster-manager not discovered yet, this node has not previously joined a bootstrapped cluster, and %s: %s",
-                    bootstrappingDescription,
-                    discoveryStateIgnoringQuorum
-                );
-            }
-
-            assert clusterState.getLastCommittedConfiguration().isEmpty() == false;
-
-            if (clusterState.getLastCommittedConfiguration().equals(VotingConfiguration.MUST_JOIN_ELECTED_CLUSTER_MANAGER)) {
-                return String.format(
-                    Locale.ROOT,
-                    "cluster-manager not discovered yet and this node was detached from its previous cluster, have discovered %s; %s",
-                    foundPeers,
+        warningScheduler = new WarningScheduler();
+import org.apache.logging.log4j.LogManager;
                     discoveryWillContinueDescription
+ * Modifications Copyright OpenSearch Contributors. See
+        private final List<TransportAddress> resolvedAddresses;
+                "node term %d, last-accepted version %d in term %d; discovery will continue using %s from hosts providers and %s from last-known cluster state",
                 );
-            }
-
-            final String quorumDescription;
-            if (clusterState.getLastAcceptedConfiguration().equals(clusterState.getLastCommittedConfiguration())) {
+        ThreadPool threadPool,
+                public void onFailure(Exception e) {
+ * this file be licensed under the Apache-2.0 license or a
+                isQuorumOrNot,
+import java.util.List;
+    private static final Logger logger = LogManager.getLogger(ClusterFormationFailureHelper.class);
+     */
+    /**
+import java.util.stream.Collectors;
+import java.util.Set;
+                quorumDescription,
+        }
                 quorumDescription = describeQuorum(clusterState.getLastAcceptedConfiguration());
-            } else {
+                if (INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(Settings.EMPTY).equals(INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(settings))) {
+            Settings settings,
+                @Override
+ * specific language governing permissions and limitations
+                    return "emit warning if cluster not formed";
+        TimeValue.timeValueMillis(10000),
+ * ownership. Elasticsearch licenses this file to you under
+        }
+import org.opensearch.common.util.concurrent.AbstractRunnable;
+import java.util.function.Supplier;
+ */
+            return warningScheduler == this;
+                return "two nodes with ids " + realNodeIds;
+import org.opensearch.threadpool.ThreadPool.Names;
+import java.util.HashSet;
+                return String.format(
+                }
+        }
+            final Set<String> realNodeIds = new HashSet<>(nodeIds);
+ * Unless required by applicable law or agreed to in writing,
+ * SPDX-License-Identifier: Apache-2.0
+import org.opensearch.core.common.transport.TransportAddress;
                 quorumDescription = describeQuorum(clusterState.getLastAcceptedConfiguration())
-                    + " and "
+                    logger.debug("unexpected exception scheduling cluster formation warning", e);
+            ClusterState clusterState,
+                "have discovered %s; %s",
+            if (nodeIds.size() == 1) {
+        private final long currentTerm;
+            });
+            final String isQuorumOrNot = electionStrategy.isElectionQuorum(
+                return String.format(Locale.ROOT, "this node is unhealthy: %s", statusInfo.getInfo());
+            this.clusterState = clusterState;
+            this.foundPeers = foundPeers;
+                }
+                    return "one or more nodes that have already participated as cluster-manager-eligible nodes in the cluster but this node was "
+            } else if (nodeIds.size() == 2) {
+            final String quorumDescription;
+        }
+            assert nodeIds.isEmpty() == false;
+        String getDescription() {
+                    }
+        TimeValue.timeValueMillis(1),
                     + describeQuorum(clusterState.getLastCommittedConfiguration());
             }
-
-            final VoteCollection voteCollection = new VoteCollection();
-            foundPeers.forEach(voteCollection::addVote);
-            final String isQuorumOrNot = electionStrategy.isElectionQuorum(
-                clusterState.nodes().getLocalNode(),
-                currentTerm,
+            if (clusterState.getLastAcceptedConfiguration().equals(clusterState.getLastCommittedConfiguration())) {
+                public void onAfter() {
+                    );
+                return String.format(Locale.ROOT, "cluster-manager not discovered yet: %s", discoveryStateIgnoringQuorum);
+            long currentTerm,
+            }
+                return String.format(
+/**
+    }
+        Settings settings,
+            final Set<String> nodeIds = votingConfiguration.getNodeIds();
+import static org.opensearch.monitor.StatusInfo.Status.UNHEALTHY;
+    private volatile WarningScheduler warningScheduler;
                 clusterState.term(),
+        ClusterFormationState(
+            } else {
+        private final StatusInfo statusInfo;
+                if (requiredNodes < realNodeIds.size()) {
                 clusterState.getVersionOrMetadataVersion(),
-                clusterState.getLastCommittedConfiguration(),
+ * Licensed to Elasticsearch under one or more contributor
+        "discovery.cluster_formation_warning_timeout",
                 clusterState.getLastAcceptedConfiguration(),
-                voteCollection
-            ) ? "is a quorum" : "is not a quorum";
-
+     *
+import java.util.Locale;
+                } else {
+                        scheduleNextWarning();
+            final int requiredNodes = nodeIds.size() / 2 + 1;
+            assert requiredNodes <= realNodeIds.size() : nodeIds;
+import org.opensearch.common.Nullable;
+            assert clusterState.getLastCommittedConfiguration().isEmpty() == false;
+import static org.opensearch.cluster.coordination.ClusterBootstrapService.INITIAL_CLUSTER_MANAGER_NODES_SETTING;
+                    if (isActive()) {
+            this.electionStrategy = electionStrategy;
+            ).map(n -> n.toString()).collect(Collectors.toList());
+            this.currentTerm = currentTerm;
+ */
+/*
+                    foundPeers,
+            if (clusterState.getLastCommittedConfiguration().equals(VotingConfiguration.MUST_JOIN_ELECTED_CLUSTER_MANAGER)) {
+ * KIND, either express or implied.  See the License for the
+    }
+            this.resolvedAddresses = resolvedAddresses;
+package org.opensearch.cluster.coordination;
+ * the Apache License, Version 2.0 (the "License"); you may
+ *
+            if (clusterState.getLastAcceptedConfiguration().isEmpty()) {
+                    "cluster-manager not discovered yet and this node was detached from its previous cluster, have discovered %s; %s",
+    private final Supplier<ClusterFormationState> clusterFormationStateSupplier;
+import org.opensearch.gateway.GatewayMetaState;
+                    discoveryStateIgnoringQuorum
+                currentTerm,
+            }
+        this.clusterFormationWarningTimeout = DISCOVERY_CLUSTER_FORMATION_WARNING_TIMEOUT_SETTING.get(settings);
+        private final ClusterState clusterState;
+import org.opensearch.cluster.node.DiscoveryNode;
+ * license agreements. See the NOTICE file distributed with
+        private final ElectionStrategy electionStrategy;
+    ) {
+                        INITIAL_CLUSTER_MANAGER_NODES_SETTING.get(settings)
+                if (nodeIds.contains(GatewayMetaState.STALE_STATE_CONFIG_NODE_ID)) {
+ *
+            if (clusterState.nodes().getLocalNode().isClusterManagerNode() == false) {
+                public String toString() {
+    }
+                @Override
+     *
+            final List<String> clusterStateNodes = StreamSupport.stream(
+ *     http://www.apache.org/licenses/LICENSE-2.0
+        Setting.Property.NodeScope
+            foundPeers.forEach(voteCollection::addVote);
+ * under the License.
+    private class WarningScheduler {
+import org.opensearch.common.settings.Setting;
+                clusterState.getVersionOrMetadataVersion(),
+ *
+                Locale.ROOT,
+ * You may obtain a copy of the License at
+        void scheduleNextWarning() {
+ * The OpenSearch Contributors require contributions made to
+        ) {
+                } else {
+                protected void doRun() {
+import org.opensearch.monitor.StatusInfo;
+                );
+            }
+    public boolean isRunning() {
+    private final TimeValue clusterFormationWarningTimeout;
+                currentTerm,
+            StatusInfo statusInfo
+                    Locale.ROOT,
+                }
+ */
+            realNodeIds.removeIf(ClusterBootstrapService::isBootstrapPlaceholder);
+        this.logLastFailedJoinAttempt = logLastFailedJoinAttempt;
+     * State of the cluster formation.
+    static class ClusterFormationState {
+            threadPool.scheduleUnlessShuttingDown(clusterFormationWarningTimeout, Names.GENERIC, new AbstractRunnable() {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+                false
+    private final Runnable logLastFailedJoinAttempt;
+    );
+import java.util.stream.StreamSupport;
+import org.opensearch.cluster.coordination.CoordinationMetadata.VotingConfiguration;
+            );
+        return warningScheduler != null;
+                clusterStateNodes
+            final String discoveryStateIgnoringQuorum = String.format(
+                        logger.warn(clusterFormationStateSupplier.get().getDescription());
+                    "cluster-manager not discovered yet, this node has not previously joined a bootstrapped cluster, and %s: %s",
+ * software distributed under the License is distributed on an
+                discoveryWillContinueDescription
             return String.format(
+ * not use this file except in compliance with the License.
+                Locale.ROOT,
+        }
+ * GitHub history for details.
+                }
+        this.threadPool = threadPool;
+ * compatible open source license.
+                    return requiredNodes + " nodes with ids " + realNodeIds;
+import org.opensearch.cluster.coordination.CoordinationState.VoteCollection;
+        Supplier<ClusterFormationState> clusterFormationStateSupplier,
+    public void start() {
+     * @opensearch.internal
                 Locale.ROOT,
                 "cluster-manager not discovered or elected yet, an election requires %s, have discovered %s which %s; %s",
-                quorumDescription,
-                foundPeers,
-                isQuorumOrNot,
-                discoveryWillContinueDescription
+                    Locale.ROOT,
+    private final ThreadPool threadPool;
+    /**
+                } else {
             );
-        }
-
-        private String describeQuorum(VotingConfiguration votingConfiguration) {
-            final Set<String> nodeIds = votingConfiguration.getNodeIds();
-            assert nodeIds.isEmpty() == false;
-            final int requiredNodes = nodeIds.size() / 2 + 1;
-
-            final Set<String> realNodeIds = new HashSet<>(nodeIds);
-            realNodeIds.removeIf(ClusterBootstrapService::isBootstrapPlaceholder);
-            assert requiredNodes <= realNodeIds.size() : nodeIds;
-
-            if (nodeIds.size() == 1) {
-                if (nodeIds.contains(GatewayMetaState.STALE_STATE_CONFIG_NODE_ID)) {
-                    return "one or more nodes that have already participated as cluster-manager-eligible nodes in the cluster but this node was "
+            ElectionStrategy electionStrategy,
+    @Nullable // if no warning is scheduled
+            final VoteCollection voteCollection = new VoteCollection();
+ * this work for additional information regarding copyright
                         + "not cluster-manager-eligible the last time it joined the cluster";
-                } else {
-                    return "a node with id " + realNodeIds;
-                }
-            } else if (nodeIds.size() == 2) {
-                return "two nodes with ids " + realNodeIds;
-            } else {
-                if (requiredNodes < realNodeIds.size()) {
-                    return "at least " + requiredNodes + " nodes with ids from " + realNodeIds;
-                } else {
-                    return requiredNodes + " nodes with ids " + realNodeIds;
-                }
+     * @opensearch.internal
             }
-        }
+                    return "at least " + requiredNodes + " nodes with ids from " + realNodeIds;
+                    bootstrappingDescription = String.format(
+import org.apache.logging.log4j.Logger;
+     * A warning scheduler.
+     */
+/*
+            ) ? "is a quorum" : "is not a quorum";
+        private boolean isActive() {
     }
-}
+import org.opensearch.common.settings.Settings;
+        warningScheduler.scheduleNextWarning();
+                foundPeers,
+                clusterState.nodes().getClusterManagerNodes().values().spliterator(),
+    public ClusterFormationFailureHelper(
+        this.clusterFormationStateSupplier = clusterFormationStateSupplier;
+            final String discoveryWillContinueDescription = String.format(
+public class ClusterFormationFailureHelper {
+                clusterState.getLastCommittedConfiguration(),
+                    bootstrappingDescription = "[" + INITIAL_CLUSTER_MANAGER_NODES_SETTING.getKey() + "] is empty on this node";
+                voteCollection
+/*
+                foundPeers,
+                        logLastFailedJoinAttempt.run();
+import org.opensearch.cluster.ClusterState;
+                }
+            if (statusInfo.getStatus() == UNHEALTHY) {
+                    }
+ */
+                    + " and "
+import org.opensearch.threadpool.ThreadPool;
+            this.settings = settings;
+            List<TransportAddress> resolvedAddresses,
+        warningScheduler = null;

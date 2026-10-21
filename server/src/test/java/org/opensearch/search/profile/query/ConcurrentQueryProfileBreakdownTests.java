@@ -1,490 +1,448 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
+        assertEquals(10, testQueryProfileBreakdownCombined.getAvgSliceNodeTime());
+import org.apache.lucene.index.IndexWriterConfig;
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
+    @Before
+            }
+                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
+        final Collector sliceCollector_1 = mock(Collector.class);
+        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
+            // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single leaf
+                // verify there is no min/max/avg for weight type stats
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+                assertEquals(createWeightTime, testQueryProfileBreakdown.toNodeTime());
+        testQueryProfileBreakdown = new ConcurrentQueryProfileBreakdown(ProfileMetricUtil.getDefaultQueryProfileMetrics());
+        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
+        } catch (InterruptedException ex) {
+            }
+        }
+                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
+                assertFalse(
+            }
+        final Directory directory = directoryReader.directory();
+import java.util.Map;
+            assertFalse(
+    private DirectoryReader getDirectoryReader(int numLeaves) throws Exception {
+            assertEquals(20, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
+        final LeafReaderContext sliceLeaf = directoryReader.leaves().get(0);
+                    assertNull(sliceBreakdown.get(timingTypeCountKey));
+                assertEquals(
+import org.opensearch.search.profile.Timer;
+        }
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
+                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+    private static class TestQueryProfileBreakdown extends ContextualProfileBreakdown {
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+        final DirectoryReader directoryReader = getDirectoryReader(1);
+        testQueryProfileBreakdown.getContexts().put(sliceLeaf, leafProfileBreakdown);
+        }
+        assertEquals(66, queryBreakDownMap.size());
+        final Directory directory = newDirectory();
+        } finally {
+        }
+        assertEquals(2, sliceBreakdownMap.size());
+            Map<String, Long> sliceBreakdown = sliceBreakdowns.getValue();
+        for (QueryTimingType timingType : QueryTimingType.values()) {
+                );
+                assertEquals(
+        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+            assertEquals(10, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
+                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
+                queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
+            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+    }
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+                    || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
+                assertNull(sliceBreakdown.get(timingTypeCountKey));
+            assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
+        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
+        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
+                continue;
+import org.opensearch.test.OpenSearchTestCase;
+            String timingTypeKey = timingType.toString();
+        public Map<String, Long> toBreakdownMap() {
+                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX) + leafProfileBreakdownMap.get(timingTypeKey),
+        Map<String, Long> leafBreakDownMap = new HashMap<>();
+                    assertNull(sliceBreakdown.get(timingTypeKey));
+public class ConcurrentQueryProfileBreakdownTests extends OpenSearchTestCase {
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
+        final ContextualProfileBreakdown leafProfileBreakdown = new TestQueryProfileBreakdown(leafProfileBreakdownMap);
+        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
+import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.MIN_PREFIX;
+    }
+import java.util.function.Supplier;
+    public void setup() {
+            // min of 0 means one of the slice didn't worked on any leaf context
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
+        for (QueryTimingType timingType : QueryTimingType.values()) {
+        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
+        // leaf2 profile breakdown is not present in contexts map
+import org.apache.lucene.store.Directory;
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
+        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
+        final ContextualProfileBreakdown leafProfileBreakdown_2 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_2);
  * compatible open source license.
  */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
+            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
  */
-
-package org.opensearch.search.profile.query;
-
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.NoMergePolicy;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.store.Directory;
-import org.opensearch.search.profile.ContextualProfileBreakdown;
-import org.opensearch.search.profile.ProfileMetric;
-import org.opensearch.search.profile.ProfileMetricTests;
-import org.opensearch.search.profile.ProfileMetricUtil;
-import org.opensearch.search.profile.Timer;
-import org.opensearch.test.OpenSearchTestCase;
-import org.junit.Before;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static org.opensearch.search.profile.Timer.TIMING_TYPE_COUNT_SUFFIX;
-import static org.opensearch.search.profile.Timer.TIMING_TYPE_START_TIME_SUFFIX;
-import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.MIN_PREFIX;
-import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.SLICE_END_TIME_SUFFIX;
-import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.SLICE_START_TIME_SUFFIX;
-import static org.mockito.Mockito.mock;
-
-public class ConcurrentQueryProfileBreakdownTests extends OpenSearchTestCase {
-    private ConcurrentQueryProfileBreakdown testQueryProfileBreakdown;
-    private ConcurrentQueryProfileBreakdown testQueryProfileBreakdownCombined;
-    private Timer createWeightTimer;
-
-    @Before
-    public void setup() {
-        testQueryProfileBreakdown = new ConcurrentQueryProfileBreakdown(ProfileMetricUtil.getDefaultQueryProfileMetrics());
-        Collection<Supplier<ProfileMetric>> combinedMetrics = ProfileMetricUtil.getDefaultQueryProfileMetrics();
-        combinedMetrics.addAll(ProfileMetricTests.getNonTimingMetric());
-        testQueryProfileBreakdownCombined = new ConcurrentQueryProfileBreakdown(combinedMetrics);
-        createWeightTimer = testQueryProfileBreakdown.getTimer(QueryTimingType.CREATE_WEIGHT);
-        try {
-            createWeightTimer.start();
-            Thread.sleep(10);
-        } catch (InterruptedException ex) {
-            // ignore
-        } finally {
-            createWeightTimer.stop();
-        }
-    }
-
-    public void testBreakdownMapWithNoLeafContext() throws Exception {
-        final Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
-        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
-        assertEquals(66, queryBreakDownMap.size());
-        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
-            String timingTypeKey = queryTimingType.toString();
-            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
-                assertTrue(createWeightTime > 0);
-                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
-                // verify there is no min/max/avg for weight type stats
-                assertFalse(
-                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
-                );
-                // verify total/min/max/avg node time is same as weight time
-                assertEquals(createWeightTime, testQueryProfileBreakdown.toNodeTime());
-                assertEquals(0, testQueryProfileBreakdown.getMaxSliceNodeTime());
-                assertEquals(0, testQueryProfileBreakdown.getMinSliceNodeTime());
-                assertEquals(0, testQueryProfileBreakdown.getAvgSliceNodeTime());
-                continue;
-            }
-            assertEquals(0, (long) queryBreakDownMap.get(timingTypeKey));
-            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
-            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
-            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
-            assertEquals(0, (long) queryBreakDownMap.get(timingTypeCountKey));
-            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
-            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
-            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
-        }
-    }
-
-    public void testBuildSliceLevelBreakdownWithSingleSlice() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(1);
-        final Directory directory = directoryReader.directory();
-        final LeafReaderContext sliceLeaf = directoryReader.leaves().get(0);
-        final Collector sliceCollector = mock(Collector.class);
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown = new TestQueryProfileBreakdown(leafProfileBreakdownMap);
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector, sliceLeaf);
-        testQueryProfileBreakdown.getContexts().put(sliceLeaf, leafProfileBreakdown);
-        final Map<Collector, Map<String, Long>> sliceBreakdownMap = testQueryProfileBreakdown.buildSliceLevelBreakdown();
-        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
-        assertEquals(1, sliceBreakdownMap.size());
-        assertTrue(sliceBreakdownMap.containsKey(sliceCollector));
-
-        final Map<String, Long> sliceBreakdown = sliceBreakdownMap.entrySet().iterator().next().getValue();
-        for (QueryTimingType timingType : QueryTimingType.values()) {
-            String timingTypeKey = timingType.toString();
-            String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                // there should be no entry for create weight at slice level breakdown map
-                assertNull(sliceBreakdown.get(timingTypeKey));
-                assertNull(sliceBreakdown.get(timingTypeCountKey));
-                continue;
-            }
-
-            // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single leaf
-            assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
-            assertEquals(leafProfileBreakdownMap.get(timingTypeCountKey), sliceBreakdown.get(timingTypeCountKey));
-            assertEquals(
-                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
-                sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
-            );
-            assertEquals(
-                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX) + leafProfileBreakdownMap.get(timingTypeKey),
-                (long) sliceBreakdown.get(timingTypeKey + SLICE_END_TIME_SUFFIX)
-            );
-        }
-        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdown.getAvgSliceNodeTime());
-        directoryReader.close();
-        directory.close();
-    }
-
-    public void testBuildSliceLevelBreakdownWithMultipleSlices() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(2);
-        final Directory directory = directoryReader.directory();
-        final Collector sliceCollector_1 = mock(Collector.class);
-        final Collector sliceCollector_2 = mock(Collector.class);
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final Map<String, Long> leafProfileBreakdownMap_2 = getLeafBreakdownMap(createWeightEndTime + 40, 10, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
-        final ContextualProfileBreakdown leafProfileBreakdown_2 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_2);
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(1), leafProfileBreakdown_2);
-        final Map<Collector, Map<String, Long>> sliceBreakdownMap = testQueryProfileBreakdown.buildSliceLevelBreakdown();
-        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
-        assertEquals(2, sliceBreakdownMap.size());
-
-        for (Map.Entry<Collector, Map<String, Long>> sliceBreakdowns : sliceBreakdownMap.entrySet()) {
-            Map<String, Long> sliceBreakdown = sliceBreakdowns.getValue();
-            Map<String, Long> leafProfileBreakdownMap;
-            if (sliceBreakdowns.getKey().equals(sliceCollector_1)) {
-                leafProfileBreakdownMap = leafProfileBreakdownMap_1;
-            } else {
-                leafProfileBreakdownMap = leafProfileBreakdownMap_2;
-            }
-            for (QueryTimingType timingType : QueryTimingType.values()) {
-                String timingTypeKey = timingType.toString();
-                String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
-
                 if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                    // there should be no entry for create weight at slice level breakdown map
-                    assertNull(sliceBreakdown.get(timingTypeKey));
-                    assertNull(sliceBreakdown.get(timingTypeCountKey));
-                    continue;
-                }
-
-                // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single
-                // leaf
-                assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
-                assertEquals(leafProfileBreakdownMap.get(timingTypeCountKey), sliceBreakdown.get(timingTypeCountKey));
-                assertEquals(
-                    leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
-                    sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
-                );
-                assertEquals(
-                    leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX) + leafProfileBreakdownMap.get(timingTypeKey),
-                    (long) sliceBreakdown.get(timingTypeKey + SLICE_END_TIME_SUFFIX)
-                );
-            }
-        }
-
-        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdown.getAvgSliceNodeTime());
-        directoryReader.close();
-        directory.close();
-    }
-
-    public void testBreakDownMapWithMultipleSlices() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(2);
-        final Directory directory = directoryReader.directory();
-        final Collector sliceCollector_1 = mock(Collector.class);
-        final Collector sliceCollector_2 = mock(Collector.class);
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final Map<String, Long> leafProfileBreakdownMap_2 = getLeafBreakdownMap(createWeightEndTime + 40, 20, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
-        final ContextualProfileBreakdown leafProfileBreakdown_2 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_2);
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(1), leafProfileBreakdown_2);
-
-        Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
-        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
-        assertEquals(66, queryBreakDownMap.size());
-
-        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
-            String timingTypeKey = queryTimingType.toString();
-            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
-                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
-                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
-                // verify there is no min/max/avg for weight type stats
-                assertFalse(
-                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
-                );
-                continue;
-            }
-            assertEquals(50, (long) queryBreakDownMap.get(timingTypeKey));
-            assertEquals(20, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
-            assertEquals(15, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
-            assertEquals(10, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
-            assertEquals(2, (long) queryBreakDownMap.get(timingTypeCountKey));
-            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
-            assertEquals(1, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
-            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
-        }
-
-        assertEquals(20, testQueryProfileBreakdown.getMaxSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
-        assertEquals(15, testQueryProfileBreakdown.getAvgSliceNodeTime());
-        directoryReader.close();
-        directory.close();
-    }
-
-    public void testBreakDownMapWithMultipleSlicesAndOneSliceWithNoLeafContext() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(2);
-        final Directory directory = directoryReader.directory();
-        final Collector sliceCollector_1 = mock(Collector.class);
-        final Collector sliceCollector_2 = mock(Collector.class);
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
-        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
-        // leaf2 profile breakdown is not present in contexts map
-
-        Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
-        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
-        assertEquals(66, queryBreakDownMap.size());
-
-        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
-            String timingTypeKey = queryTimingType.toString();
-            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
-                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
-                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
-                // verify there is no min/max/avg for weight type stats
-                assertFalse(
-                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
-                );
-                continue;
-            }
-            assertEquals(10, (long) queryBreakDownMap.get(timingTypeKey));
-            assertEquals(10, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
-            assertEquals(5, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
-            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
-            assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
-            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
-            // min of 0 means one of the slice didn't worked on any leaf context
-            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
-            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
-        }
-
-        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
         assertEquals(0, testQueryProfileBreakdown.getMinSliceNodeTime());
-        assertEquals(5, testQueryProfileBreakdown.getAvgSliceNodeTime());
+package org.opensearch.search.profile.query;
+            leafBreakDownMap.put(timingTypeKey, timeTaken);
         directoryReader.close();
-        directory.close();
-    }
-
-    public void testOneLeafContextWithEmptySliceCollectorsToLeaves() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(1);
-        final Directory directory = directoryReader.directory();
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
-        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
-        final Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
-        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
-        assertEquals(26, queryBreakDownMap.size());
-        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
-            String timingTypeKey = queryTimingType.toString();
             String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
-                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
+            assertNotNull(queryBreakDownMap.get(timingTypeCountKey));
+        final Collector sliceCollector = mock(Collector.class);
+import org.opensearch.search.profile.ProfileMetric;
+        }
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+        final Directory directory = directoryReader.directory();
+            // verify there is no min/max/avg for current breakdown type stats
+import org.apache.lucene.document.Document;
+        iw.deleteDocuments(new Term("field1", "value3"));
+            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
+        final Map<Collector, Map<String, Long>> sliceBreakdownMap = testQueryProfileBreakdown.buildSliceLevelBreakdown();
+        assertEquals(0, testQueryProfileBreakdown.getAvgSliceNodeTime());
+        public TestQueryProfileBreakdown(Map<String, Long> breakdownMap) {
+        final Directory directory = directoryReader.directory();
+        @Override
                 assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
+            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX, startTime);
+        final Map<String, Long> leafProfileBreakdownMap_2 = getLeafBreakdownMap(createWeightEndTime + 40, 20, 1);
+ * Modifications Copyright OpenSearch Contributors. See
+                assertEquals(0, testQueryProfileBreakdown.getMaxSliceNodeTime());
+                );
                 // verify there is no min/max/avg for weight type stats
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
+        final DirectoryReader directoryReader = getDirectoryReader(2);
+        directory.close();
+        try {
+        directoryReader.close();
+import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.SLICE_START_TIME_SUFFIX;
+    }
+        assertEquals(1, sliceBreakdownMap.size());
+                continue;
+        final DirectoryReader directoryReader = getDirectoryReader(1);
+            assertEquals(
+import static org.opensearch.search.profile.Timer.TIMING_TYPE_START_TIME_SUFFIX;
+            assertEquals(
+        final DirectoryReader directoryReader = getDirectoryReader(2);
+            for (QueryTimingType timingType : QueryTimingType.values()) {
+            }
+import org.opensearch.search.profile.ProfileMetricTests;
+        directoryReader.close();
+        private Map<String, Long> breakdownMap;
+            leafBreakDownMap.put(timingTypeKey, timeTaken);
+            String timingTypeKey = timingType.toString();
+        final ContextualProfileBreakdown leafProfileBreakdown = new TestQueryProfileBreakdown(leafProfileBreakdownMap);
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+import org.junit.Before;
+                    continue;
                 assertFalse(
-                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
-                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+            return null;
+import java.util.HashMap;
+        for (QueryTimingType queryTimingType : QueryTimingType.values()) {
                         || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
-                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
+            String timingTypeKey = queryTimingType.toString();
+        final Directory directory = directoryReader.directory();
+    }
+            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+    private ConcurrentQueryProfileBreakdown testQueryProfileBreakdown;
+                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
+            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
+        directory.close();
+        final Collector sliceCollector_2 = mock(Collector.class);
+        assertEquals(26, queryBreakDownMap.size());
+            createWeightTimer.stop();
                         || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
                 );
+            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_COUNT_SUFFIX, count);
+            String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
+        final Map<String, Long> sliceBreakdown = sliceBreakdownMap.entrySet().iterator().next().getValue();
+                );
+        directoryReader.close();
+    }
+            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
+            }
+        final Directory directory = directoryReader.directory();
+        }
+        for (QueryTimingType timingType : QueryTimingType.values()) {
+import org.apache.lucene.index.IndexWriter;
+            Document document = new Document();
+import org.apache.lucene.document.Field;
+                leafProfileBreakdownMap = leafProfileBreakdownMap_2;
+                (long) sliceBreakdown.get(timingTypeKey + SLICE_END_TIME_SUFFIX)
+                // verify total/min/max/avg node time is same as weight time
+ * this file be licensed under the Apache-2.0 license or a
+            iw.commit();
+        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
                 continue;
+            String timingTypeKey = timingType.toString();
+                // don't add anything
+        @Override
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
+                assertEquals(0, testQueryProfileBreakdown.getMinSliceNodeTime());
+        directoryReader.close();
+            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
+        assertEquals(0, testQueryProfileBreakdown.getMinSliceNodeTime());
+        final DirectoryReader directoryReader = getDirectoryReader(2);
+import org.apache.lucene.index.Term;
+        return DirectoryReader.open(directory);
+            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
             }
             assertNotNull(queryBreakDownMap.get(timingTypeKey));
-            assertNotNull(queryBreakDownMap.get(timingTypeCountKey));
-            // verify there is no min/max/avg for current breakdown type stats
-            assertFalse(
-                queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
-                    || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
-                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
-                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
+            assertEquals(
                     || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
-                    || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
-            );
         }
-        assertEquals(0, testQueryProfileBreakdown.getMaxSliceNodeTime());
-        assertEquals(0, testQueryProfileBreakdown.getMinSliceNodeTime());
-        assertEquals(0, testQueryProfileBreakdown.getAvgSliceNodeTime());
-        directoryReader.close();
-        directory.close();
-    }
-
-    public void testBuildSliceLevelBreakdownWithSingleSliceCombinedMetricOnly() throws Exception {
-        final DirectoryReader directoryReader = getDirectoryReader(1);
-        final Directory directory = directoryReader.directory();
-        final LeafReaderContext sliceLeaf = directoryReader.leaves().get(0);
-        final Collector sliceCollector = mock(Collector.class);
-        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
-        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
-        final Map<String, Long> leafProfileBreakdownMap = getCombinedLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
-        final ContextualProfileBreakdown leafProfileBreakdown = new TestQueryProfileBreakdown(leafProfileBreakdownMap);
-        testQueryProfileBreakdownCombined.associateCollectorToLeaves(sliceCollector, sliceLeaf);
-        testQueryProfileBreakdownCombined.getContexts().put(sliceLeaf, leafProfileBreakdown);
         final Map<Collector, Map<String, Long>> sliceBreakdownMap = testQueryProfileBreakdownCombined.buildSliceLevelBreakdown();
-        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
-        assertEquals(1, sliceBreakdownMap.size());
-        assertTrue(sliceBreakdownMap.containsKey(sliceCollector));
-
-        final Map<String, Long> sliceBreakdown = sliceBreakdownMap.entrySet().iterator().next().getValue();
-        for (QueryTimingType timingType : QueryTimingType.values()) {
-            String timingTypeKey = timingType.toString();
-            String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
-
-            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                // there should be no entry for create weight at slice level breakdown map
-                assertNull(sliceBreakdown.get(timingTypeKey));
-                assertNull(sliceBreakdown.get(timingTypeCountKey));
-                continue;
-            }
-
-            // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single leaf
-            assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
+                    leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX) + leafProfileBreakdownMap.get(timingTypeKey),
             assertEquals(leafProfileBreakdownMap.get(timingTypeCountKey), sliceBreakdown.get(timingTypeCountKey));
-            assertEquals(
-                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
-                sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
+        assertEquals(10, testQueryProfileBreakdown.getMaxSliceNodeTime());
+            assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
+                assertFalse(
+        iw.close();
+import org.apache.lucene.index.LeafReaderContext;
+            assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
+        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
+            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX, startTime);
             );
-            assertEquals(
+        assertEquals(15, testQueryProfileBreakdown.getAvgSliceNodeTime());
+        for (int i = 0; i < numLeaves; ++i) {
+                // leaf
+                assertFalse(
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+            createWeightTimer.start();
+                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
+        return leafBreakDownMap;
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
+                sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
+        assertEquals(20, testQueryProfileBreakdown.getMaxSliceNodeTime());
+            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+        testQueryProfileBreakdownCombined = new ConcurrentQueryProfileBreakdown(combinedMetrics);
+        assertEquals(66, queryBreakDownMap.size());
+        Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
+import java.util.List;
+        final DirectoryReader directoryReader = getDirectoryReader(1);
+        final Map<Collector, Map<String, Long>> sliceBreakdownMap = testQueryProfileBreakdown.buildSliceLevelBreakdown();
+        final Collector sliceCollector = mock(Collector.class);
+                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
+        assertEquals(10, testQueryProfileBreakdownCombined.getMaxSliceNodeTime());
+                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
+                // there should be no entry for create weight at slice level breakdown map
+        final Directory directory = directoryReader.directory();
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+    }
+                sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
+                    leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
+            assertEquals(1, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
+        assertFalse(queryBreakDownMap == null || queryBreakDownMap.isEmpty());
+                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
+import static org.opensearch.search.profile.query.ConcurrentQueryProfileBreakdown.SLICE_END_TIME_SUFFIX;
+        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
+ * GitHub history for details.
+            String timingTypeKey = queryTimingType.toString();
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_1, directoryReader.leaves().get(0));
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
+                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
+import org.opensearch.search.profile.ContextualProfileBreakdown;
+            }
+        assertEquals(10, testQueryProfileBreakdown.getAvgSliceNodeTime());
+        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
+        }
+        final Collector sliceCollector_1 = mock(Collector.class);
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+        testQueryProfileBreakdownCombined.associateCollectorToLeaves(sliceCollector, sliceLeaf);
                 leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX) + leafProfileBreakdownMap.get(timingTypeKey),
+        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
+                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
+import org.opensearch.search.profile.ProfileMetricUtil;
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector_2, directoryReader.leaves().get(1));
+        assertEquals(5, testQueryProfileBreakdown.getAvgSliceNodeTime());
+                leafProfileBreakdownMap.get(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX),
+                leafProfileBreakdownMap = leafProfileBreakdownMap_1;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+        final Collector sliceCollector_1 = mock(Collector.class);
+        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+        final Map<String, Long> leafProfileBreakdownMap = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+                    sliceBreakdown.get(timingTypeKey + SLICE_START_TIME_SUFFIX)
+        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
+            document.add(new StringField("field2", "value" + i, Field.Store.NO));
+        final Map<String, Long> leafProfileBreakdownMap = getCombinedLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+        assertTrue(sliceBreakdownMap.containsKey(sliceCollector));
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
+            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
+            assertEquals(2, (long) queryBreakDownMap.get(timingTypeCountKey));
+import org.apache.lucene.index.NoMergePolicy;
+                );
+import org.apache.lucene.document.StringField;
+                continue;
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeKey)
+                    (long) sliceBreakdown.get(timingTypeKey + SLICE_END_TIME_SUFFIX)
+        combinedMetrics.addAll(ProfileMetricTests.getNonTimingMetric());
+        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+    public void testOneLeafContextWithEmptySliceCollectorsToLeaves() throws Exception {
+            // ignore
+/*
+ *
+                String timingTypeKey = timingType.toString();
+        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
+                // verify there is no min/max/avg for weight type stats
+                );
+    private Timer createWeightTimer;
+            } else {
+/*
+                assertNull(sliceBreakdown.get(timingTypeCountKey));
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
+        directory.close();
+                assertTrue(createWeightTime > 0);
+        }
+                assertEquals(leafProfileBreakdownMap.get(timingTypeKey), sliceBreakdown.get(timingTypeKey));
+            Map<String, Long> leafProfileBreakdownMap;
+            return breakdownMap;
+        final Map<String, Long> leafProfileBreakdownMap_1 = getLeafBreakdownMap(createWeightEndTime + 10, 10, 1);
+        final Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey)
+            assertEquals(
+    }
+                assertNull(sliceBreakdown.get(timingTypeKey));
+            assertEquals(5, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
+            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
+            assertEquals(0, (long) queryBreakDownMap.get(timingTypeKey));
+            assertEquals(leafProfileBreakdownMap.get(timingTypeCountKey), sliceBreakdown.get(timingTypeCountKey));
+                assertEquals(1, (long) queryBreakDownMap.get(timingTypeCountKey));
+        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
+        final Collector sliceCollector_2 = mock(Collector.class);
+ * SPDX-License-Identifier: Apache-2.0
+            iw.addDocument(document);
+            String timingTypeKey = queryTimingType.toString();
+            if (queryTimingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+        for (Map.Entry<Collector, Map<String, Long>> sliceBreakdowns : sliceBreakdownMap.entrySet()) {
+            );
+                continue;
+    private Map<String, Long> getLeafBreakdownMap(long startTime, long timeTaken, long count) {
+        createWeightTimer = testQueryProfileBreakdown.getTimer(QueryTimingType.CREATE_WEIGHT);
+            assertEquals(1, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
+        final Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
+                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
+            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+        final ContextualProfileBreakdown leafProfileBreakdown_1 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_1);
+            String timingTypeKey = timingType.toString();
+            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_COUNT_SUFFIX, count);
+    public void testBreakdownMapWithNoLeafContext() throws Exception {
+            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeCountKey));
+                // don't add anything
+                // verify there is no min/max/avg for weight type stats
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(1), leafProfileBreakdown_2);
+        final Collector sliceCollector_2 = mock(Collector.class);
+        testQueryProfileBreakdownCombined.getContexts().put(sliceLeaf, leafProfileBreakdown);
+                String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
+                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
+            assertEquals(10, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey));
+        directory.close();
+            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
+        directoryReader.close();
+        }
+        Map<String, Long> queryBreakDownMap = testQueryProfileBreakdown.toBreakdownMap();
+    public void testBuildSliceLevelBreakdownWithSingleSliceCombinedMetricOnly() throws Exception {
+}
+            // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single leaf
+            assertEquals(15, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey));
+            assertEquals(10, (long) queryBreakDownMap.get(timingTypeKey));
+    }
+            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
+        final LeafReaderContext sliceLeaf = directoryReader.leaves().get(0);
+        directory.close();
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+    }
+    public void testBuildSliceLevelBreakdownWithSingleSlice() throws Exception {
+            super(List.of());
+                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
+            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeCountKey));
+import org.apache.lucene.search.Collector;
+        }
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
+                }
+    }
+        testQueryProfileBreakdown.associateCollectorToLeaves(sliceCollector, sliceLeaf);
+        assertTrue(sliceBreakdownMap.containsKey(sliceCollector));
+    private Map<String, Long> getCombinedLeafBreakdownMap(long startTime, long timeTaken, long count) {
+        assertEquals(0, testQueryProfileBreakdown.getMaxSliceNodeTime());
+            Thread.sleep(10);
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+        assertEquals(10, testQueryProfileBreakdown.getMinSliceNodeTime());
+            String timingTypeCountKey = queryTimingType + TIMING_TYPE_COUNT_SUFFIX;
+        IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE));
+        for (QueryTimingType timingType : QueryTimingType.values()) {
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeKey)
+    public void testBuildSliceLevelBreakdownWithMultipleSlices() throws Exception {
+            assertEquals(0, (long) queryBreakDownMap.get(timingTypeCountKey));
+                // for other timing type we will have all the value and will be same as leaf breakdown as there is single slice and single
+                final long createWeightTime = queryBreakDownMap.get(timingTypeKey);
+        final Map<String, Long> sliceBreakdown = sliceBreakdownMap.entrySet().iterator().next().getValue();
+        assertEquals(10, testQueryProfileBreakdown.getAvgSliceNodeTime());
+                assertNull(sliceBreakdown.get(timingTypeKey));
+                assertEquals(leafProfileBreakdownMap.get(timingTypeCountKey), sliceBreakdown.get(timingTypeCountKey));
+                assertEquals(createWeightTimer.getApproximateTiming(), createWeightTime);
+        final ContextualProfileBreakdown leafProfileBreakdown_2 = new TestQueryProfileBreakdown(leafProfileBreakdownMap_2);
+        leafBreakDownMap.put("test_metric", 123L);
+        assertFalse(sliceBreakdownMap == null || sliceBreakdownMap.isEmpty());
+            }
+        final long createWeightEarliestStartTime = createWeightTimer.getEarliestTimerStartTime();
+                continue;
+    }
+    }
+    public void testBreakDownMapWithMultipleSlices() throws Exception {
+import java.util.Collection;
+            String timingTypeKey = queryTimingType.toString();
+            if (sliceBreakdowns.getKey().equals(sliceCollector_1)) {
+            assertEquals(0, (long) queryBreakDownMap.get(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey));
+        assertEquals(1, sliceBreakdownMap.size());
+        assertEquals(leafProfileBreakdownMap.get("value"), sliceBreakdown.get("value"));
+            String timingTypeCountKey = timingTypeKey + TIMING_TYPE_COUNT_SUFFIX;
+    private ConcurrentQueryProfileBreakdown testQueryProfileBreakdownCombined;
+        directory.close();
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+            document.add(new StringField("field1", "value" + i, Field.Store.NO));
+                        || queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.AVG_PREFIX + timingTypeCountKey)
+    public void testBreakDownMapWithMultipleSlicesAndOneSliceWithNoLeafContext() throws Exception {
+                continue;
+        assertEquals(66, queryBreakDownMap.size());
+            );
+                assertEquals(0, testQueryProfileBreakdown.getAvgSliceNodeTime());
+        }
+                continue;
+            assertEquals(50, (long) queryBreakDownMap.get(timingTypeKey));
+                    queryBreakDownMap.containsKey(ConcurrentQueryProfileBreakdown.MAX_PREFIX + timingTypeKey)
+            }
+        final long createWeightEndTime = createWeightEarliestStartTime + createWeightTimer.getApproximateTiming();
+            this.breakdownMap = breakdownMap;
+import static org.mockito.Mockito.mock;
+import static org.opensearch.search.profile.Timer.TIMING_TYPE_COUNT_SUFFIX;
+        Collection<Supplier<ProfileMetric>> combinedMetrics = ProfileMetricUtil.getDefaultQueryProfileMetrics();
+                    // there should be no entry for create weight at slice level breakdown map
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(1), leafProfileBreakdown_2);
+        }
+        assertEquals(10, testQueryProfileBreakdownCombined.getMinSliceNodeTime());
+        Map<String, Long> leafBreakDownMap = new HashMap<>();
+        testQueryProfileBreakdown.getContexts().put(directoryReader.leaves().get(0), leafProfileBreakdown_1);
+            );
+ * The OpenSearch Contributors require contributions made to
+        return leafBreakDownMap;
                 (long) sliceBreakdown.get(timingTypeKey + SLICE_END_TIME_SUFFIX)
             );
+            assertEquals(0, (long) queryBreakDownMap.get(MIN_PREFIX + timingTypeKey));
+        final Map<String, Long> leafProfileBreakdownMap_2 = getLeafBreakdownMap(createWeightEndTime + 40, 10, 1);
+import org.apache.lucene.index.DirectoryReader;
+                // there should be no entry for create weight at slice level breakdown map
+                        || queryBreakDownMap.containsKey(MIN_PREFIX + timingTypeCountKey)
         }
-        assertEquals(leafProfileBreakdownMap.get("value"), sliceBreakdown.get("value"));
-        assertEquals(10, testQueryProfileBreakdownCombined.getMaxSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdownCombined.getMinSliceNodeTime());
-        assertEquals(10, testQueryProfileBreakdownCombined.getAvgSliceNodeTime());
-        directoryReader.close();
-        directory.close();
-    }
-
-    private Map<String, Long> getLeafBreakdownMap(long startTime, long timeTaken, long count) {
-        Map<String, Long> leafBreakDownMap = new HashMap<>();
-        for (QueryTimingType timingType : QueryTimingType.values()) {
-            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                // don't add anything
-                continue;
             }
-            String timingTypeKey = timingType.toString();
-            leafBreakDownMap.put(timingTypeKey, timeTaken);
-            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_COUNT_SUFFIX, count);
-            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX, startTime);
-        }
-        return leafBreakDownMap;
-    }
-
-    private Map<String, Long> getCombinedLeafBreakdownMap(long startTime, long timeTaken, long count) {
-        Map<String, Long> leafBreakDownMap = new HashMap<>();
-        for (QueryTimingType timingType : QueryTimingType.values()) {
-            if (timingType.equals(QueryTimingType.CREATE_WEIGHT)) {
-                // don't add anything
-                continue;
-            }
-            String timingTypeKey = timingType.toString();
-            leafBreakDownMap.put(timingTypeKey, timeTaken);
-            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_COUNT_SUFFIX, count);
-            leafBreakDownMap.put(timingTypeKey + TIMING_TYPE_START_TIME_SUFFIX, startTime);
-        }
-        leafBreakDownMap.put("test_metric", 123L);
-        return leafBreakDownMap;
-    }
-
-    private DirectoryReader getDirectoryReader(int numLeaves) throws Exception {
-        final Directory directory = newDirectory();
-        IndexWriter iw = new IndexWriter(directory, new IndexWriterConfig(new StandardAnalyzer()).setMergePolicy(NoMergePolicy.INSTANCE));
-
-        for (int i = 0; i < numLeaves; ++i) {
-            Document document = new Document();
-            document.add(new StringField("field1", "value" + i, Field.Store.NO));
-            document.add(new StringField("field2", "value" + i, Field.Store.NO));
-            iw.addDocument(document);
-            iw.commit();
-        }
-        iw.deleteDocuments(new Term("field1", "value3"));
-        iw.close();
-        return DirectoryReader.open(directory);
-    }
-
-    private static class TestQueryProfileBreakdown extends ContextualProfileBreakdown {
-        private Map<String, Long> breakdownMap;
-
-        public TestQueryProfileBreakdown(Map<String, Long> breakdownMap) {
-            super(List.of());
-            this.breakdownMap = breakdownMap;
-        }
-
-        @Override
-        public Map<String, Long> toBreakdownMap() {
-            return breakdownMap;
-        }
-
-        @Override
         public ContextualProfileBreakdown context(Object context) {
-            return null;
-        }
-    }
-}

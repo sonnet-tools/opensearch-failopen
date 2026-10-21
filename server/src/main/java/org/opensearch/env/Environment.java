@@ -1,378 +1,328 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
- *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.env;
-
-import org.opensearch.common.SuppressForbidden;
-import org.opensearch.common.annotation.PublicApi;
-import org.opensearch.common.io.PathUtils;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Setting.Property;
-import org.opensearch.common.settings.Settings;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.nio.file.FileStore;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
-/**
- * The environment of where things exists.
- *
- * @opensearch.api
- */
-@PublicApi(since = "1.0.0")
-@SuppressForbidden(reason = "configures paths for the system")
-// TODO: move PathUtils to be package-private here instead of
-// public+forbidden api!
-public class Environment {
-
-    private static final Path[] EMPTY_PATH_ARRAY = new Path[0];
-
-    public static final Setting<String> PATH_HOME_SETTING = Setting.simpleString("path.home", Property.NodeScope);
-    public static final Setting<List<String>> PATH_DATA_SETTING = Setting.listSetting(
-        "path.data",
-        Collections.emptyList(),
-        Function.identity(),
-        Property.NodeScope
-    );
-    public static final Setting<String> PATH_LOGS_SETTING = new Setting<>("path.logs", "", Function.identity(), Property.NodeScope);
-    public static final Setting<List<String>> PATH_REPO_SETTING = Setting.listSetting(
-        "path.repo",
-        Collections.emptyList(),
-        Function.identity(),
-        Property.NodeScope
-    );
-    public static final Setting<String> PATH_SHARED_DATA_SETTING = Setting.simpleString("path.shared_data", Property.NodeScope);
-    public static final Setting<String> PIDFILE_SETTING = Setting.simpleString("pidfile", Property.Deprecated, Property.NodeScope);
-    public static final Setting<String> NODE_PIDFILE_SETTING = Setting.simpleString("node.pidfile", PIDFILE_SETTING, Property.NodeScope);
-
-    private final Settings settings;
-
-    private final Path[] dataFiles;
-
-    private final Path[] repoFiles;
-
-    private final Path configDir;
-
-    private final Path pluginsDir;
-
-    private final Path extensionsDir;
-
-    private final Path modulesDir;
-
-    private final Path sharedDataDir;
-
-    /** location of bin/, used by plugin manager */
-    private final Path binDir;
-
-    /** location of lib/, */
-    private final Path libDir;
-
-    private final Path logsDir;
-
-    /** Path to the PID file (can be null if no PID file is configured) **/
-    private final Path pidFile;
-
-    /** Path to the temporary file directory used by the JDK */
-    private final Path tmpDir;
-
-    public Environment(final Settings settings, final Path configPath) {
-        this(settings, configPath, true);
-    }
-
-    public Environment(final Settings settings, final Path configPath, final boolean nodeLocalStorage) {
-        this(settings, configPath, nodeLocalStorage, PathUtils.get(System.getProperty("java.io.tmpdir")));
-    }
-
-    // Should only be called directly by this class's unit tests
-    Environment(final Settings settings, final Path configPath, final boolean nodeLocalStorage, final Path tmpPath) {
-        final Path homeFile;
-        if (PATH_HOME_SETTING.exists(settings)) {
-            homeFile = PathUtils.get(PATH_HOME_SETTING.get(settings)).toAbsolutePath().normalize();
-        } else {
-            throw new IllegalStateException(PATH_HOME_SETTING.getKey() + " is not configured");
-        }
-
-        if (configPath != null) {
-            configDir = configPath.toAbsolutePath().normalize();
-        } else {
-            configDir = homeFile.resolve("config");
-        }
-
         tmpDir = Objects.requireNonNull(tmpPath);
-
-        pluginsDir = homeFile.resolve("plugins");
-        extensionsDir = homeFile.resolve("extensions");
-
-        List<String> dataPaths = PATH_DATA_SETTING.get(settings);
-        if (nodeLocalStorage) {
-            if (dataPaths.isEmpty() == false) {
-                dataFiles = new Path[dataPaths.size()];
-                for (int i = 0; i < dataPaths.size(); i++) {
-                    dataFiles[i] = PathUtils.get(dataPaths.get(i)).toAbsolutePath().normalize();
-                }
-            } else {
-                dataFiles = new Path[] { homeFile.resolve("data") };
-            }
-        } else {
-            if (dataPaths.isEmpty()) {
-                dataFiles = EMPTY_PATH_ARRAY;
-            } else {
-                final String paths = String.join(",", dataPaths);
-                throw new IllegalStateException("node does not require local storage yet path.data is set to [" + paths + "]");
-            }
-        }
-        if (PATH_SHARED_DATA_SETTING.exists(settings)) {
-            sharedDataDir = PathUtils.get(PATH_SHARED_DATA_SETTING.get(settings)).toAbsolutePath().normalize();
-        } else {
-            sharedDataDir = null;
-        }
-        List<String> repoPaths = PATH_REPO_SETTING.get(settings);
-        if (repoPaths.isEmpty()) {
-            repoFiles = EMPTY_PATH_ARRAY;
-        } else {
-            repoFiles = new Path[repoPaths.size()];
-            for (int i = 0; i < repoPaths.size(); i++) {
-                repoFiles[i] = PathUtils.get(repoPaths.get(i)).toAbsolutePath().normalize();
-            }
-        }
-
-        // this is trappy, Setting#get(Settings) will get a fallback setting yet return false for Settings#exists(Settings)
-        if (PATH_LOGS_SETTING.exists(settings)) {
-            logsDir = PathUtils.get(PATH_LOGS_SETTING.get(settings)).toAbsolutePath().normalize();
-        } else {
-            logsDir = homeFile.resolve("logs");
-        }
-
-        if (NODE_PIDFILE_SETTING.exists(settings) || PIDFILE_SETTING.exists(settings)) {
-            pidFile = PathUtils.get(NODE_PIDFILE_SETTING.get(settings)).toAbsolutePath().normalize();
-        } else {
-            pidFile = null;
-        }
-
-        binDir = homeFile.resolve("bin");
-        libDir = homeFile.resolve("lib");
-        modulesDir = homeFile.resolve("modules");
-
-        final Settings.Builder finalSettings = Settings.builder().put(settings);
-        if (PATH_DATA_SETTING.exists(settings)) {
-            finalSettings.putList(PATH_DATA_SETTING.getKey(), Arrays.stream(dataFiles).map(Path::toString).collect(Collectors.toList()));
-        }
-        finalSettings.put(PATH_HOME_SETTING.getKey(), homeFile);
-        finalSettings.put(PATH_LOGS_SETTING.getKey(), logsDir.toString());
-        if (PATH_REPO_SETTING.exists(settings)) {
-            finalSettings.putList(
-                Environment.PATH_REPO_SETTING.getKey(),
-                Arrays.stream(repoFiles).map(Path::toString).collect(Collectors.toList())
-            );
-        }
-        if (PATH_SHARED_DATA_SETTING.exists(settings)) {
-            assert sharedDataDir != null;
-            finalSettings.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), sharedDataDir.toString());
-        }
-        if (NODE_PIDFILE_SETTING.exists(settings)) {
-            assert pidFile != null;
-            finalSettings.put(Environment.NODE_PIDFILE_SETTING.getKey(), pidFile.toString());
-        } else if (PIDFILE_SETTING.exists(settings)) {
-            assert pidFile != null;
             finalSettings.put(Environment.PIDFILE_SETTING.getKey(), pidFile.toString());
-        }
-        this.settings = finalSettings.build();
+        if (PATH_DATA_SETTING.exists(settings)) {
     }
-
-    /**
-     * The settings used to build this environment.
-     */
-    public Settings settings() {
-        return this.settings;
-    }
-
-    /**
-     * The data location.
-     */
-    public Path[] dataFiles() {
-        return dataFiles;
-    }
-
-    /**
-     * The shared data location
-     */
-    public Path sharedDataDir() {
-        return sharedDataDir;
-    }
-
-    /**
-     * The shared filesystem repo locations.
-     */
-    public Path[] repoFiles() {
-        return repoFiles;
-    }
-
-    /**
-     * Resolves the specified location against the list of configured repository roots
-     * <p>
-     * If the specified location doesn't match any of the roots, returns null.
-     */
-    public Path resolveRepoFile(String location) {
-        return PathUtils.get(repoFiles, location);
-    }
-
-    /**
-     * Checks if the specified URL is pointing to the local file system and if it does, resolves the specified url
-     * against the list of configured repository roots
-     * <p>
-     * If the specified url doesn't match any of the roots, returns null.
-     */
-    public URL resolveRepoURL(URL url) {
-        try {
-            if ("file".equalsIgnoreCase(url.getProtocol())) {
-                if (url.getHost() == null || "".equals(url.getHost())) {
-                    // only local file urls are supported
-                    Path path = PathUtils.get(repoFiles, url.toURI());
-                    if (path == null) {
-                        // Couldn't resolve against known repo locations
-                        return null;
-                    }
-                    // Normalize URL
-                    return path.toUri().toURL();
-                }
-                return null;
-            } else if ("jar".equals(url.getProtocol())) {
-                String file = url.getFile();
-                int pos = file.indexOf("!/");
-                if (pos < 0) {
-                    return null;
-                }
-                String jarTail = file.substring(pos);
+            repoFiles = EMPTY_PATH_ARRAY;
+        assertEquals(actual.modulesDir(), expected.modulesDir(), "modulesDir");
+// TODO: move PathUtils to be package-private here instead of
                 String filePath = file.substring(0, pos);
-                URL internalUrl = new URL(filePath);
-                URL normalizedUrl = resolveRepoURL(internalUrl);
-                if (normalizedUrl == null) {
+                int pos = file.indexOf("!/");
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+ *
+        }
+        binDir = homeFile.resolve("bin");
+            assert pidFile != null;
+import java.util.Arrays;
+     */
+    public Environment(final Settings settings, final Path configPath, final boolean nodeLocalStorage) {
+            if ("file".equalsIgnoreCase(url.getProtocol())) {
+                throw new IllegalStateException("node does not require local storage yet path.data is set to [" + paths + "]");
+    }
+        return sharedDataDir;
+        assertEquals(actual.pidFile(), expected.pidFile(), "pidFile");
+            configDir = homeFile.resolve("config");
+     * The shared data location
+        if (PATH_SHARED_DATA_SETTING.exists(settings)) {
+    /**
+            assert sharedDataDir != null;
+ * software distributed under the License is distributed on an
                     return null;
+    private final Path logsDir;
+        modulesDir = homeFile.resolve("modules");
+                String jarTail = file.substring(pos);
+    }
+        assertEquals(actual.repoFiles(), expected.repoFiles(), "repoFiles");
                 }
                 return new URL("jar", "", normalizedUrl.toExternalForm() + jarTail);
-            } else {
-                // It's not file or jar url and it didn't match the white list - reject
-                return null;
-            }
-        } catch (MalformedURLException ex) {
-            // cannot make sense of this file url
-            return null;
-        } catch (URISyntaxException ex) {
-            return null;
-        }
+            configDir = configPath.toAbsolutePath().normalize();
+        final Path homeFile;
     }
-
-    /**
-     * The config directory.
-     */
-    public Path configDir() {
-        return configDir;
-    }
-
-    public Path pluginsDir() {
-        return pluginsDir;
-    }
-
-    public Path binDir() {
+ * KIND, either express or implied.  See the License for the
+    /** Path to the PID file (can be null if no PID file is configured) **/
         return binDir;
     }
-
-    public Path libDir() {
-        return libDir;
-    }
-
-    public Path modulesDir() {
-        return modulesDir;
-    }
-
-    public Path logsDir() {
-        return logsDir;
-    }
-
-    /**
-     * The PID file location (can be null if no PID file is configured)
-     */
-    public Path pidFile() {
-        return pidFile;
-    }
-
+                    // Normalize URL
+            }
+ * GitHub history for details.
+        }
+            }
+ * not use this file except in compliance with the License.
+        } else {
+        Collections.emptyList(),
+        }
+        if (PATH_SHARED_DATA_SETTING.exists(settings)) {
+ */
+        return this.settings;
+            throw new IOException("Configured temporary file directory [" + tmpDir + "] is not a directory");
     /** Path to the default temp directory used by the JDK */
+     */
+    /** location of bin/, used by plugin manager */
+        List<String> dataPaths = PATH_DATA_SETTING.get(settings);
+    );
+    public static final Setting<List<String>> PATH_REPO_SETTING = Setting.listSetting(
+import org.opensearch.common.SuppressForbidden;
+    /**
+import java.nio.file.FileStore;
+ * specific language governing permissions and limitations
+                    // only local file urls are supported
+        return modulesDir;
+ * @opensearch.api
+        libDir = homeFile.resolve("lib");
+    /**
+     */
+    }
+            } else {
+    private final Path tmpDir;
+        }
+    public Settings settings() {
+    }
+        List<String> repoPaths = PATH_REPO_SETTING.get(settings);
+    }
+                final String paths = String.join(",", dataPaths);
+import java.net.MalformedURLException;
+ * this file be licensed under the Apache-2.0 license or a
+import java.nio.file.Path;
+import java.util.Collections;
+ */
+     */
+ * Unless required by applicable law or agreed to in writing,
+        } else {
+    private final Path libDir;
+        Function.identity(),
+            );
+     * <p>
+ * ownership. Elasticsearch licenses this file to you under
+        if (PATH_LOGS_SETTING.exists(settings)) {
+                    }
+                if (pos < 0) {
+    public Path libDir() {
+                dataFiles = new Path[] { homeFile.resolve("data") };
+        Function.identity(),
+ */
+    public Path modulesDir() {
+                Environment.PATH_REPO_SETTING.getKey(),
+     */
+            logsDir = PathUtils.get(PATH_LOGS_SETTING.get(settings)).toAbsolutePath().normalize();
+        assertEquals(actual.libDir(), expected.libDir(), "libDir");
+/**
+        }
+                URL normalizedUrl = resolveRepoURL(internalUrl);
+            if (dataPaths.isEmpty()) {
+     * Resolves the specified location against the list of configured repository roots
+        assertEquals(actual.logsDir(), expected.logsDir(), "logsDir");
+     * <p>
+     * The config directory.
+                        return null;
+ * under the License.
+import org.opensearch.common.settings.Setting;
+        return repoFiles;
+        }
+        if (PATH_REPO_SETTING.exists(settings)) {
+    public Path binDir() {
+ *
+    public static final Setting<String> PATH_LOGS_SETTING = new Setting<>("path.logs", "", Function.identity(), Property.NodeScope);
+    private final Settings settings;
+     */
+ * Modifications Copyright OpenSearch Contributors. See
+    }
+     * asserts that the two environments are equivalent for all things the environment cares about (i.e., all but the setting
+        return pidFile;
+        try {
+    public Path pluginsDir() {
+        assertEquals(actual.configDir(), expected.configDir(), "configDir");
+        }
+    }
+        } else {
+            return null;
+        } else {
+     */
+    public Environment(final Settings settings, final Path configPath) {
+    public static final Setting<List<String>> PATH_DATA_SETTING = Setting.listSetting(
+     * The settings used to build this environment.
+            } else {
+import java.util.List;
     public Path tmpDir() {
+        extensionsDir = homeFile.resolve("extensions");
+import java.nio.file.Files;
+     * The shared filesystem repo locations.
+import java.net.URL;
+        return dataFiles;
+package org.opensearch.env;
+                    dataFiles[i] = PathUtils.get(dataPaths.get(i)).toAbsolutePath().normalize();
+                Arrays.stream(repoFiles).map(Path::toString).collect(Collectors.toList())
+    }
+        // this is trappy, Setting#get(Settings) will get a fallback setting yet return false for Settings#exists(Settings)
+     */
+            pidFile = null;
+    }
+            repoFiles = new Path[repoPaths.size()];
+        Property.NodeScope
+    private final Path[] dataFiles;
+    public Path sharedDataDir() {
+    private static void assertEquals(Object actual, Object expected, String name) {
+        Collections.emptyList(),
+                return null;
         return tmpDir;
     }
-
-    /** Ensure the configured temp directory is a valid directory */
-    public void validateTmpDir() throws IOException {
-        if (Files.exists(tmpDir) == false) {
-            throw new FileNotFoundException("Temporary file directory [" + tmpDir + "] does not exist or is not accessible");
-        }
-        if (Files.isDirectory(tmpDir) == false) {
-            throw new IOException("Configured temporary file directory [" + tmpDir + "] is not a directory");
-        }
+            finalSettings.putList(
+import java.io.IOException;
+    Environment(final Settings settings, final Path configPath, final boolean nodeLocalStorage, final Path tmpPath) {
     }
-
-    public static FileStore getFileStore(final Path path) throws IOException {
+ *
+        }
+import org.opensearch.common.annotation.PublicApi;
+    public static final Setting<String> PATH_HOME_SETTING = Setting.simpleString("path.home", Property.NodeScope);
+    // Should only be called directly by this class's unit tests
         return new OpenSearchFileStore(Files.getFileStore(path));
-    }
-
-    /**
-     * asserts that the two environments are equivalent for all things the environment cares about (i.e., all but the setting
-     * object which may contain different setting)
+    /** Path to the temporary file directory used by the JDK */
+        }
+     * If the specified url doesn't match any of the roots, returns null.
+            logsDir = homeFile.resolve("logs");
+    private final Path modulesDir;
+            finalSettings.put(Environment.PATH_SHARED_DATA_SETTING.getKey(), sharedDataDir.toString());
+// public+forbidden api!
+     * against the list of configured repository roots
+                URL internalUrl = new URL(filePath);
+            assert pidFile != null;
      */
-    public static void assertEquivalent(Environment actual, Environment expected) {
         assertEquals(actual.dataFiles(), expected.dataFiles(), "dataFiles");
-        assertEquals(actual.repoFiles(), expected.repoFiles(), "repoFiles");
-        assertEquals(actual.configDir(), expected.configDir(), "configDir");
-        assertEquals(actual.pluginsDir(), expected.pluginsDir(), "pluginsDir");
-        assertEquals(actual.binDir(), expected.binDir(), "binDir");
-        assertEquals(actual.libDir(), expected.libDir(), "libDir");
-        assertEquals(actual.modulesDir(), expected.modulesDir(), "modulesDir");
-        assertEquals(actual.logsDir(), expected.logsDir(), "logsDir");
-        assertEquals(actual.pidFile(), expected.pidFile(), "pidFile");
+    public void validateTmpDir() throws IOException {
+ * The OpenSearch Contributors require contributions made to
+        this(settings, configPath, true);
+                dataFiles = EMPTY_PATH_ARRAY;
+    private final Path pluginsDir;
+    /**
+                }
+        Property.NodeScope
+    }
+    public static final Setting<String> PATH_SHARED_DATA_SETTING = Setting.simpleString("path.shared_data", Property.NodeScope);
+ * SPDX-License-Identifier: Apache-2.0
+/*
+public class Environment {
         assertEquals(actual.tmpDir(), expected.tmpDir(), "tmpDir");
+        "path.data",
+        if (nodeLocalStorage) {
+                if (normalizedUrl == null) {
+        } catch (MalformedURLException ex) {
     }
-
-    private static void assertEquals(Object actual, Object expected, String name) {
-        assert Objects.deepEquals(actual, expected) : "actual " + name + " [" + actual + "] is different than [ " + expected + "]";
-    }
+            throw new FileNotFoundException("Temporary file directory [" + tmpDir + "] does not exist or is not accessible");
+    /**
+        return PathUtils.get(repoFiles, location);
 }
+    public Path[] dataFiles() {
+                    return null;
+ * The environment of where things exists.
+    /**
+        final Settings.Builder finalSettings = Settings.builder().put(settings);
+            }
+ * compatible open source license.
+import java.io.FileNotFoundException;
+                return null;
+                if (url.getHost() == null || "".equals(url.getHost())) {
+        assertEquals(actual.binDir(), expected.binDir(), "binDir");
+    public URL resolveRepoURL(URL url) {
+                    if (path == null) {
+            if (dataPaths.isEmpty() == false) {
+    public static void assertEquivalent(Environment actual, Environment expected) {
+            } else {
+    private final Path[] repoFiles;
+    private final Path extensionsDir;
+    /** location of lib/, */
+                String file = url.getFile();
+        } else if (PIDFILE_SETTING.exists(settings)) {
+    public Path logsDir() {
+            for (int i = 0; i < repoPaths.size(); i++) {
+                dataFiles = new Path[dataPaths.size()];
+    public Path pidFile() {
+    public static final Setting<String> PIDFILE_SETTING = Setting.simpleString("pidfile", Property.Deprecated, Property.NodeScope);
+import java.net.URISyntaxException;
+    /**
+        } else {
+        finalSettings.put(PATH_HOME_SETTING.getKey(), homeFile);
+@SuppressForbidden(reason = "configures paths for the system")
+    }
+            finalSettings.putList(PATH_DATA_SETTING.getKey(), Arrays.stream(dataFiles).map(Path::toString).collect(Collectors.toList()));
+    /**
+        return logsDir;
+     * The PID file location (can be null if no PID file is configured)
+        this.settings = finalSettings.build();
+                }
+    public static FileStore getFileStore(final Path path) throws IOException {
+    }
+        } else {
+                    Path path = PathUtils.get(repoFiles, url.toURI());
+                }
+     * Checks if the specified URL is pointing to the local file system and if it does, resolves the specified url
+    public Path[] repoFiles() {
+                for (int i = 0; i < dataPaths.size(); i++) {
+    );
+        if (NODE_PIDFILE_SETTING.exists(settings)) {
+    private final Path sharedDataDir;
+        if (configPath != null) {
+     * object which may contain different setting)
+ */
+ * You may obtain a copy of the License at
+    private final Path pidFile;
+        } else {
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+     * The data location.
+@PublicApi(since = "1.0.0")
+        return configDir;
+ * Licensed to Elasticsearch under one or more contributor
+        assert Objects.deepEquals(actual, expected) : "actual " + name + " [" + actual + "] is different than [ " + expected + "]";
+        if (repoPaths.isEmpty()) {
+    }
+    }
+        assertEquals(actual.pluginsDir(), expected.pluginsDir(), "pluginsDir");
+            return null;
+        this(settings, configPath, nodeLocalStorage, PathUtils.get(System.getProperty("java.io.tmpdir")));
+ *
+        pluginsDir = homeFile.resolve("plugins");
+            sharedDataDir = null;
+        if (Files.isDirectory(tmpDir) == false) {
+            }
+    public static final Setting<String> NODE_PIDFILE_SETTING = Setting.simpleString("node.pidfile", PIDFILE_SETTING, Property.NodeScope);
+            // cannot make sense of this file url
+            finalSettings.put(Environment.NODE_PIDFILE_SETTING.getKey(), pidFile.toString());
+        if (Files.exists(tmpDir) == false) {
+        return libDir;
+/*
+    /** Ensure the configured temp directory is a valid directory */
+        } catch (URISyntaxException ex) {
+ *    http://www.apache.org/licenses/LICENSE-2.0
+                repoFiles[i] = PathUtils.get(repoPaths.get(i)).toAbsolutePath().normalize();
+            } else if ("jar".equals(url.getProtocol())) {
+ * this work for additional information regarding copyright
+import java.util.function.Function;
+import org.opensearch.common.io.PathUtils;
+    public Path configDir() {
+        if (NODE_PIDFILE_SETTING.exists(settings) || PIDFILE_SETTING.exists(settings)) {
+    private static final Path[] EMPTY_PATH_ARRAY = new Path[0];
+        }
+    /**
+     * If the specified location doesn't match any of the roots, returns null.
+            pidFile = PathUtils.get(NODE_PIDFILE_SETTING.get(settings)).toAbsolutePath().normalize();
+    }
+            throw new IllegalStateException(PATH_HOME_SETTING.getKey() + " is not configured");
+        return pluginsDir;
+        "path.repo",
+        }
+                // It's not file or jar url and it didn't match the white list - reject
+    private final Path configDir;
+    public Path resolveRepoFile(String location) {
+        if (PATH_HOME_SETTING.exists(settings)) {
+import java.util.stream.Collectors;
+                    return path.toUri().toURL();
+        }
+            sharedDataDir = PathUtils.get(PATH_SHARED_DATA_SETTING.get(settings)).toAbsolutePath().normalize();
+            homeFile = PathUtils.get(PATH_HOME_SETTING.get(settings)).toAbsolutePath().normalize();
+/*
+import java.util.Objects;
+        }
+import org.opensearch.common.settings.Setting.Property;
+                        // Couldn't resolve against known repo locations
+import org.opensearch.common.settings.Settings;
+        finalSettings.put(PATH_LOGS_SETTING.getKey(), logsDir.toString());
+    private final Path binDir;
+ * license agreements. See the NOTICE file distributed with

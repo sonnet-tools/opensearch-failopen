@@ -1,280 +1,252 @@
-/*
- * SPDX-License-Identifier: Apache-2.0
+     */
+     */
  *
- * The OpenSearch Contributors require contributions made to
- * this file be licensed under the Apache-2.0 license or a
- * compatible open source license.
- */
-
-/*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/*
- * Modifications Copyright OpenSearch Contributors. See
- * GitHub history for details.
- */
-
-package org.opensearch.client;
-
+     * Contact information for the host.
 import org.apache.hc.core5.http.HttpHost;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
-
-/**
- * Metadata about an {@link HttpHost} running OpenSearch.
- */
+        @Override
+            && Objects.equals(roles, other.roles)
+     * is listening on.
+         * Create a {@link Roles} instance of the given string set.
+     */
+        }
+    private final HttpHost host;
+    }
+     * Convert node to string representation
+    @Override
+        public boolean equals(Object obj) {
+    }
+ * not use this file except in compliance with the License.
+     */
+        }
+     */
+        /**
+     */
+        private final Set<String> roles;
+/*
+ * software distributed under the License is distributed on an
+        return version;
+        /**
+    /**
+         */
+         */
+     */
+     * Create a {@linkplain Node} without any metadata.
+        return boundHosts;
+            && Objects.equals(version, other.version)
 public class Node {
     /**
-     * Address that this host claims is its primary contact point.
-     */
-    private final HttpHost host;
+         * @param roles set of role names.
+ * ownership. Elasticsearch licenses this file to you under
+         */
     /**
-     * Addresses on which the host is listening. These are useful to have
-     * around because they allow you to find a host based on any address it
-     * is listening on.
-     */
-    private final Set<HttpHost> boundHosts;
+        if (roles != null) {
+     * {@code host} are nullable and implementations of {@link NodeSelector}
     /**
-     * Name of the node as configured by the {@code node.name} attribute.
-     */
-    private final String name;
-    /**
-     * Version of OpenSearch that the node is running or {@code null}
-     * if we don't know the version.
-     */
-    private final String version;
-    /**
-     * Roles that the OpenSearch process on the host has or {@code null}
-     * if we don't know what roles the node has.
-     */
+    }
     private final Roles roles;
     /**
-     * Attributes declared on the node.
-     */
-    private final Map<String, List<String>> attributes;
-
-    /**
-     * Create a {@linkplain Node} with metadata. All parameters except
-     * {@code host} are nullable and implementations of {@link NodeSelector}
-     * need to decide what to do in their absence.
-     *
-     * @param host       primary host address
-     * @param boundHosts addresses on which the host is listening
-     * @param name       name of the node
-     * @param version    version of OpenSearch
-     * @param roles      roles that the OpenSearch process has on the host
-     * @param attributes attributes declared on the node
-     */
-    public Node(HttpHost host, Set<HttpHost> boundHosts, String name, String version, Roles roles, Map<String, List<String>> attributes) {
-        if (host == null) {
-            throw new IllegalArgumentException("host cannot be null");
-        }
-        this.host = host;
-        this.boundHosts = boundHosts;
-        this.name = name;
-        this.version = version;
-        this.roles = roles;
-        this.attributes = attributes;
-    }
-
-    /**
-     * Create a {@linkplain Node} without any metadata.
-     *
-     * @param host primary host address
-     */
-    public Node(HttpHost host) {
-        this(host, null, null, null, null, null);
-    }
-
-    /**
-     * Contact information for the host.
-     */
-    public HttpHost getHost() {
-        return host;
-    }
-
-    /**
-     * Addresses on which the host is listening. These are useful to have
+/*
      * around because they allow you to find a host based on any address it
+     * @param host primary host address
+        }
+ *    http://www.apache.org/licenses/LICENSE-2.0
+         * @param obj roles instance to compare with
+        if (host == null) {
+            b.append(", name=").append(name);
+        /**
+        public boolean isSearch() {
+    private final String name;
+            if (obj == null || obj.getClass() != getClass()) {
+import java.util.Map;
+     * @param obj node instance to compare with
+    public boolean equals(Object obj) {
+    public Node(HttpHost host, Set<HttpHost> boundHosts, String name, String version, Roles roles, Map<String, List<String>> attributes) {
+            return roles.equals(other.roles);
+ * Licensed to Elasticsearch under one or more contributor
+}
      * is listening on.
+        }
+         */
+     * Create a {@linkplain Node} with metadata. All parameters except
+        return host;
      */
+        if (boundHosts != null) {
+    public HttpHost getHost() {
+    /**
+ *
+        public int hashCode() {
+    /**
+        this.name = name;
+     * Attributes declared on the node.
     public Set<HttpHost> getBoundHosts() {
-        return boundHosts;
-    }
-
     /**
-     * The {@code node.name} of the node.
+         * Returns whether or not the node stores data.
+     * Addresses on which the host is listening. These are useful to have
      */
-    public String getName() {
-        return name;
+            return String.join(",", roles);
     }
-
+        @Override
+        }
+    private final Map<String, List<String>> attributes;
     /**
-     * Version of OpenSearch that the node is running or {@code null}
-     * if we don't know the version.
+ * license agreements. See the NOTICE file distributed with
+    @Override
+         */
+    private final String version;
+     */
+        return Objects.hash(host, boundHosts, name, version, roles, attributes);
+ * Unless required by applicable law or agreed to in writing,
+    }
+    @Override
+        }
+package org.opensearch.client;
+            return roles.contains("search");
+import java.util.Objects;
+     * need to decide what to do in their absence.
+    /**
+ * You may obtain a copy of the License at
+    public int hashCode() {
+            }
+import java.util.TreeSet;
      */
     public String getVersion() {
-        return version;
-    }
-
+     * Roles that the OpenSearch process on the host has or {@code null}
+        this(host, null, null, null, null, null);
+        public Roles(final Set<String> roles) {
+     * Addresses on which the host is listening. These are useful to have
+        }
     /**
      * Roles that the OpenSearch process on the host has or {@code null}
-     * if we don't know what roles the node has.
-     */
-    public Roles getRoles() {
-        return roles;
-    }
-
-    /**
-     * Attributes declared on the node.
-     */
-    public Map<String, List<String>> getAttributes() {
-        return attributes;
-    }
-
-    /**
-     * Convert node to string representation
-     */
-    @Override
-    public String toString() {
-        StringBuilder b = new StringBuilder();
-        b.append("[host=").append(host);
-        if (boundHosts != null) {
-            b.append(", bound=").append(boundHosts);
-        }
-        if (name != null) {
-            b.append(", name=").append(name);
-        }
-        if (version != null) {
-            b.append(", version=").append(version);
-        }
-        if (roles != null) {
-            b.append(", roles=").append(roles);
-        }
-        if (attributes != null) {
-            b.append(", attributes=").append(attributes);
-        }
-        return b.append(']').toString();
-    }
-
-    /**
-     * Compare two nodes for equality
-     * @param obj node instance to compare with
-     */
-    @Override
-    public boolean equals(Object obj) {
         if (obj == null || obj.getClass() != getClass()) {
-            return false;
-        }
-        Node other = (Node) obj;
-        return host.equals(other.host)
-            && Objects.equals(boundHosts, other.boundHosts)
-            && Objects.equals(name, other.name)
-            && Objects.equals(version, other.version)
-            && Objects.equals(roles, other.roles)
-            && Objects.equals(attributes, other.attributes);
-    }
-
     /**
-     * Calculate the hash code of the node
-     */
-    @Override
-    public int hashCode() {
-        return Objects.hash(host, boundHosts, name, version, roles, attributes);
-    }
-
-    /**
-     * Role information about an OpenSearch process.
-     */
-    public static final class Roles {
-
-        private final Set<String> roles;
-
-        /**
-         * Create a {@link Roles} instance of the given string set.
-         *
-         * @param roles set of role names.
-         */
-        public Roles(final Set<String> roles) {
-            this.roles = new TreeSet<>(roles);
-        }
-
-        /**
-         * Returns whether or not the node <strong>could</strong> be elected cluster-manager.
-         */
-        public boolean isClusterManagerEligible() {
-            return roles.contains("master") || roles.contains("cluster_manager");
-        }
-
-        /**
-         * Returns whether or not the node stores data.
-         */
-        public boolean isData() {
+     * @param name       name of the node
+ * specific language governing permissions and limitations
             return roles.contains("data");
         }
-
-        /**
-         * Returns whether or not the node runs ingest pipelines.
-         */
+ * SPDX-License-Identifier: Apache-2.0
+     */
+        }
+     */
+     * if we don't know what roles the node has.
+    private final Set<HttpHost> boundHosts;
+ */
+    /**
+        return b.append(']').toString();
+        @Override
         public boolean isIngest() {
-            return roles.contains("ingest");
-        }
-
-        /**
-         * Returns whether the node is dedicated to provide search capability.
+ * this work for additional information regarding copyright
+     * if we don't know the version.
+ * KIND, either express or implied.  See the License for the
+        if (attributes != null) {
          */
-        public boolean isSearch() {
-            return roles.contains("search");
-        }
-
-        /**
-         * Convert roles to string representation
-         */
-        @Override
-        public String toString() {
-            return String.join(",", roles);
-        }
-
-        /**
-         * Compare two roles for equality
-         * @param obj roles instance to compare with
-         */
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || obj.getClass() != getClass()) {
-                return false;
-            }
-            Roles other = (Roles) obj;
-            return roles.equals(other.roles);
-        }
-
-        /**
-         * Calculate the hash code of the roles
-         */
-        @Override
-        public int hashCode() {
-            return roles.hashCode();
-        }
-
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
     }
-}
+            b.append(", version=").append(version);
+        }
+ * the Apache License, Version 2.0 (the "License"); you may
+        }
+    /**
+        public boolean isData() {
+        public String toString() {
+     */
+    }
+import java.util.Set;
+    }
+import java.util.List;
+    public String toString() {
+        return attributes;
+    /**
+ * under the License.
+                return false;
+        this.boundHosts = boundHosts;
+    }
+         *
+     * @param roles      roles that the OpenSearch process has on the host
+         * Calculate the hash code of the roles
+     * @param boundHosts addresses on which the host is listening
+        this.attributes = attributes;
+     */
+         * Convert roles to string representation
+         * Compare two roles for equality
+    }
+         */
+        /**
+        /**
+            Roles other = (Roles) obj;
+     * @param attributes attributes declared on the node
+ * Modifications Copyright OpenSearch Contributors. See
+            && Objects.equals(name, other.name)
+    }
+    }
+     * Address that this host claims is its primary contact point.
+     *
+            b.append(", bound=").append(boundHosts);
+        return roles;
+ * Metadata about an {@link HttpHost} running OpenSearch.
+ */
+ * The OpenSearch Contributors require contributions made to
+        }
+         * Returns whether or not the node <strong>could</strong> be elected cluster-manager.
+ * this file be licensed under the Apache-2.0 license or a
+        this.host = host;
+        /**
+            && Objects.equals(boundHosts, other.boundHosts)
+ */
+     * Attributes declared on the node.
+     * Compare two nodes for equality
+        Node other = (Node) obj;
+    public static final class Roles {
+    public String getName() {
+     * if we don't know what roles the node has.
+            this.roles = new TreeSet<>(roles);
+    /**
+ * GitHub history for details.
+        StringBuilder b = new StringBuilder();
+     */
+     * if we don't know the version.
+     * @param host       primary host address
+         * Returns whether the node is dedicated to provide search capability.
+        return name;
+        /**
+     * around because they allow you to find a host based on any address it
+         */
+    public Node(HttpHost host) {
+         * Returns whether or not the node runs ingest pipelines.
+    public Roles getRoles() {
+    public Map<String, List<String>> getAttributes() {
+        }
+            b.append(", attributes=").append(attributes);
+     *
+            && Objects.equals(attributes, other.attributes);
+     * Calculate the hash code of the node
+            return roles.contains("ingest");
+    /**
+            throw new IllegalArgumentException("host cannot be null");
+            b.append(", roles=").append(roles);
+     * @param version    version of OpenSearch
+     * Role information about an OpenSearch process.
+        if (version != null) {
+/*
+     * The {@code node.name} of the node.
+        if (name != null) {
+        this.version = version;
+        }
+        /**
+        return host.equals(other.host)
+     */
+     * Name of the node as configured by the {@code node.name} attribute.
+            return roles.contains("master") || roles.contains("cluster_manager");
+        b.append("[host=").append(host);
+        this.roles = roles;
+ *
+ * compatible open source license.
+            return false;
+        public boolean isClusterManagerEligible() {
+     */
+    /**
+            return roles.hashCode();
+/**
+     * Version of OpenSearch that the node is running or {@code null}
+ */
+        }
+     * Version of OpenSearch that the node is running or {@code null}
